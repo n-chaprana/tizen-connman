@@ -4,7 +4,7 @@
 %bcond_with     connman_ntp
 
 Name:           connman
-Version:        1.26
+Version:        1.26.1
 Release:        1
 License:        GPL-2.0
 Summary:        Connection Manager
@@ -19,6 +19,7 @@ BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(libiptc)
 BuildRequires:  pkgconfig(xtables)
+BuildRequires:  pkgconfig(libsmack)
 BuildRequires:  pkgconfig(gnutls)
 %if %{with connman_openconnect}
 BuildRequires:  openconnect
@@ -86,13 +87,13 @@ Header files and development files for connman.
 cp %{SOURCE1001} .
 
 %build
-CFLAGS+=" -DTIZEN_EXT"
 
 chmod +x bootstrap
 ./bootstrap
 %configure \
             --enable-threads \
             --enable-client \
+            --enable-tizen-ext \
             --enable-pacrunner \
             --enable-wifi=builtin \
 %if %{with connman_openconnect}

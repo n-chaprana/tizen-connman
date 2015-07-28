@@ -37,6 +37,10 @@
 
 #define RESOLVER_FLAG_PUBLIC (1 << 0)
 
+#if defined TIZEN_EXT
+#include <sys/smack.h>
+#endif
+
 /*
  * Threshold for RDNSS lifetime. Will be used to trigger RS
  * before RDNSS entries actually expire
@@ -136,6 +140,11 @@ static int resolvfile_export(void)
 		err = -errno;
 		goto done;
 	}
+
+#if defined TIZEN_EXT
+	if (smack_fsetlabel(fd, "_", SMACK_LABEL_ACCESS) != 0)
+		DBG("Failed to label _");
+#endif
 
 	if (ftruncate(fd, 0) < 0) {
 		err = -errno;

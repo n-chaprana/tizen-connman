@@ -67,6 +67,13 @@ AC_ARG_ENABLE(telephony,
 AM_CONDITIONAL(TELEPHONY, test "${enable_telephony}" != "no")
 AM_CONDITIONAL(TELEPHONY_BUILTIN, test "${enable_telephony}" = "builtin")
 
+AC_ARG_ENABLE(tizen-ext,
+	AC_HELP_STRING([--enable-tizen-ext], [enable TIZEN extensions]),
+			[if (test "${enableval}" = "yes"); then
+				CFLAGS="$CFLAGS -DTIZEN_EXT"
+				LIBS="$LIBS -lsmack"
+			fi])
+
 AC_ARG_WITH(openconnect, AC_HELP_STRING([--with-openconnect=PROGRAM],
         [specify location of openconnect binary]), [path_openconnect=${withval}])
 
