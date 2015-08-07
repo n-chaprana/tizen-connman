@@ -37,10 +37,6 @@
 
 #define RESOLVER_FLAG_PUBLIC (1 << 0)
 
-#if defined TIZEN_EXT
-#include <sys/smack.h>
-#endif
-
 /*
  * Threshold for RDNSS lifetime. Will be used to trigger RS
  * before RDNSS entries actually expire
@@ -140,11 +136,6 @@ static int resolvfile_export(void)
 		err = -errno;
 		goto done;
 	}
-
-#if defined TIZEN_EXT
-	if (smack_fsetlabel(fd, "_", SMACK_LABEL_ACCESS) != 0)
-		DBG("Failed to label _");
-#endif
 
 	if (ftruncate(fd, 0) < 0) {
 		err = -errno;
@@ -292,6 +283,8 @@ static void remove_entries(GSList *entries)
 	}
 
 	g_slist_free(entries);
+
+	append_fallback_nameservers();
 }
 
 static gboolean resolver_expire_cb(gpointer user_data)
@@ -571,21 +564,6 @@ int connman_resolver_remove_all(int index)
 	return 0;
 }
 
-/**
- * connman_resolver_flush:
- *
- * Flush pending resolver requests
- */
-void connman_resolver_flush(void)
-{
-	append_fallback_nameservers();
-
-	if (dnsproxy_enabled)
-		__connman_dnsproxy_flush();
-
-	return;
-}
-
 int __connman_resolver_redo_servers(int index)
 {
 	GSList *list;
@@ -617,14 +595,6 @@ int __connman_resolver_redo_servers(int index)
 		 */
 		__connman_dnsproxy_remove(entry->index, entry->domain,
 					entry->server);
-		/*
-		 * Remove also the resolver timer for the old server entry.
-		 * A new timer will be set for the new server entry
-		 * when the next Router Advertisement message arrives
-		 * with RDNSS/DNSSL settings.
-		 */
-		g_source_remove(entry->timeout);
-		entry->timeout = 0;
 
 		__connman_dnsproxy_append(entry->index, entry->domain,
 					entry->server);

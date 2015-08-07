@@ -39,6 +39,10 @@ char *connman_inet_ifname(int index);
 int connman_inet_ifup(int index);
 int connman_inet_ifdown(int index);
 
+#if defined TIZEN_EXT
+void connman_inet_update_device_ident(struct connman_device *device);
+#endif
+
 int connman_inet_set_address(int index, struct connman_ipaddress *ipaddress);
 int connman_inet_clear_address(int index, struct connman_ipaddress *ipaddress);
 int connman_inet_add_host_route(int index, const char *host, const char *gateway);

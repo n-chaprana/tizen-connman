@@ -79,8 +79,10 @@ static void request_input_passphrase_reply(DBusMessage *reply, void *user_data)
 	int name_len = 0;
 	DBusMessageIter iter, dict;
 
-	if (!reply)
-		goto out;
+	if (!reply) {
+		error = CONNMAN_ERROR_INTERFACE ".OperationAborted";
+		goto done;
+	}
 
 	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
 		error = dbus_message_get_error_name(reply);
@@ -138,10 +140,24 @@ static void request_input_passphrase_reply(DBusMessage *reply, void *user_data)
 			dbus_message_iter_get_basic(&value, &name);
 			name_len = strlen(name);
 		} else if (g_str_equal(key, "SSID")) {
+#if defined TIZEN_EXT
+			DBusMessageIter array;
+#endif
 			dbus_message_iter_next(&entry);
 			if (dbus_message_iter_get_arg_type(&entry)
 							!= DBUS_TYPE_VARIANT)
 				break;
+#if defined TIZEN_EXT
+			dbus_message_iter_recurse(&entry, &array);
+			if (dbus_message_iter_get_arg_type(&array)
+							!= DBUS_TYPE_ARRAY)
+				break;
+			dbus_message_iter_recurse(&array, &value);
+			if (dbus_message_iter_get_arg_type(&value)
+							!= DBUS_TYPE_BYTE)
+				break;
+#else
+
 			dbus_message_iter_recurse(&entry, &value);
 			if (dbus_message_iter_get_arg_type(&value)
 							!= DBUS_TYPE_VARIANT)
@@ -149,6 +165,7 @@ static void request_input_passphrase_reply(DBusMessage *reply, void *user_data)
 			if (dbus_message_iter_get_element_type(&value)
 							!= DBUS_TYPE_VARIANT)
 				break;
+#endif
 			dbus_message_iter_get_fixed_array(&value, &name,
 							&name_len);
 		}
@@ -160,7 +177,7 @@ done:
 					values_received, name, name_len,
 					identity, passphrase, wps, wpspin,
 					error, passphrase_reply->user_data);
-out:
+
 	g_free(passphrase_reply);
 }
 
@@ -365,8 +382,10 @@ static void request_input_login_reply(DBusMessage *reply, void *user_data)
 	char *key;
 	DBusMessageIter iter, dict;
 
-	if (!reply)
-		goto out;
+	if (!reply) {
+		error = CONNMAN_ERROR_INTERFACE ".OperationAborted";
+		goto done;
+	}
 
 	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
 		error = dbus_message_get_error_name(reply);
@@ -414,7 +433,7 @@ done:
 			username_password_reply->service, values_received,
 			NULL, 0, username, password, FALSE, NULL, error,
 			username_password_reply->user_data);
-out:
+
 	g_free(username_password_reply);
 }
 
@@ -582,6 +601,11 @@ static void request_browser_reply(DBusMessage *reply, void *user_data)
 	bool result = false;
 	const char *error = NULL;
 
+	if (!reply) {
+		error = CONNMAN_ERROR_INTERFACE ".OperationAborted";
+		goto done;
+	}
+
 	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
 		error = dbus_message_get_error_name(reply);
 		goto done;
@@ -674,8 +698,10 @@ static void request_peer_authorization_reply(DBusMessage *reply,
 	char *wpspin = NULL;
 	char *key;
 
-	if (!reply)
-		goto out;
+	if (!reply) {
+		error = CONNMAN_ERROR_INTERFACE ".OperationAborted";
+		goto done;
+	}
 
 	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
 		error = dbus_message_get_error_name(reply);
@@ -716,7 +742,7 @@ static void request_peer_authorization_reply(DBusMessage *reply,
 done:
 	auth_reply->peer_callback(auth_reply->peer, choice_done, wpspin,
 						error, auth_reply->user_data);
-out:
+
 	g_free(auth_reply);
 }
 

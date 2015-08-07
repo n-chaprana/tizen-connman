@@ -46,6 +46,12 @@
 #define ARPHDR_PHONET_PIPE (821)
 #endif
 
+#if defined TIZEN_EXT
+#ifndef ARPHDR_RMNET
+#define ARPHDR_RMNET (530)
+#endif
+#endif
+
 #define print(arg...) do { if (0) connman_info(arg); } while (0)
 //#define print(arg...) connman_info(arg)
 
@@ -116,6 +122,29 @@ static bool wext_interface(char *ifname)
 	return true;
 }
 
+#if defined TIZEN_EXT
+static bool __connman_rtnl_is_cellular_device(const char *name)
+{
+	char **pattern;
+	char **cellular_interfaces;
+
+	cellular_interfaces =
+			connman_setting_get_string_list(
+					"NetworkCellularInterfaceList");
+	if (!cellular_interfaces)
+		return false;
+
+	for (pattern = cellular_interfaces; *pattern; pattern++) {
+		if (g_str_has_prefix(name, *pattern)) {
+			DBG("Cellular interface: %s", name);
+			return true;
+		}
+	}
+
+	return false;
+}
+#endif
+
 static void read_uevent(struct interface_data *interface)
 {
 	char *filename, *name, line[128];
@@ -123,6 +152,14 @@ static void read_uevent(struct interface_data *interface)
 	FILE *f;
 
 	name = connman_inet_ifname(interface->index);
+
+#if defined TIZEN_EXT
+	if (__connman_rtnl_is_cellular_device(name)) {
+		interface->service_type = CONNMAN_SERVICE_TYPE_CELLULAR;
+		interface->device_type = CONNMAN_DEVICE_TYPE_CELLULAR;
+		return;
+	}
+#endif
 
 	if (ether_blacklisted(name)) {
 		interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
@@ -170,6 +207,9 @@ static void read_uevent(struct interface_data *interface)
 		} else if (strcmp(line + 8, "gadget") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_GADGET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_GADGET;
+		} else if (strcmp(line + 8, "vlan") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
+			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
 
 		} else {
 			interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
@@ -414,6 +454,14 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 	if (!extract_link(msg, bytes, &address, &ifname, &mtu, &operstate, &stats))
 		return;
 
+#if defined TIZEN_EXT
+	/* Do not accept Wi-Fi P2P interface */
+	if (g_strrstr(ifname, "p2p") != NULL) {
+		DBG("Newlink event for Wi-Fi P2P interface ignored");
+		return;
+	}
+#endif
+
 	snprintf(ident, 13, "%02x%02x%02x%02x%02x%02x",
 						address.ether_addr_octet[0],
 						address.ether_addr_octet[1],
@@ -436,12 +484,25 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 		return;
 	}
 
+#if defined TIZEN_TV_EXT
+	if (g_strcmp0(ident, "eeeeeeeeeeee") == 0) {
+		DBG("Newlink event with Dummy MAC. Ignored!");
+		return;
+	}
+#endif
+
 	switch (type) {
 	case ARPHRD_ETHER:
 	case ARPHRD_LOOPBACK:
 	case ARPHDR_PHONET_PIPE:
 	case ARPHRD_PPP:
 	case ARPHRD_NONE:
+#if defined TIZEN_EXT
+/*
+ * Description: ARPHDR_RMNET for QC modem using QMI
+ */
+	case ARPHDR_RMNET:
+#endif
 		__connman_ipconfig_newlink(index, type, flags,
 							str, mtu, &stats);
 		break;
@@ -466,6 +527,25 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 
 		if (type == ARPHRD_ETHER)
 			read_uevent(interface);
+#if defined TIZEN_EXT
+		if (type == ARPHRD_PPP || type == ARPHDR_RMNET)
+			read_uevent(interface);
+
+	} else if (g_strcmp0(interface->ident, ident) != 0) {
+		/* If an original address is built-in physical device,
+		 * it's hardly get an address at a initial creation
+		 */
+		__connman_technology_remove_interface(interface->service_type,
+				interface->index, interface->ident);
+
+		g_free(interface->ident);
+		interface->ident = g_strdup(ident);
+
+		__connman_technology_add_interface(interface->service_type,
+				interface->index, interface->ident);
+
+		interface = NULL;
+#endif
 	} else
 		interface = NULL;
 
@@ -527,6 +607,13 @@ static void process_dellink(unsigned short type, int index, unsigned flags,
 	case ARPHDR_PHONET_PIPE:
 	case ARPHRD_PPP:
 	case ARPHRD_NONE:
+#if defined TIZEN_EXT
+	/*
+	 * Description: SLP requires ARPHRD_PPP for PPP type device
+	 *              ARPHDR_RMNET for QC modem using QMI
+	 */
+	case ARPHDR_RMNET:
+#endif
 		__connman_ipconfig_dellink(index, &stats);
 		break;
 	}
@@ -612,17 +699,18 @@ static void process_newaddr(unsigned char family, unsigned char prefixlen,
 	if (!inet_ntop(family, src, ip_string, INET6_ADDRSTRLEN))
 		return;
 
-	__connman_ipconfig_newaddr(index, family, label,
-					prefixlen, ip_string);
-
-	if (family == AF_INET6) {
-		/*
-		 * Re-create RDNSS configured servers if there are any
-		 * for this interface. This is done because we might
-		 * have now properly configured interface with proper
-		 * autoconfigured address.
-		 */
-		__connman_resolver_redo_servers(index);
+	if (__connman_ipconfig_newaddr(index, family, label,
+					prefixlen, ip_string) >= 0) {
+		if (family == AF_INET6) {
+			/*
+			 * Re-create RDNSS configured servers if there
+			 * are any for this interface. This is done
+			 * because we might have now properly
+			 * configured interface with proper
+			 * autoconfigured address.
+			 */
+			__connman_resolver_redo_servers(index);
+		}
 	}
 }
 
@@ -1083,6 +1171,8 @@ static void rtnl_route(struct nlmsghdr *hdr)
 
 static bool is_route_rtmsg(struct rtmsg *msg)
 {
+	if (msg->rtm_flags & RTM_F_CLONED)
+		return false;
 
 	if (msg->rtm_table != RT_TABLE_MAIN)
 		return false;
@@ -1291,6 +1381,7 @@ static const char *type2string(uint16_t type)
 }
 
 static GIOChannel *channel = NULL;
+static guint channel_watch = 0;
 
 struct rtnl_request {
 	struct nlmsghdr hdr;
@@ -1621,8 +1712,9 @@ int __connman_rtnl_init(void)
 	g_io_channel_set_encoding(channel, NULL, NULL);
 	g_io_channel_set_buffered(channel, FALSE);
 
-	g_io_add_watch(channel, G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
-							netlink_event, NULL);
+	channel_watch = g_io_add_watch(channel,
+				G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
+				netlink_event, NULL);
 
 	return 0;
 }
@@ -1671,6 +1763,11 @@ void __connman_rtnl_cleanup(void)
 
 	g_slist_free(request_list);
 	request_list = NULL;
+
+	if (channel_watch) {
+		g_source_remove(channel_watch);
+		channel_watch = 0;
+	}
 
 	g_io_channel_shutdown(channel, TRUE, NULL);
 	g_io_channel_unref(channel);

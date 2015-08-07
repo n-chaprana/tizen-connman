@@ -136,6 +136,9 @@ int connman_network_set_proxy(struct connman_network *network,
                                const char *proxies);
 
 void connman_network_clear_associating(struct connman_network *network);
+int connman_network_set_is_hs20AP(struct connman_network *network,
+				unsigned int isHS20AP);
+unsigned int connman_network_get_is_hs20AP(struct connman_network *network);
 #endif
 
 int connman_network_set_name(struct connman_network *network,
@@ -178,6 +181,9 @@ struct connman_network_driver {
 	void (*remove) (struct connman_network *network);
 	int (*connect) (struct connman_network *network);
 	int (*disconnect) (struct connman_network *network);
+#if defined TIZEN_EXT
+	int (*merge) (struct connman_network *network);
+#endif
 };
 
 int connman_network_driver_register(struct connman_network_driver *driver);

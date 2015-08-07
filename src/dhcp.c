@@ -399,7 +399,8 @@ static bool apply_lease_available_on_network(GDHCPClient *dhcp_client,
 								dhcp->pac);
 	}
 
-	__connman_6to4_probe(service);
+	if (connman_setting_get_bool("Enable6to4"))
+		__connman_6to4_probe(service);
 
 	return true;
 }
@@ -582,6 +583,17 @@ static int dhcp_release(struct connman_dhcp *dhcp)
 	return 0;
 }
 
+char *__connman_dhcp_get_server_address(struct connman_ipconfig *ipconfig)
+{
+	struct connman_dhcp *dhcp;
+
+	dhcp = g_hash_table_lookup(ipconfig_table, ipconfig);
+	if (!dhcp)
+		return NULL;
+
+	return g_dhcp_client_get_server_address(dhcp->dhcp_client);
+}
+
 int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
 			struct connman_network *network, dhcp_cb callback,
 			gpointer user_data)
@@ -672,4 +684,6 @@ void __connman_dhcp_cleanup(void)
 
 	g_hash_table_destroy(ipconfig_table);
 	ipconfig_table = NULL;
+
+	dhcp_cleanup_random();
 }

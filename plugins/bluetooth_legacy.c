@@ -256,6 +256,13 @@ static int pan_disconnect(struct connman_network *network)
 	if (!path)
 		return -EINVAL;
 
+#if defined TIZEN_EXT
+	if (connman_network_get_associating(network) == TRUE) {
+		connman_network_set_error(network,
+					CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
+	}
+#endif
+
 	message = dbus_message_new_method_call(BLUEZ_SERVICE, path,
 					BLUEZ_NETWORK_INTERFACE, DISCONNECT);
 	if (!message)

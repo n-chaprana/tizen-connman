@@ -232,11 +232,6 @@ int g_supplicant_interface_scan(GSupplicantInterface *interface,
 					GSupplicantInterfaceCallback callback,
 							void *user_data);
 
-int g_supplicant_interface_autoscan(GSupplicantInterface *interface,
-					const char *autoscan_data,
-					GSupplicantInterfaceCallback callback,
-							void *user_data);
-
 int g_supplicant_interface_p2p_find(GSupplicantInterface *interface,
 					GSupplicantInterfaceCallback callback,
 							void *user_data);
@@ -333,6 +328,7 @@ GSupplicantInterface *g_supplicant_peer_get_interface(GSupplicantPeer *peer);
 const char *g_supplicant_peer_get_path(GSupplicantPeer *peer);
 const char *g_supplicant_peer_get_identifier(GSupplicantPeer *peer);
 const void *g_supplicant_peer_get_device_address(GSupplicantPeer *peer);
+const void *g_supplicant_peer_get_iface_address(GSupplicantPeer *peer);
 const char *g_supplicant_peer_get_name(GSupplicantPeer *peer);
 const unsigned char *g_supplicant_peer_get_widi_ies(GSupplicantPeer *peer,
 								int *length);
@@ -351,6 +347,10 @@ const unsigned char *g_supplicant_network_get_bssid(
 						GSupplicantNetwork *network);
 unsigned int g_supplicant_network_get_maxrate(GSupplicantNetwork *network);
 const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network);
+unsigned int g_supplicant_network_is_hs20AP(GSupplicantNetwork *network);
+const char *g_supplicant_network_get_eap(GSupplicantNetwork *network);
+const char *g_supplicant_network_get_identity(GSupplicantNetwork *network);
+const char *g_supplicant_network_get_phase2(GSupplicantNetwork *network);
 #endif
 
 struct _GSupplicantCallbacks {
@@ -364,6 +364,9 @@ struct _GSupplicantCallbacks {
 	void (*scan_finished) (GSupplicantInterface *interface);
 	void (*network_added) (GSupplicantNetwork *network);
 	void (*network_removed) (GSupplicantNetwork *network);
+#if defined TIZEN_EXT
+	void (*network_merged) (GSupplicantNetwork *network);
+#endif
 	void (*network_changed) (GSupplicantNetwork *network,
 					const char *property);
 	void (*add_station) (const char *mac);

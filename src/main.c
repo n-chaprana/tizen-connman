@@ -73,6 +73,10 @@ static struct {
 	bool single_tech;
 	char **tethering_technologies;
 	bool persistent_tethering_mode;
+	bool enable_6to4;
+#if defined TIZEN_EXT
+	char **cellular_interfaces;
+#endif
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -86,6 +90,10 @@ static struct {
 	.single_tech = false,
 	.tethering_technologies = NULL,
 	.persistent_tethering_mode = false,
+	.enable_6to4 = false,
+#if defined TIZEN_EXT
+	.cellular_interfaces = NULL,
+#endif
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -100,6 +108,10 @@ static struct {
 #define CONF_SINGLE_TECH                "SingleConnectedTechnology"
 #define CONF_TETHERING_TECHNOLOGIES      "TetheringTechnologies"
 #define CONF_PERSISTENT_TETHERING_MODE  "PersistentTetheringMode"
+#define CONF_ENABLE_6TO4                "Enable6to4"
+#if defined TIZEN_EXT
+#define CONF_CELLULAR_INTERFACE         "NetworkCellularInterfaceList"
+#endif
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -114,6 +126,10 @@ static const char *supported_options[] = {
 	CONF_SINGLE_TECH,
 	CONF_TETHERING_TECHNOLOGIES,
 	CONF_PERSISTENT_TETHERING_MODE,
+	CONF_ENABLE_6TO4,
+#if defined TIZEN_EXT
+	CONF_CELLULAR_INTERFACE,
+#endif
 	NULL
 };
 
@@ -227,6 +243,23 @@ static void check_config(GKeyFile *config)
 
 	g_strfreev(keys);
 }
+
+#if defined TIZEN_EXT
+static void check_Tizen_configuration(GKeyFile *config)
+{
+	GError *error = NULL;
+	char **cellular_interfaces;
+	gsize len;
+
+	cellular_interfaces = g_key_file_get_string_list(config, "General",
+			CONF_CELLULAR_INTERFACE, &len, &error);
+
+	if (error == NULL)
+		connman_settings.cellular_interfaces = cellular_interfaces;
+
+	g_clear_error(&error);
+}
+#endif
 
 static void parse_config(GKeyFile *config)
 {
@@ -354,6 +387,17 @@ static void parse_config(GKeyFile *config)
 		connman_settings.persistent_tethering_mode = boolean;
 
 	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
+					CONF_ENABLE_6TO4, &error);
+	if (!error)
+		connman_settings.enable_6to4 = boolean;
+
+	g_clear_error(&error);
+
+#if defined TIZEN_EXT
+	check_Tizen_configuration(config);
+#endif
 }
 
 static int config_init(const char *file)
@@ -528,6 +572,9 @@ bool connman_setting_get_bool(const char *key)
 	if (g_str_equal(key, CONF_PERSISTENT_TETHERING_MODE))
 		return connman_settings.persistent_tethering_mode;
 
+	if (g_str_equal(key, CONF_ENABLE_6TO4))
+		return connman_settings.enable_6to4;
+
 	return false;
 }
 
@@ -544,6 +591,11 @@ char **connman_setting_get_string_list(const char *key)
 
 	if (g_str_equal(key, CONF_TETHERING_TECHNOLOGIES))
 		return connman_settings.tethering_technologies;
+
+#if defined TIZEN_EXT
+	if (g_str_equal(key, CONF_CELLULAR_INTERFACE))
+		return connman_settings.cellular_interfaces;
+#endif
 
 	return NULL;
 }
@@ -639,6 +691,7 @@ int main(int argc, char *argv[])
 	else
 		config_init(option_config);
 
+	__connman_util_init();
 	__connman_inotify_init();
 	__connman_technology_init();
 	__connman_notifier_init();
@@ -729,6 +782,7 @@ int main(int argc, char *argv[])
 	__connman_technology_cleanup();
 	__connman_inotify_cleanup();
 
+	__connman_util_cleanup();
 	__connman_dbus_cleanup();
 
 	__connman_log_cleanup(option_backtrace);
@@ -747,6 +801,7 @@ int main(int argc, char *argv[])
 	g_strfreev(connman_settings.tethering_technologies);
 
 	g_free(option_debug);
+	g_free(option_wifi);
 
 	return 0;
 }

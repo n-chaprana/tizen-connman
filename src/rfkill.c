@@ -155,7 +155,7 @@ static gboolean rfkill_event(GIOChannel *chan, GIOCondition cond, gpointer data)
 	return TRUE;
 }
 
-static GIOChannel *channel = NULL;
+static guint watch = 0;
 
 int __connman_rfkill_block(enum connman_service_type type, bool block)
 {
@@ -179,7 +179,7 @@ int __connman_rfkill_block(enum connman_service_type type, bool block)
 
 	fd = open("/dev/rfkill", O_RDWR | O_CLOEXEC);
 	if (fd < 0)
-		return fd;
+		return -errno;
 
 	memset(&event, 0, sizeof(event));
 	event.op = RFKILL_OP_CHANGE_ALL;
@@ -188,10 +188,9 @@ int __connman_rfkill_block(enum connman_service_type type, bool block)
 
 	len = write(fd, &event, sizeof(event));
 	if (len < 0) {
+		err = -errno;
 		connman_error("Failed to change RFKILL state");
-		err = len;
-	} else
-		err = 0;
+	}
 
 	close(fd);
 
@@ -201,6 +200,7 @@ int __connman_rfkill_block(enum connman_service_type type, bool block)
 
 int __connman_rfkill_init(void)
 {
+	GIOChannel *channel;
 	GIOFlags flags;
 	int fd;
 
@@ -225,21 +225,21 @@ int __connman_rfkill_init(void)
 	/* Process current RFKILL events sent on device open */
 	while (rfkill_process(channel) == G_IO_STATUS_NORMAL);
 
-	g_io_add_watch(channel, G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
-							rfkill_event, NULL);
+	watch = g_io_add_watch(channel,
+				G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
+				rfkill_event, NULL);
 
-	return 0;
+	g_io_channel_unref(channel);
+
+	return watch ? 0 : -EIO;
 }
 
 void __connman_rfkill_cleanup(void)
 {
 	DBG("");
 
-	if (!channel)
-		return;
-
-	g_io_channel_shutdown(channel, TRUE, NULL);
-	g_io_channel_unref(channel);
-
-	channel = NULL;
+	if (watch) {
+		g_source_remove(watch);
+		watch = 0;
+	}
 }

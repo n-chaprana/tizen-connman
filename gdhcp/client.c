@@ -514,11 +514,13 @@ static int send_release(GDHCPClient *dhcp_client,
 			uint32_t server, uint32_t ciaddr)
 {
 	struct dhcp_packet packet;
+	uint64_t rand;
 
 	debug(dhcp_client, "sending DHCP release request");
 
 	init_packet(dhcp_client, &packet, DHCPRELEASE);
-	packet.xid = rand();
+	dhcp_get_random(&rand);
+	packet.xid = rand;
 	packet.ciaddr = htonl(ciaddr);
 
 	dhcp_add_option_uint32(&packet, DHCP_SERVER_ID, server);
@@ -540,7 +542,7 @@ static gboolean send_probe_packet(gpointer dhcp_data)
 	/* if requested_ip is not valid, pick a new address*/
 	if (dhcp_client->requested_ip == 0) {
 		debug(dhcp_client, "pick a new random address");
-		dhcp_client->requested_ip = ipv4ll_random_ip(0);
+		dhcp_client->requested_ip = ipv4ll_random_ip();
 	}
 
 	debug(dhcp_client, "sending IPV4LL probe request");
@@ -1361,7 +1363,6 @@ static int dhcp_recv_l2_packet(struct dhcp_packet *dhcp_pkt, int fd,
 static void ipv4ll_start(GDHCPClient *dhcp_client)
 {
 	guint timeout;
-	int seed;
 
 	remove_timeouts(dhcp_client);
 
@@ -1369,9 +1370,7 @@ static void ipv4ll_start(GDHCPClient *dhcp_client)
 	dhcp_client->retry_times = 0;
 	dhcp_client->requested_ip = 0;
 
-	/*try to start with a based mac address ip*/
-	seed = (dhcp_client->mac_address[4] << 8 | dhcp_client->mac_address[4]);
-	dhcp_client->requested_ip = ipv4ll_random_ip(seed);
+	dhcp_client->requested_ip = ipv4ll_random_ip();
 
 	/*first wait a random delay to avoid storm of arp request on boot*/
 	timeout = ipv4ll_random_delay_ms(PROBE_WAIT);
@@ -1670,6 +1669,7 @@ static gboolean start_expire(gpointer user_data)
 static gboolean continue_rebound(gpointer user_data)
 {
 	GDHCPClient *dhcp_client = user_data;
+	uint64_t rand;
 
 	switch_listening_mode(dhcp_client, L2);
 	send_request(dhcp_client);
@@ -1680,9 +1680,10 @@ static gboolean continue_rebound(gpointer user_data)
 	/*recalculate remaining rebind time*/
 	dhcp_client->T2 >>= 1;
 	if (dhcp_client->T2 > 60) {
+		dhcp_get_random(&rand);
 		dhcp_client->t2_timeout =
 			g_timeout_add_full(G_PRIORITY_HIGH,
-					dhcp_client->T2 * 1000 + (rand() % 2000) - 1000,
+					dhcp_client->T2 * 1000 + (rand % 2000) - 1000,
 					continue_rebound,
 					dhcp_client,
 					NULL);
@@ -1714,6 +1715,7 @@ static gboolean start_rebound(gpointer user_data)
 static gboolean continue_renew (gpointer user_data)
 {
 	GDHCPClient *dhcp_client = user_data;
+	uint64_t rand;
 
 	switch_listening_mode(dhcp_client, L3);
 	send_request(dhcp_client);
@@ -1721,11 +1723,14 @@ static gboolean continue_renew (gpointer user_data)
 	if (dhcp_client->t1_timeout > 0)
 		g_source_remove(dhcp_client->t1_timeout);
 
+	dhcp_client->t1_timeout = 0;
+
 	dhcp_client->T1 >>= 1;
 
 	if (dhcp_client->T1 > 60) {
+		dhcp_get_random(&rand);
 		dhcp_client->t1_timeout = g_timeout_add_full(G_PRIORITY_HIGH,
-				dhcp_client->T1 * 1000 + (rand() % 2000) - 1000,
+				dhcp_client->T1 * 1000 + (rand % 2000) - 1000,
 				continue_renew,
 				dhcp_client,
 				NULL);
@@ -2396,7 +2401,7 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 			rapid_commit = dhcpv6_get_option(packet6, pkt_len,
 							G_DHCPV6_RAPID_COMMIT,
 							&option_len, &count);
-			if (!rapid_commit || option_len == 0 ||
+			if (!rapid_commit || option_len != 0 ||
 								count != 1)
 				/* RFC 3315, 17.1.4 */
 				return TRUE;
@@ -2594,6 +2599,11 @@ static gboolean ipv4ll_announce_timeout(gpointer dhcp_data)
 	GDHCPClient *dhcp_client = dhcp_data;
 	uint32_t ip;
 
+#if defined TIZEN_EXT
+	if (!dhcp_client)
+		return FALSE;
+#endif
+
 	debug(dhcp_client, "request timeout (retries %d)",
 	       dhcp_client->retry_times);
 
@@ -2642,6 +2652,7 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 {
 	int re;
 	uint32_t addr;
+	uint64_t rand;
 
 	if (dhcp_client->type == G_DHCP_IPV6) {
 		if (dhcp_client->information_req_cb) {
@@ -2750,7 +2761,8 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 		if (re != 0)
 			return re;
 
-		dhcp_client->xid = rand();
+		dhcp_get_random(&rand);
+		dhcp_client->xid = rand;
 		dhcp_client->start = time(NULL);
 	}
 
@@ -2917,6 +2929,14 @@ void g_dhcp_client_register_event(GDHCPClient *dhcp_client,
 int g_dhcp_client_get_index(GDHCPClient *dhcp_client)
 {
 	return dhcp_client->ifindex;
+}
+
+char *g_dhcp_client_get_server_address(GDHCPClient *dhcp_client)
+{
+	if (!dhcp_client)
+		return NULL;
+
+	return get_ip(dhcp_client->server_ip);
 }
 
 char *g_dhcp_client_get_address(GDHCPClient *dhcp_client)
@@ -3143,6 +3163,9 @@ void g_dhcp_client_unref(GDHCPClient *dhcp_client)
 	g_hash_table_destroy(dhcp_client->send_value_hash);
 
 	g_free(dhcp_client);
+#if defined TIZEN_EXT
+	dhcp_client = NULL;
+#endif
 }
 
 void g_dhcp_client_set_debug(GDHCPClient *dhcp_client,

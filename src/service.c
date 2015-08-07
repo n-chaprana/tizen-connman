@@ -77,6 +77,14 @@ struct connman_service_user {
 	uid_t current_user;
 };
 
+#if defined TIZEN_TV_EXT
+enum connman_dnsconfig_method {
+	CONNMAN_DNSCONFIG_METHOD_UNKNOWN = 0,
+	CONNMAN_DNSCONFIG_METHOD_MANUAL  = 1,
+	CONNMAN_DNSCONFIG_METHOD_DHCP    = 2,
+};
+#endif
+
 struct connman_service {
 	int refcount;
 	char *identifier;
@@ -148,6 +156,9 @@ struct connman_service {
 	 *		manage open/close connection requests by each application.
 	 */
 	int user_pdn_connection_refcount;
+#endif
+#if defined TIZEN_TV_EXT
+	enum connman_dnsconfig_method dns_config_method;
 #endif
 };
 
@@ -415,6 +426,33 @@ static enum connman_service_proxy_method string2proxymethod(const char *method)
 	else
 		return CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 }
+
+#if defined TIZEN_TV_EXT
+static const char *__connman_dnsconfig_method2string(enum connman_dnsconfig_method method)
+{
+	switch (method) {
+	case CONNMAN_DNSCONFIG_METHOD_UNKNOWN:
+		return "unknown";
+	case CONNMAN_DNSCONFIG_METHOD_MANUAL:
+		return "manual";
+	case CONNMAN_DNSCONFIG_METHOD_DHCP:
+		return "dhcp";
+	}
+
+	return NULL;
+}
+
+static enum connman_dnsconfig_method __connman_dnsconfig_string2method(
+		const char *method)
+{
+	if (g_strcmp0(method, "manual") == 0)
+		return CONNMAN_DNSCONFIG_METHOD_MANUAL;
+	else if (g_strcmp0(method, "dhcp") == 0)
+		return CONNMAN_DNSCONFIG_METHOD_DHCP;
+	else
+		return CONNMAN_DNSCONFIG_METHOD_UNKNOWN;
+}
+#endif
 
 static bool
 connman_service_is_user_allowed(struct connman_service *service, uid_t uid)
@@ -688,6 +726,13 @@ static int service_load(struct connman_service *service)
 		service->nameservers_config = NULL;
 	}
 
+#if defined TIZEN_TV_EXT
+	char *dns_method;
+	dns_method = g_key_file_get_string(keyfile, service->identifier,
+			"Nameservers.method", NULL);
+	service->dns_config_method = __connman_dnsconfig_string2method(dns_method);
+#endif
+
 	service->timeservers_config = g_key_file_get_string_list(keyfile,
 			service->identifier, "Timeservers", &length, NULL);
 	if (service->timeservers_config && length == 0) {
@@ -732,6 +777,60 @@ static int service_load(struct connman_service *service)
 
 	service->hidden_service = g_key_file_get_boolean(keyfile,
 					service->identifier, "Hidden", NULL);
+
+#if defined TIZEN_EXT
+	if (service->type == CONNMAN_SERVICE_TYPE_WIFI &&
+			service->security == CONNMAN_SERVICE_SECURITY_8021X) {
+		str = g_key_file_get_string(keyfile,
+				service->identifier, "EAP", NULL);
+		if (str != NULL) {
+			g_free(service->eap);
+			service->eap = str;
+		}
+
+		str = g_key_file_get_string(keyfile,
+				service->identifier, "Phase2", NULL);
+		if (str != NULL) {
+			g_free(service->phase2);
+			service->phase2 = str;
+		}
+
+		str = g_key_file_get_string(keyfile,
+				service->identifier, "Identity", NULL);
+		if (str != NULL) {
+			g_free(service->identity);
+			service->identity = str;
+		}
+
+		str = g_key_file_get_string(keyfile,
+				service->identifier, "CACertFile", NULL);
+		if (str != NULL) {
+			g_free(service->ca_cert_file);
+			service->ca_cert_file = str;
+		}
+
+		str = g_key_file_get_string(keyfile,
+				service->identifier, "ClientCertFile", NULL);
+		if (str != NULL) {
+			g_free(service->client_cert_file);
+			service->client_cert_file = str;
+		}
+
+		str = g_key_file_get_string(keyfile,
+				service->identifier, "PrivateKeyFile", NULL);
+		if (str != NULL) {
+			g_free(service->private_key_file);
+			service->private_key_file = str;
+		}
+
+		str = g_key_file_get_string(keyfile,
+				service->identifier, "PrivateKeyPassphrase", NULL);
+		if (str != NULL) {
+			g_free(service->private_key_passphrase);
+			service->private_key_passphrase = str;
+		}
+	}
+#endif
 
 	if (g_key_file_has_key(keyfile, service->identifier, "UID", NULL))
 		service->user.favorite_user = g_key_file_get_integer(keyfile,
@@ -870,6 +969,18 @@ static int service_save(struct connman_service *service)
 	g_key_file_remove_key(keyfile, service->identifier,
 							"Nameservers", NULL);
 
+#if defined TIZEN_TV_EXT
+	if(service->dns_config_method != 0) {
+		const char *method;
+		method = __connman_dnsconfig_method2string(
+				service->dns_config_method);
+		g_key_file_set_string(keyfile, service->identifier,
+				"Nameservers.method", method);
+	} else
+	g_key_file_remove_key(keyfile, service->identifier,
+						"Nameservers.method", NULL);
+#endif
+
 	if (service->timeservers_config) {
 		guint len = g_strv_length(service->timeservers_config);
 
@@ -934,6 +1045,60 @@ static int service_save(struct connman_service *service)
 					strlen(service->config_entry) > 0)
 		g_key_file_set_string(keyfile, service->identifier,
 				"Config.ident", service->config_entry);
+
+#if defined TIZEN_EXT
+	if (service->type == CONNMAN_SERVICE_TYPE_WIFI &&
+			service->security == CONNMAN_SERVICE_SECURITY_8021X) {
+		if (service->eap != NULL && strlen(service->eap) > 0)
+			g_key_file_set_string(keyfile, service->identifier,
+					"EAP", service->eap);
+		else
+			g_key_file_remove_key(keyfile, service->identifier,
+					"EAP", NULL);
+
+		if (service->phase2 != NULL && strlen(service->phase2) > 0)
+			g_key_file_set_string(keyfile, service->identifier,
+					"Phase2", service->phase2);
+		else
+			g_key_file_remove_key(keyfile, service->identifier,
+					"Phase2", NULL);
+
+		if (service->identity != NULL && strlen(service->identity) > 0)
+			g_key_file_set_string(keyfile, service->identifier,
+					"Identity", service->identity);
+		else
+			g_key_file_remove_key(keyfile, service->identifier,
+					"Identity", NULL);
+
+		if (service->ca_cert_file != NULL && strlen(service->ca_cert_file) > 0)
+			g_key_file_set_string(keyfile, service->identifier,
+					"CACertFile", service->ca_cert_file);
+		else
+			g_key_file_remove_key(keyfile, service->identifier,
+					"CACertFile", NULL);
+
+		if (service->client_cert_file != NULL && strlen(service->client_cert_file) > 0)
+			g_key_file_set_string(keyfile, service->identifier,
+					"ClientCertFile", service->client_cert_file);
+		else
+			g_key_file_remove_key(keyfile, service->identifier,
+					"ClientCertFile", NULL);
+
+		if (service->private_key_file != NULL && strlen(service->private_key_file) > 0)
+			g_key_file_set_string(keyfile, service->identifier,
+					"PrivateKeyFile", service->private_key_file);
+		else
+			g_key_file_remove_key(keyfile, service->identifier,
+					"PrivateKeyFile", NULL);
+
+		if (service->private_key_passphrase != NULL && strlen(service->private_key_passphrase) > 0)
+			g_key_file_set_string(keyfile, service->identifier,
+					"PrivateKeyPassphrase", service->private_key_passphrase);
+		else
+			g_key_file_remove_key(keyfile, service->identifier,
+					"PrivateKeyPassphrase", NULL);
+	}
+#endif
 
 done:
 	__connman_storage_save_service(keyfile, service->identifier);
@@ -1107,61 +1272,8 @@ static bool is_connected(struct connman_service *service)
 	return is_connected_state(service, service->state);
 }
 
-static int nameserver_get_index(struct connman_service *service)
-{
-	switch (combine_state(service->state_ipv4, service->state_ipv6)) {
-	case CONNMAN_SERVICE_STATE_UNKNOWN:
-	case CONNMAN_SERVICE_STATE_IDLE:
-	case CONNMAN_SERVICE_STATE_ASSOCIATION:
-	case CONNMAN_SERVICE_STATE_CONFIGURATION:
-	case CONNMAN_SERVICE_STATE_FAILURE:
-	case CONNMAN_SERVICE_STATE_DISCONNECT:
-		return -1;
-	case CONNMAN_SERVICE_STATE_READY:
-	case CONNMAN_SERVICE_STATE_ONLINE:
-		break;
-	}
-
-	return __connman_service_get_index(service);
-}
-
-static void remove_nameservers(struct connman_service *service,
-		int index, char **ns)
-{
-	int i;
-
-	if (!ns)
-		return;
-
-	if (index < 0)
-		index = nameserver_get_index(service);
-
-	if (index < 0)
-			return;
-
-	for (i = 0; ns[i]; i++)
-		connman_resolver_remove(index, NULL, ns[i]);
-}
-
-static void remove_searchdomains(struct connman_service *service,
-		int index, char **sd)
-{
-	int i;
-
-	if (!sd)
-		return;
-
-	if (index < 0)
-		index = nameserver_get_index(service);
-
-	if (index < 0)
-		return;
-
-	for (i = 0; sd[i]; i++)
-		connman_resolver_remove(index, sd[i], NULL);
-}
-
-static bool nameserver_available(struct connman_service *service, char *ns)
+static bool nameserver_available(struct connman_service *service,
+				const char *ns)
 {
 	int family;
 
@@ -1176,77 +1288,139 @@ static bool nameserver_available(struct connman_service *service, char *ns)
 	return false;
 }
 
-static void update_nameservers(struct connman_service *service)
+static int nameserver_add(struct connman_service *service,
+			const char *nameserver)
 {
 	int index;
-	char *ns;
+
+	if (!nameserver_available(service, nameserver))
+		return 0;
 
 	index = __connman_service_get_index(service);
 	if (index < 0)
-		return;
+		return -ENXIO;
 
-	switch (combine_state(service->state_ipv4, service->state_ipv6)) {
-	case CONNMAN_SERVICE_STATE_UNKNOWN:
-	case CONNMAN_SERVICE_STATE_IDLE:
-	case CONNMAN_SERVICE_STATE_ASSOCIATION:
-	case CONNMAN_SERVICE_STATE_CONFIGURATION:
-		return;
-	case CONNMAN_SERVICE_STATE_FAILURE:
-	case CONNMAN_SERVICE_STATE_DISCONNECT:
-		connman_resolver_remove_all(index);
-		return;
-	case CONNMAN_SERVICE_STATE_READY:
-	case CONNMAN_SERVICE_STATE_ONLINE:
-		break;
-	}
+	return connman_resolver_append(index, NULL, nameserver);
+}
+
+static int nameserver_add_all(struct connman_service *service)
+{
+	int i = 0;
 
 	if (service->nameservers_config) {
-		int i;
-
-		remove_nameservers(service, index, service->nameservers);
-
-		i = g_strv_length(service->nameservers_config);
-		while (i != 0) {
-			i--;
-
-			ns = service->nameservers_config[i];
-
-			if (nameserver_available(service, ns))
-				connman_resolver_append(index, NULL, ns);
+		while (service->nameservers_config[i]) {
+			nameserver_add(service, service->nameservers_config[i]);
+			i++;
 		}
-	} else if (service->nameservers) {
-		int i;
 
-		remove_nameservers(service, index, service->nameservers);
+		return 0;
+	}
 
-		i = g_strv_length(service->nameservers);
-		while (i != 0) {
-			i--;
-
-			ns = service->nameservers[i];
-
-			if (nameserver_available(service, ns))
-				connman_resolver_append(index, NULL, ns);
+	if (service->nameservers) {
+		while (service->nameservers[i]) {
+			nameserver_add(service, service->nameservers[i]);
+			i++;
 		}
 	}
 
+	return 0;
+}
+
+static int nameserver_remove(struct connman_service *service,
+			const char *nameserver)
+{
+	int index;
+
+	if (!nameserver_available(service, nameserver))
+		return 0;
+
+	index = __connman_service_get_index(service);
+	if (index < 0)
+		return -ENXIO;
+
+	return connman_resolver_remove(index, NULL, nameserver);
+}
+
+static int nameserver_remove_all(struct connman_service *service)
+{
+#if defined TIZEN_EXT
+	/**
+	  * Skip this function if there is any connected profiles
+	  * that use same interface
+	  */
+	if (service->type == CONNMAN_SERVICE_TYPE_CELLULAR &&
+			__connman_service_get_connected_count_of_iface(service) > 0)
+		return 0;
+#endif
+	int index, i = 0;
+
+	index = __connman_service_get_index(service);
+	if (index < 0)
+		return -ENXIO;
+
+	while (service->nameservers_config && service->nameservers_config[i]) {
+
+		nameserver_remove(service, service->nameservers_config[i]);
+		i++;
+	}
+
+	i = 0;
+	while (service->nameservers && service->nameservers[i]) {
+		nameserver_remove(service, service->nameservers[i]);
+		i++;
+	}
+
+	return 0;
+}
+
+static int searchdomain_add_all(struct connman_service *service)
+{
+	int index, i = 0;
+
+	if (!is_connected(service))
+		return -ENOTCONN;
+
+	index = __connman_service_get_index(service);
+	if (index < 0)
+		return -ENXIO;
+
 	if (service->domains) {
-		char *searchdomains[2] = {NULL, NULL};
-		int i;
-
-		searchdomains[0] = service->domainname;
-		remove_searchdomains(service, index, searchdomains);
-
-		i = g_strv_length(service->domains);
-		while (i != 0) {
-			i--;
+		while (service->domains[i]) {
 			connman_resolver_append(index, service->domains[i],
 						NULL);
+			i++;
 		}
-	} else if (service->domainname)
+
+		return 0;
+	}
+
+	if (service->domainname)
 		connman_resolver_append(index, service->domainname, NULL);
 
-	connman_resolver_flush();
+	return 0;
+
+}
+
+static int searchdomain_remove_all(struct connman_service *service)
+{
+	int index, i = 0;
+
+	if (!is_connected(service))
+		return -ENOTCONN;
+
+	index = __connman_service_get_index(service);
+	if (index < 0)
+		return -ENXIO;
+
+	while (service->domains && service->domains[i]) {
+		connman_resolver_remove(index, service->domains[i], NULL);
+		i++;
+	}
+
+	if (service->domainname)
+		connman_resolver_remove(index, service->domainname, NULL);
+
+	return 0;
 }
 
 /*
@@ -1291,11 +1465,16 @@ int __connman_service_nameserver_append(struct connman_service *service,
 
 	nameservers[len + 1] = NULL;
 
+#if defined TIZEN_TV_EXT
+	if(service->dns_config_method == CONNMAN_DNSCONFIG_METHOD_UNKNOWN)
+		service->dns_config_method = CONNMAN_DNSCONFIG_METHOD_DHCP;
+#endif
+
 	if (is_auto) {
 		service->nameservers_auto = nameservers;
 	} else {
 		service->nameservers = nameservers;
-		update_nameservers(service);
+		nameserver_add(service, nameserver);
 	}
 
 	return 0;
@@ -1333,13 +1512,8 @@ int __connman_service_nameserver_remove(struct connman_service *service,
 	len = g_strv_length(nameservers);
 
 	if (len == 1) {
-		g_strfreev(nameservers);
-		if (is_auto)
-			service->nameservers_auto = NULL;
-		else
-			service->nameservers = NULL;
-
-		return 0;
+		servers = NULL;
+		goto set_servers;
 	}
 
 	servers = g_try_new0(char *, len);
@@ -1347,15 +1521,17 @@ int __connman_service_nameserver_remove(struct connman_service *service,
 		return -ENOMEM;
 
 	for (i = 0, j = 0; i < len; i++) {
-		if (g_strcmp0(nameservers[i], nameserver) != 0) {
-			servers[j] = g_strdup(nameservers[i]);
-			if (!servers[j])
-				return -ENOMEM;
+		if (g_strcmp0(nameservers[i], nameserver)) {
+			servers[j] = nameservers[i];
 			j++;
-		}
+		} else
+			g_free(nameservers[i]);
+
+		nameservers[i] = NULL;
 	}
 	servers[len - 1] = NULL;
 
+set_servers:
 	g_strfreev(nameservers);
 	nameservers = servers;
 
@@ -1363,7 +1539,7 @@ int __connman_service_nameserver_remove(struct connman_service *service,
 		service->nameservers_auto = nameservers;
 	} else {
 		service->nameservers = nameservers;
-		update_nameservers(service);
+		nameserver_remove(service, nameserver);
 	}
 
 	return 0;
@@ -1371,10 +1547,12 @@ int __connman_service_nameserver_remove(struct connman_service *service,
 
 void __connman_service_nameserver_clear(struct connman_service *service)
 {
+	nameserver_remove_all(service);
+
 	g_strfreev(service->nameservers);
 	service->nameservers = NULL;
 
-	update_nameservers(service);
+	nameserver_add_all(service);
 }
 
 static void add_nameserver_route(int family, int index, char *nameserver,
@@ -1402,14 +1580,18 @@ static void add_nameserver_route(int family, int index, char *nameserver,
 static void nameserver_add_routes(int index, char **nameservers,
 					const char *gw)
 {
-	int i, family;
+	int i, ns_family, gw_family;
+
+	gw_family = connman_inet_check_ipaddress(gw);
+	if (gw_family < 0)
+		return;
 
 	for (i = 0; nameservers[i]; i++) {
-		family = connman_inet_check_ipaddress(nameservers[i]);
-		if (family < 0)
+		ns_family = connman_inet_check_ipaddress(nameservers[i]);
+		if (ns_family < 0 || ns_family != gw_family)
 			continue;
 
-		add_nameserver_route(family, index, nameservers[i], gw);
+		add_nameserver_route(ns_family, index, nameservers[i], gw);
 	}
 }
 
@@ -1674,9 +1856,15 @@ static void default_changed(void)
 		current_default ? current_default->identifier : "");
 	DBG("new default %p %s", service, service ? service->identifier : "");
 
+#if defined TIZEN_EXT
+	current_default = service;
+
+	__connman_service_timeserver_changed(service, NULL);
+#else
 	__connman_service_timeserver_changed(current_default, NULL);
 
 	current_default = service;
+#endif
 
 	if (service) {
 		if (service->hostname &&
@@ -1896,6 +2084,15 @@ static void append_dns(DBusMessageIter *iter, void *user_data)
 	if (!is_connected(service))
 		return;
 
+#if defined TIZEN_TV_EXT
+	/* Append DNS Config Type */
+	const char *str;
+	str = __connman_dnsconfig_method2string(service->dns_config_method);
+	if(str != NULL)
+		dbus_message_iter_append_basic(iter,
+			DBUS_TYPE_STRING, &str);
+#endif
+
 	if (service->nameservers_config) {
 		append_nameservers(iter, service, service->nameservers_config);
 		return;
@@ -1923,6 +2120,15 @@ static void append_dns(DBusMessageIter *iter, void *user_data)
 static void append_dnsconfig(DBusMessageIter *iter, void *user_data)
 {
 	struct connman_service *service = user_data;
+
+#if defined TIZEN_TV_EXT
+	/* Append DNS Config Type */
+	const char *str;
+	str = __connman_dnsconfig_method2string(service->dns_config_method);
+	if(str != NULL)
+		dbus_message_iter_append_basic(iter,
+			DBUS_TYPE_STRING, &str);
+#endif
 
 	if (!service->nameservers_config)
 		return;
@@ -2542,6 +2748,13 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 	if (str)
 		connman_dbus_dict_append_basic(dict, "State",
 						DBUS_TYPE_STRING, &str);
+
+#if defined TIZEN_TV_EXT
+	str = state2string(service->state_ipv6);
+	if (str != NULL)
+		connman_dbus_dict_append_basic(dict, "StateIPv6",
+						DBUS_TYPE_STRING, &str);
+#endif
 
 	str = error2string(service->error);
 	if (str)
@@ -3213,7 +3426,6 @@ int __connman_service_set_passphrase(struct connman_service *service,
 	if (service->network)
 		connman_network_set_string(service->network, "WiFi.Passphrase",
 				service->passphrase);
-	service_save(service);
 
 	return 0;
 }
@@ -3224,16 +3436,6 @@ const char *__connman_service_get_passphrase(struct connman_service *service)
 		return NULL;
 
 	return service->passphrase;
-}
-
-static void clear_passphrase(struct connman_service *service)
-{
-	g_free(service->passphrase);
-	service->passphrase = NULL;
-
-	if (service->network)
-		connman_network_set_string(service->network, "WiFi.Passphrase",
-				service->passphrase);
 }
 
 static DBusMessage *get_properties(DBusConnection *conn,
@@ -3598,6 +3800,18 @@ static DBusMessage *set_property(DBusConnection *conn,
 			const char *val;
 			dbus_message_iter_get_basic(&entry, &val);
 			dbus_message_iter_next(&entry);
+#if defined TIZEN_TV_EXT
+			/* First unpack the DNS Config Method */
+			if(g_strcmp0(val, "manual") == 0) {
+				service->dns_config_method =
+					CONNMAN_DNSCONFIG_METHOD_MANUAL;
+				continue;
+			} else if(g_strcmp0(val, "dhcp") == 0) {
+				service->dns_config_method =
+					CONNMAN_DNSCONFIG_METHOD_DHCP;
+				continue;
+			}
+#endif
 			if (connman_inet_check_ipaddress(val) > 0) {
 				if (str->len > 0)
 					g_string_append_printf(str, " %s", val);
@@ -3606,7 +3820,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 			}
 		}
 
-		remove_nameservers(service, -1, service->nameservers_config);
+		nameserver_remove_all(service);
 		g_strfreev(service->nameservers_config);
 
 		if (str->len > 0) {
@@ -3621,7 +3835,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		if (gw && strlen(gw))
 			__connman_service_nameserver_add_routes(service, gw);
 
-		update_nameservers(service);
+		nameserver_add_all(service);
 		dns_configuration_changed(service);
 
 		if (__connman_service_is_connected_state(service,
@@ -3708,7 +3922,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 				g_string_append(str, val);
 		}
 
-		remove_searchdomains(service, -1, service->domains);
+		searchdomain_remove_all(service);
 		g_strfreev(service->domains);
 
 		if (str->len > 0)
@@ -3718,7 +3932,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		g_string_free(str, TRUE);
 
-		update_nameservers(service);
+		searchdomain_add_all(service);
 		domain_configuration_changed(service);
 		domain_changed(service);
 
@@ -3771,10 +3985,13 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		if (err < 0) {
 			if (is_connected_state(service, state) ||
-					is_connecting_state(service, state))
-				__connman_network_set_ipconfig(service->network,
-						service->ipconfig_ipv4,
-						service->ipconfig_ipv6);
+					is_connecting_state(service, state)) {
+				__connman_network_enable_ipconfig(service->network,
+							service->ipconfig_ipv4);
+				__connman_network_enable_ipconfig(service->network,
+							service->ipconfig_ipv6);
+			}
+
 			return __connman_error_failed(msg, -err);
 		}
 
@@ -3783,10 +4000,12 @@ static DBusMessage *set_property(DBusConnection *conn,
 		else
 			ipv6_configuration_changed(service);
 
-		if (is_connecting(service) || is_connected(service))
-			__connman_network_set_ipconfig(service->network,
-					service->ipconfig_ipv4,
-					service->ipconfig_ipv6);
+		if (is_connecting(service) || is_connected(service)) {
+			__connman_network_enable_ipconfig(service->network,
+							service->ipconfig_ipv4);
+			__connman_network_enable_ipconfig(service->network,
+							service->ipconfig_ipv6);
+		}
 
 		service_save(service);
 	} else
@@ -3808,13 +4027,13 @@ static void set_error(struct connman_service *service,
 	if (!service->path)
 		return;
 
+	if (!allow_property_changed(service))
+		return;
+
 	str = error2string(service->error);
 
 	if (!str)
 		str = "";
-
-	if (!allow_property_changed(service))
-		return;
 
 	connman_dbus_property_changed_basic(service->path,
 				CONNMAN_SERVICE_INTERFACE, "Error",
@@ -4026,6 +4245,20 @@ static bool auto_connect_service(GList *services,
 				__connman_service_type2string(service->type));
 			continue;
 		}
+
+#if defined TIZEN_EXT
+		DBG("service %p %s %s %s, favorite(%d), ignore(%d), hidden(%d, %d)",
+				service, service->name,
+				state2string(service->state),
+				__connman_service_type2string(service->type),
+				service->favorite, is_ignore(service),
+				service->hidden, service->hidden_service);
+
+		/* Tizen takes Wi-Fi as the highest priority into consideration. */
+		if (service->type != CONNMAN_SERVICE_TYPE_WIFI)
+			if (is_connecting(service) == TRUE || is_connected(service) == TRUE)
+				continue;
+#endif
 
 		if (service->pending ||
 				is_connecting(service) ||
@@ -4492,10 +4725,12 @@ static DBusMessage *remove_service(DBusConnection *conn,
 			return __connman_error_permission_denied(msg);
 		}
 
+#if !defined TIZEN_EXT
 		if (!connman_service_is_user_allowed(service, uid)) {
 			DBG("Not allow this user to remove this wifi service now!");
 			return __connman_error_permission_denied(msg);
 		}
+#endif
 	}
 
 	if (!__connman_service_remove(service))
@@ -5334,6 +5569,11 @@ bool __connman_service_is_connected_state(struct connman_service *service,
 		return is_connected_state(service, service->state_ipv4);
 	case CONNMAN_IPCONFIG_TYPE_IPV6:
 		return is_connected_state(service, service->state_ipv6);
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+		return is_connected_state(service,
+					CONNMAN_IPCONFIG_TYPE_IPV4) &&
+			is_connected_state(service,
+					CONNMAN_IPCONFIG_TYPE_IPV6);
 	}
 
 	return false;
@@ -5531,32 +5771,14 @@ void __connman_service_set_string(struct connman_service *service,
 void __connman_service_set_search_domains(struct connman_service *service,
 					char **domains)
 {
-	int index;
+	searchdomain_remove_all(service);
 
-	index = __connman_service_get_index(service);
-	if (index < 0)
-		return;
-
-	if (service->domains) {
-		remove_searchdomains(service, index, service->domains);
+	if (service->domains)
 		g_strfreev(service->domains);
 
-		service->domains = g_strdupv(domains);
-
-		update_nameservers(service);
-	}
-}
-
-/*
- * This variant is used when domain search list is updated via
- * dhcp and in that case the service is not yet fully connected so
- * we cannot do same things as what the set() variant is doing.
- */
-void __connman_service_update_search_domains(struct connman_service *service,
-					char **domains)
-{
-	g_strfreev(service->domains);
 	service->domains = g_strdupv(domains);
+
+	searchdomain_add_all(service);
 }
 
 #if defined TIZEN_EXT
@@ -5635,6 +5857,34 @@ static int check_wpspin(struct connman_service *service, const char *wpspin)
 	return 0;
 }
 
+#if defined TIZEN_EXT
+static int __connman_service_connect_hidden(struct connman_service *service,
+			const char *name, int name_len,
+			const char *identity, const char *passphrase, void *user_data)
+{
+	GList *list;
+
+	for (list = service_list; list; list = list->next) {
+		struct connman_service *target = list->data;
+		const char *target_ssid = NULL;
+		unsigned int target_ssid_len = 0;
+
+		if (service->network != NULL &&
+					service->security == target->security) {
+			target_ssid = connman_network_get_blob(service->network,
+							"WiFi.SSID", &target_ssid_len);
+			if (target_ssid_len == name_len &&
+							memcmp(target_ssid, name, name_len) == 0) {
+				return connman_network_connect_hidden(service->network,
+							(char *)identity, (char *)passphrase, user_data);
+			}
+		}
+	}
+
+	return -ENOENT;
+}
+#endif
+
 static void request_input_cb(struct connman_service *service,
 			bool values_received,
 			const char *name, int name_len,
@@ -5667,6 +5917,14 @@ static void request_input_cb(struct connman_service *service,
 	}
 
 	if (service->hidden && name_len > 0 && name_len <= 32) {
+#if defined TIZEN_EXT
+		/* TIZEN already has Wi-Fi hidden scan before this hidden connection */
+		err = __connman_service_connect_hidden(service, name, name_len,
+						identity, passphrase, user_data);
+		if (err == 0 || err == -EALREADY || err == -EINPROGRESS)
+			return;
+#endif
+
 		device = connman_network_get_device(service->network);
 		security = connman_network_get_string(service->network,
 							"WiFi.Security");
@@ -5978,6 +6236,10 @@ static int service_indicate_state(struct connman_service *service)
 	if (old_state == CONNMAN_SERVICE_STATE_ONLINE)
 		__connman_notifier_leave_online(service->type);
 
+	if (is_connected_state(service, old_state) &&
+			!is_connected_state(service, new_state))
+		searchdomain_remove_all(service);
+
 	service->state = new_state;
 	state_changed(service);
 
@@ -6012,6 +6274,8 @@ static int service_indicate_state(struct connman_service *service)
 		break;
 
 	case CONNMAN_SERVICE_STATE_READY:
+		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+
 		if (service->new_service &&
 				__connman_stats_service_register(service) == 0) {
 			/*
@@ -6040,6 +6304,7 @@ static int service_indicate_state(struct connman_service *service)
 		g_get_current_time(&service->modified);
 		service_save(service);
 
+		searchdomain_add_all(service);
 		dns_changed(service);
 		domain_changed(service);
 		proxy_changed(service);
@@ -6078,6 +6343,7 @@ static int service_indicate_state(struct connman_service *service)
 		break;
 
 	case CONNMAN_SERVICE_STATE_DISCONNECT:
+		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
 
 		reply_pending(service, ECONNABORTED);
 
@@ -6134,9 +6400,6 @@ static int service_indicate_state(struct connman_service *service)
 		break;
 	}
 
-	if (new_state != CONNMAN_SERVICE_STATE_FAILURE)
-		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
-
 	service_list_sort();
 
 #if defined TIZEN_EXT
@@ -6182,17 +6445,10 @@ int __connman_service_indicate_error(struct connman_service *service,
 	if (!service)
 		return -EINVAL;
 
+	if (service->state == CONNMAN_SERVICE_STATE_FAILURE)
+		return -EALREADY;
+
 	set_error(service, error);
-
-	/*
-	 * Supplicant does not always return invalid key error for
-	 * WPA-EAP so clear the credentials always.
-	 */
-	if (service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY ||
-			service->security == CONNMAN_SERVICE_SECURITY_8021X)
-		clear_passphrase(service);
-
-	__connman_service_set_agent_identity(service, NULL);
 
 	__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_FAILURE,
@@ -6396,7 +6652,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	struct connman_ipconfig *ipconfig = NULL;
-	enum connman_service_state *old_state;
+	enum connman_service_state old_state;
 	enum connman_ipconfig_method method;
 
 	if (!service)
@@ -6404,16 +6660,17 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 
 	switch (type) {
 	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+	case CONNMAN_IPCONFIG_TYPE_ALL:
 		return -EINVAL;
 
 	case CONNMAN_IPCONFIG_TYPE_IPV4:
-		old_state = &service->state_ipv4;
+		old_state = service->state_ipv4;
 		ipconfig = service->ipconfig_ipv4;
 
 		break;
 
 	case CONNMAN_IPCONFIG_TYPE_IPV6:
-		old_state = &service->state_ipv6;
+		old_state = service->state_ipv6;
 		ipconfig = service->ipconfig_ipv6;
 
 		break;
@@ -6423,7 +6680,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		return -EINVAL;
 
 	/* Any change? */
-	if (*old_state == new_state)
+	if (old_state == new_state)
 		return -EALREADY;
 
 #if defined TIZEN_EXT
@@ -6440,7 +6697,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 
 	DBG("service %p (%s) old state %d (%s) new state %d (%s) type %d (%s)",
 		service, service ? service->identifier : NULL,
-		*old_state, state2string(*old_state),
+		old_state, state2string(old_state),
 		new_state, state2string(new_state),
 		type, __connman_ipconfig_type2string(type));
 
@@ -6496,16 +6753,25 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		break;
 
 	case CONNMAN_IPCONFIG_METHOD_FIXED:
-        case CONNMAN_IPCONFIG_METHOD_MANUAL:
-        case CONNMAN_IPCONFIG_METHOD_DHCP:
-        case CONNMAN_IPCONFIG_METHOD_AUTO:
+	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+	case CONNMAN_IPCONFIG_METHOD_DHCP:
+	case CONNMAN_IPCONFIG_METHOD_AUTO:
 		break;
 
 	}
 
-	*old_state = new_state;
+	if (is_connected_state(service, old_state) &&
+			!is_connected_state(service, new_state))
+		nameserver_remove_all(service);
 
-	update_nameservers(service);
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		service->state_ipv4 = new_state;
+	else
+		service->state_ipv6 = new_state;
+
+	if (!is_connected_state(service, old_state) &&
+			is_connected_state(service, new_state))
+		nameserver_add_all(service);
 
 	return service_indicate_state(service);
 }
@@ -6603,6 +6869,9 @@ static int service_connect(struct connman_service *service)
 		case CONNMAN_SERVICE_SECURITY_PSK:
 		case CONNMAN_SERVICE_SECURITY_WPA:
 		case CONNMAN_SERVICE_SECURITY_RSN:
+			if (service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY)
+				return -ENOKEY;
+
 			if (service->request_passphrase_input) {
 				DBG("Now try to connect other user's favorite service");
 				service->request_passphrase_input = false;
@@ -6644,9 +6913,10 @@ static int service_connect(struct connman_service *service)
 			 * missing. Agent provided credentials can be used as
 			 * fallback if needed.
 			 */
-			if ((!service->identity &&
+			if (((!service->identity &&
 					!service->agent_identity) ||
-					!service->passphrase)
+					!service->passphrase) ||
+					service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY)
 				return -ENOKEY;
 
 			break;
@@ -6741,16 +7011,14 @@ int __connman_service_connect(struct connman_service *service,
 	err = service_connect(service);
 
 	service->connect_reason = reason;
-	if (err >= 0) {
-		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+	if (err >= 0)
 		return 0;
-	}
 
 	if (err == -EINPROGRESS) {
 		if (service->timeout == 0)
 			service->timeout = g_timeout_add_seconds(
 				CONNECT_TIMEOUT, connect_timeout, service);
-		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+
 		return -EINPROGRESS;
 	}
 
@@ -7541,8 +7809,45 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 
 	if (service->favorite) {
 		device = connman_network_get_device(service->network);
-		if (device && !connman_device_get_scanning(device))
-			__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+		if (device && !connman_device_get_scanning(device)) {
+
+			switch (service->type) {
+			case CONNMAN_SERVICE_TYPE_UNKNOWN:
+			case CONNMAN_SERVICE_TYPE_SYSTEM:
+			case CONNMAN_SERVICE_TYPE_P2P:
+				break;
+
+			case CONNMAN_SERVICE_TYPE_GADGET:
+			case CONNMAN_SERVICE_TYPE_ETHERNET:
+				if (service->autoconnect) {
+					__connman_service_connect(service,
+						CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+					break;
+				}
+
+				/* fall through */
+			case CONNMAN_SERVICE_TYPE_BLUETOOTH:
+			case CONNMAN_SERVICE_TYPE_GPS:
+			case CONNMAN_SERVICE_TYPE_VPN:
+			case CONNMAN_SERVICE_TYPE_WIFI:
+			case CONNMAN_SERVICE_TYPE_CELLULAR:
+				__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+				break;
+			}
+		}
+
+#if defined TIZEN_EXT
+		/* TIZEN synchronizes below information when the service creates */
+		if (service->eap != NULL)
+			connman_network_set_string(service->network, "WiFi.EAP",
+								service->eap);
+		if (service->identity != NULL)
+			connman_network_set_string(service->network, "WiFi.Identity",
+								service->identity);
+		if (service->phase2 != NULL)
+			connman_network_set_string(service->network, "WiFi.Phase2",
+								service->phase2);
+#endif
 	}
 
 	__connman_notifier_service_add(service, service->name);

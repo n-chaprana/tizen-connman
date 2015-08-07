@@ -1143,7 +1143,11 @@ int __connman_device_request_hidden_scan(struct connman_device *device,
 					passphrase, security, user_data);
 }
 
+#if defined TIZEN_EXT
+char *index2ident(int index, const char *prefix)
+#else
 static char *index2ident(int index, const char *prefix)
+#endif
 {
 	struct ifreq ifr;
 	struct ether_addr eth;
@@ -1189,7 +1193,11 @@ static char *index2ident(int index, const char *prefix)
 	return str;
 }
 
+#if defined TIZEN_EXT
+char *index2addr(int index)
+#else
 static char *index2addr(int index)
+#endif
 {
 	struct ifreq ifr;
 	struct ether_addr eth;

@@ -330,6 +330,62 @@ done:
 	return err;
 }
 
+#if defined TIZEN_EXT
+void connman_inet_update_device_ident(struct connman_device *device)
+{
+	int index;
+	enum connman_device_type type;
+	char *ident = NULL, *addr = NULL;
+
+	index = connman_device_get_index(device);
+	type = connman_device_get_type(device);
+
+	switch (type) {
+	case CONNMAN_DEVICE_TYPE_UNKNOWN:
+		return;
+	case CONNMAN_DEVICE_TYPE_ETHERNET:
+	case CONNMAN_DEVICE_TYPE_GADGET:
+	case CONNMAN_DEVICE_TYPE_WIFI:
+		addr = index2addr(index);
+		break;
+	case CONNMAN_DEVICE_TYPE_BLUETOOTH:
+	case CONNMAN_DEVICE_TYPE_CELLULAR:
+	case CONNMAN_DEVICE_TYPE_GPS:
+	case CONNMAN_DEVICE_TYPE_VENDOR:
+		break;
+	}
+
+	switch (type) {
+	case CONNMAN_DEVICE_TYPE_UNKNOWN:
+	case CONNMAN_DEVICE_TYPE_VENDOR:
+	case CONNMAN_DEVICE_TYPE_GPS:
+		break;
+	case CONNMAN_DEVICE_TYPE_ETHERNET:
+	case CONNMAN_DEVICE_TYPE_GADGET:
+		ident = index2ident(index, NULL);
+		break;
+	case CONNMAN_DEVICE_TYPE_WIFI:
+		ident = index2ident(index, NULL);
+		break;
+	case CONNMAN_DEVICE_TYPE_BLUETOOTH:
+		break;
+	case CONNMAN_DEVICE_TYPE_CELLULAR:
+		ident = index2ident(index, NULL);
+		break;
+	}
+
+	if (ident != NULL) {
+		connman_device_set_ident(device, ident);
+		g_free(ident);
+	}
+
+	if (addr != NULL) {
+		connman_device_set_string(device, "Address", addr);
+		g_free(addr);
+	}
+}
+#endif
+
 struct in6_ifreq {
 	struct in6_addr ifr6_addr;
 	__u32 ifr6_prefixlen;
@@ -2229,10 +2285,8 @@ static int inet_rtnl_recv(GIOChannel *chan, gpointer user_data)
 
 		h = ptr;
 
-		if (!NLMSG_OK(h, len)) {
+		if (!NLMSG_OK(h, len))
 			return -1;
-			break;
-		}
 
 		if (h->nlmsg_seq != rth->seq) {
 			/* Skip this msg */

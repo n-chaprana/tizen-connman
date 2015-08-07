@@ -1007,7 +1007,7 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 	GKeyFile *keyfile;
 	gchar **services;
 	char *ssid, *name;
-	int i, freq, ret;
+	int i, ret;
 	bool value;
 	int num_ssids = 0, add_param_failed = 0;
 
@@ -1046,13 +1046,10 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 		ssid = g_key_file_get_string(keyfile,
 					services[i], "SSID", NULL);
 
-		freq = g_key_file_get_integer(keyfile, services[i],
-					"Frequency", NULL);
-
 		name = g_key_file_get_string(keyfile, services[i], "Name",
 								NULL);
 
-		ret = add_scan_param(ssid, NULL, 0, freq, scan_data, 0, name);
+		ret = add_scan_param(ssid, NULL, 0, 0, scan_data, 0, name);
 		if (ret < 0)
 			add_param_failed++;
 		else if (ret > 0)
@@ -1393,7 +1390,11 @@ static gboolean autoscan_timeout(gpointer data)
 	} else
 		interval = autoscan->interval * autoscan->base;
 
+#if defined TIZEN_EXT
 	if (autoscan->interval >= autoscan->limit)
+#else
+	if (interval > autoscan->limit)
+#endif
 		interval = autoscan->limit;
 
 	throw_wifi_scan(wifi->device, scan_callback_hidden);
@@ -1420,6 +1421,9 @@ static void start_autoscan(struct connman_device *device)
 		return;
 
 	if (wifi->p2p_device)
+		return;
+
+	if (wifi->connected)
 		return;
 
 	autoscan = wifi->autoscan;
@@ -1478,22 +1482,8 @@ static void setup_autoscan(struct wifi_data *wifi)
 	start_autoscan(wifi->device);
 }
 
-static void interface_autoscan_callback(int result,
-					GSupplicantInterface *interface,
-							void *user_data)
-{
-	struct wifi_data *wifi = user_data;
-
-	if (result < 0) {
-		DBG("Could not enable Autoscan, falling back...");
-		setup_autoscan(wifi);
-	}
-}
-
 static void finalize_interface_creation(struct wifi_data *wifi)
 {
-	GSupplicantInterface *interface = wifi->interface;
-
 	DBG("interface is ready wifi %p tethering %d", wifi, wifi->tethering);
 
 	if (!wifi->device) {
@@ -1509,12 +1499,7 @@ static void finalize_interface_creation(struct wifi_data *wifi)
 	if (wifi->p2p_device)
 		return;
 
-	/* Setting up automatic scanning */
-	if (g_supplicant_interface_autoscan(interface, AUTOSCAN_DEFAULT,
-				interface_autoscan_callback, wifi) < 0) {
-		DBG("Could not enable Autoscan, falling back...");
-		setup_autoscan(wifi);
-	}
+	setup_autoscan(wifi);
 }
 
 static void interface_create_callback(int result,
@@ -1931,6 +1916,9 @@ static int wifi_scan(enum connman_service_type type,
 
 			return 0;
 		}
+	} else if (wifi->connected) {
+		g_supplicant_free_scan_params(scan_params);
+		return wifi_scan_simple(device);
 	} else {
 		ret = get_latest_connections(driver_max_ssids, scan_params);
 		if (ret <= 0) {
@@ -2961,7 +2949,11 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 	connman_network_set_available(network, true);
 	connman_network_set_string(network, "WiFi.Mode", mode);
 
+#if defined TIZEN_EXT
+	if (group)
+#else
 	if (ssid)
+#endif
 		connman_network_set_group(network, group);
 
 #if defined TIZEN_EXT
@@ -3176,9 +3168,8 @@ static void peer_changed(GSupplicantPeer *peer, GSupplicantPeerState state)
 		p_state = CONNMAN_PEER_STATE_IDLE;
 		break;
 	case G_SUPPLICANT_PEER_GROUP_JOINED:
-		if (!g_supplicant_peer_is_in_a_group(peer))
-			break;
-		p_state = CONNMAN_PEER_STATE_READY;
+		connman_peer_set_iface_address(connman_peer,
+				g_supplicant_peer_get_iface_address(peer));
 		break;
 	case G_SUPPLICANT_PEER_GROUP_DISCONNECTED:
 		p_state = CONNMAN_PEER_STATE_IDLE;
@@ -3241,6 +3232,75 @@ static void peer_request(GSupplicantPeer *peer)
 	connman_peer_request_connection(connman_peer);
 }
 
+#if defined TIZEN_EXT
+static void network_merged(GSupplicantNetwork *network)
+{
+	GSupplicantInterface *interface;
+	GSupplicantState state;
+	struct wifi_data *wifi;
+	const char *identifier;
+	struct connman_network *connman_network;
+	unsigned int ishs20AP = 0;
+	char *temp = NULL;
+
+	interface = g_supplicant_network_get_interface(network);
+	if (!interface)
+		return;
+
+	state = g_supplicant_interface_get_state(interface);
+	if (state < G_SUPPLICANT_STATE_AUTHENTICATING)
+		return;
+
+	wifi = g_supplicant_interface_get_data(interface);
+	if (!wifi)
+		return;
+
+	identifier = g_supplicant_network_get_identifier(network);
+
+	connman_network = connman_device_get_network(wifi->device, identifier);
+	if (!connman_network)
+		return;
+
+	DBG("merged identifier %s", identifier);
+
+	if (wifi->connected == FALSE) {
+		switch (state) {
+		case G_SUPPLICANT_STATE_AUTHENTICATING:
+		case G_SUPPLICANT_STATE_ASSOCIATING:
+		case G_SUPPLICANT_STATE_ASSOCIATED:
+		case G_SUPPLICANT_STATE_4WAY_HANDSHAKE:
+		case G_SUPPLICANT_STATE_GROUP_HANDSHAKE:
+			connman_network_set_associating(connman_network, TRUE);
+			break;
+		case G_SUPPLICANT_STATE_COMPLETED:
+			connman_network_set_connected(connman_network, TRUE);
+			break;
+		default:
+			DBG("Not handled the state : %d", state);
+			break;
+		}
+	}
+
+	ishs20AP = g_supplicant_network_is_hs20AP(network);
+	connman_network_set_is_hs20AP(connman_network, ishs20AP);
+
+	if (ishs20AP &&
+		g_strcmp0(g_supplicant_network_get_security(network), "ieee8021x") == 0) {
+		temp = g_ascii_strdown(g_supplicant_network_get_eap(network), -1);
+		connman_network_set_string(connman_network, "WiFi.EAP",
+				temp);
+		connman_network_set_string(connman_network, "WiFi.Identity",
+				g_supplicant_network_get_identity(network));
+		connman_network_set_string(connman_network, "WiFi.Phase2",
+				g_supplicant_network_get_phase2(network));
+
+		g_free(temp);
+	}
+
+	wifi->network = connman_network;
+}
+#endif
+
 static void debug(const char *str)
 {
 	if (getenv("CONNMAN_SUPPLICANT_DEBUG"))
@@ -3265,6 +3325,9 @@ static const GSupplicantCallbacks callbacks = {
 	.peer_lost		= peer_lost,
 	.peer_changed		= peer_changed,
 	.peer_request		= peer_request,
+#if defined TIZEN_EXT
+	.network_merged	= network_merged,
+#endif
 	.debug			= debug,
 };
 

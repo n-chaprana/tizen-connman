@@ -96,6 +96,7 @@ struct connman_network {
 		char encryption_mode[WIFI_ENCYPTION_MODE_LEN_MAX];
 		unsigned char bssid[WIFI_BSSID_LEN_MAX];
 		unsigned int maxrate;
+		unsigned int isHS20AP;
 #endif
 	} wifi;
 
@@ -168,10 +169,6 @@ static void dhcp_success(struct connman_network *network)
 	if (!service)
 		goto err;
 
-	connman_network_set_associating(network, false);
-
-	network->connecting = false;
-
 	ipconfig_ipv4 = __connman_service_get_ip4config(service);
 
 	DBG("lease acquired for ipconfig %p", ipconfig_ipv4);
@@ -207,9 +204,6 @@ static void dhcp_failure(struct connman_network *network)
 	if (!service)
 		return;
 
-	connman_network_set_associating(network, false);
-	network->connecting = false;
-
 	ipconfig_ipv4 = __connman_service_get_ip4config(service);
 
 	DBG("lease lost for ipconfig %p", ipconfig_ipv4);
@@ -225,59 +219,23 @@ static void dhcp_callback(struct connman_ipconfig *ipconfig,
 			struct connman_network *network,
 			bool success, gpointer data)
 {
+	network->connecting = false;
+
 	if (success)
 		dhcp_success(network);
 	else
 		dhcp_failure(network);
 }
 
-static int set_connected_fixed(struct connman_network *network)
+static int set_connected_manual(struct connman_network *network)
 {
-	struct connman_service *service;
-	struct connman_ipconfig *ipconfig_ipv4;
-	int err;
-
-	DBG("");
-
-	service = connman_service_lookup_from_network(network);
-
-	ipconfig_ipv4 = __connman_service_get_ip4config(service);
-
-	set_configuration(network, CONNMAN_IPCONFIG_TYPE_IPV4);
-
-	network->connecting = false;
-
-	connman_network_set_associating(network, false);
-
-	err = __connman_ipconfig_address_add(ipconfig_ipv4);
-	if (err < 0)
-		goto err;
-
-#if defined TIZEN_EXT
-	err = __connman_ipconfig_gateway_add(ipconfig_ipv4, service);
-#else
-	err = __connman_ipconfig_gateway_add(ipconfig_ipv4);
-#endif
-
-	if (err < 0)
-		goto err;
-
-	return 0;
-
-err:
-	connman_network_set_error(network,
-			CONNMAN_NETWORK_ERROR_CONFIGURE_FAIL);
-
-	return err;
-}
-
-static void set_connected_manual(struct connman_network *network)
-{
+	int err = 0;
 	struct connman_service *service;
 	struct connman_ipconfig *ipconfig;
-	int err;
 
 	DBG("network %p", network);
+
+	network->connecting = false;
 
 	service = connman_service_lookup_from_network(network);
 
@@ -285,8 +243,6 @@ static void set_connected_manual(struct connman_network *network)
 
 	if (!__connman_ipconfig_get_local(ipconfig))
 		__connman_service_read_ip4config(service);
-
-	set_configuration(network, CONNMAN_IPCONFIG_TYPE_IPV4);
 
 	err = __connman_ipconfig_address_add(ipconfig);
 	if (err < 0)
@@ -300,16 +256,8 @@ static void set_connected_manual(struct connman_network *network)
 	if (err < 0)
 		goto err;
 
-	network->connecting = false;
-
-	connman_network_set_associating(network, false);
-
-	return;
-
 err:
-	connman_network_set_error(network,
-					CONNMAN_NETWORK_ERROR_CONFIGURE_FAIL);
-	return;
+	return err;
 }
 
 static int set_connected_dhcp(struct connman_network *network)
@@ -319,8 +267,6 @@ static int set_connected_dhcp(struct connman_network *network)
 	int err;
 
 	DBG("network %p", network);
-
-	set_configuration(network, CONNMAN_IPCONFIG_TYPE_IPV4);
 
 	service = connman_service_lookup_from_network(network);
 	ipconfig_ipv4 = __connman_service_get_ip4config(service);
@@ -374,6 +320,8 @@ static int manual_ipv6_set(struct connman_network *network,
 
 	connman_device_set_disconnected(network->device, false);
 
+	connman_network_set_associating(network, false);
+
 	network->connecting = false;
 
 	return 0;
@@ -381,6 +329,8 @@ static int manual_ipv6_set(struct connman_network *network,
 
 static void stop_dhcpv6(struct connman_network *network)
 {
+	network->connecting = false;
+
 	__connman_dhcpv6_stop(network);
 }
 
@@ -418,20 +368,10 @@ static int dhcpv6_set_addresses(struct connman_network *network)
 	if (!service)
 		goto err;
 
-	connman_network_set_associating(network, false);
-
 	network->connecting = false;
 
 	ipconfig_ipv6 = __connman_service_get_ip6config(service);
 	err = __connman_ipconfig_address_add(ipconfig_ipv6);
-	if (err < 0)
-		goto err;
-
-#if defined TIZEN_EXT
-	err = __connman_ipconfig_gateway_add(ipconfig_ipv6, service);
-#else
-	err = __connman_ipconfig_gateway_add(ipconfig_ipv6);
-#endif
 	if (err < 0)
 		goto err;
 
@@ -547,6 +487,8 @@ static void check_dhcpv6(struct nd_router_advert *reply,
 	if (service) {
 		connman_service_create_ip6config(service, network->index);
 
+		connman_network_set_associating(network, false);
+
 		__connman_service_ipconfig_indicate_state(service,
 					CONNMAN_SERVICE_STATE_CONFIGURATION,
 					CONNMAN_IPCONFIG_TYPE_IPV6);
@@ -555,10 +497,16 @@ static void check_dhcpv6(struct nd_router_advert *reply,
 	/*
 	 * We do stateful/stateless DHCPv6 if router advertisement says so.
 	 */
-	if (reply->nd_ra_flags_reserved & ND_RA_FLAG_MANAGED)
+	if (reply->nd_ra_flags_reserved & ND_RA_FLAG_MANAGED) {
 		__connman_dhcpv6_start(network, prefixes, dhcpv6_callback);
-	else if (reply->nd_ra_flags_reserved & ND_RA_FLAG_OTHER)
-		__connman_dhcpv6_start_info(network, dhcpv6_info_callback);
+	} else {
+		if (reply->nd_ra_flags_reserved & ND_RA_FLAG_OTHER)
+			__connman_dhcpv6_start_info(network,
+							dhcpv6_info_callback);
+
+		g_slist_free_full(prefixes, g_free);
+		network->connecting = false;
+	}
 
 	connman_network_unref(network);
 }
@@ -638,11 +586,9 @@ static void autoconf_ipv6_set(struct connman_network *network)
 
 	connman_device_set_disconnected(network->device, false);
 
-	network->connecting = false;
-
 #if defined TIZEN_EXT
-		if(network->type == CONNMAN_NETWORK_TYPE_CELLULAR)
-			return;
+	if(network->type == CONNMAN_NETWORK_TYPE_CELLULAR)
+		return;
 #endif
 
 	service = connman_service_lookup_from_network(network);
@@ -652,6 +598,8 @@ static void autoconf_ipv6_set(struct connman_network *network)
 	ipconfig = __connman_service_get_ip6config(service);
 	if (!ipconfig)
 		return;
+
+	__connman_ipconfig_enable_ipv6(ipconfig);
 
 	__connman_ipconfig_address_remove(ipconfig);
 
@@ -667,12 +615,12 @@ static void autoconf_ipv6_set(struct connman_network *network)
 static void set_connected(struct connman_network *network)
 {
 	struct connman_ipconfig *ipconfig_ipv4, *ipconfig_ipv6;
-	enum connman_ipconfig_method ipv4_method, ipv6_method;
 	struct connman_service *service;
-	int ret;
 
 	if (network->connected)
 		return;
+
+	connman_network_set_associating(network, false);
 
 	network->connected = true;
 
@@ -684,62 +632,8 @@ static void set_connected(struct connman_network *network)
 	DBG("service %p ipv4 %p ipv6 %p", service, ipconfig_ipv4,
 		ipconfig_ipv6);
 
-	ipv4_method = __connman_ipconfig_get_method(ipconfig_ipv4);
-	ipv6_method = __connman_ipconfig_get_method(ipconfig_ipv6);
-
-	DBG("method ipv4 %d ipv6 %d", ipv4_method, ipv6_method);
-
-	switch (ipv6_method) {
-	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
-	case CONNMAN_IPCONFIG_METHOD_OFF:
-		break;
-	case CONNMAN_IPCONFIG_METHOD_DHCP:
-	case CONNMAN_IPCONFIG_METHOD_AUTO:
-#if defined TIZEN_EXT
-		if(network->type == CONNMAN_NETWORK_TYPE_CELLULAR)
-			__connman_service_ipconfig_indicate_state(service,
-				CONNMAN_SERVICE_STATE_CONFIGURATION,
-					CONNMAN_IPCONFIG_TYPE_IPV6);
-#endif
-		autoconf_ipv6_set(network);
-		break;
-	case CONNMAN_IPCONFIG_METHOD_FIXED:
-	case CONNMAN_IPCONFIG_METHOD_MANUAL:
-		ret = manual_ipv6_set(network, ipconfig_ipv6);
-		if (ret != 0) {
-			connman_network_set_error(network,
-					CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
-			return;
-		}
-		break;
-	}
-
-	switch (ipv4_method) {
-	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
-	case CONNMAN_IPCONFIG_METHOD_OFF:
-	case CONNMAN_IPCONFIG_METHOD_AUTO:
-		return;
-	case CONNMAN_IPCONFIG_METHOD_FIXED:
-		if (set_connected_fixed(network) < 0) {
-			connman_network_set_error(network,
-					CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
-			return;
-		}
-		return;
-	case CONNMAN_IPCONFIG_METHOD_MANUAL:
-		set_connected_manual(network);
-		return;
-	case CONNMAN_IPCONFIG_METHOD_DHCP:
-		if (set_connected_dhcp(network) < 0) {
-			connman_network_set_error(network,
-					CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
-			return;
-		}
-	}
-
-	network->connecting = false;
-
-	connman_network_set_associating(network, false);
+	__connman_network_enable_ipconfig(network, ipconfig_ipv4);
+	__connman_network_enable_ipconfig(network, ipconfig_ipv6);
 }
 
 static void set_disconnected(struct connman_network *network)
@@ -1196,14 +1090,21 @@ void connman_network_set_index(struct connman_network *network, int index)
 		goto done;
 
 	ipconfig = __connman_service_get_ip4config(service);
-	if (!ipconfig)
-		goto done;
+	if (ipconfig) {
+		__connman_ipconfig_set_index(ipconfig, index);
 
-	/* If index changed, the index of ipconfig must be reset. */
-	__connman_ipconfig_set_index(ipconfig, index);
+		DBG("index %d service %p ip4config %p", network->index,
+			service, ipconfig);
+	}
 
-	DBG("index %d service %p ip4config %p", network->index,
-		service, ipconfig);
+	ipconfig = __connman_service_get_ip6config(service);
+	if (ipconfig) {
+		__connman_ipconfig_set_index(ipconfig, index);
+
+		DBG("index %d service %p ip6config %p", network->index,
+			service, ipconfig);
+	}
+
 done:
 	network->index = index;
 }
@@ -1314,7 +1215,9 @@ bool connman_network_get_connecting(struct connman_network *network)
 int connman_network_set_available(struct connman_network *network,
 						bool available)
 {
+#if !defined TIZEN_EXT
 	DBG("network %p available %d", network, available);
+#endif
 
 	if (network->available == available)
 		return -EALREADY;
@@ -1450,6 +1353,13 @@ int connman_network_set_associating(struct connman_network *network,
 					CONNMAN_SERVICE_STATE_ASSOCIATION,
 					CONNMAN_IPCONFIG_TYPE_IPV6);
 	}
+
+#if defined TIZEN_EXT
+	if (associating == FALSE)
+		g_timeout_add_seconds(1,
+				__connman_network_clear_associating_delayed,
+				network);
+#endif
 
 	return 0;
 }
@@ -1744,30 +1654,6 @@ int __connman_network_disconnect(struct connman_network *network)
 	return err;
 }
 
-static int manual_ipv4_set(struct connman_network *network,
-				struct connman_ipconfig *ipconfig)
-{
-	struct connman_service *service;
-	int err;
-
-	service = connman_service_lookup_from_network(network);
-	if (!service)
-		return -EINVAL;
-
-	err = __connman_ipconfig_address_add(ipconfig);
-	if (err < 0) {
-		connman_network_set_error(network,
-			CONNMAN_NETWORK_ERROR_CONFIGURE_FAIL);
-		return err;
-	}
-
-#if defined TIZEN_EXT
-	return __connman_ipconfig_gateway_add(ipconfig, service);
-#else
-	return __connman_ipconfig_gateway_add(ipconfig);
-#endif
-}
-
 int __connman_network_clear_ipconfig(struct connman_network *network,
 					struct connman_ipconfig *ipconfig)
 {
@@ -1812,58 +1698,99 @@ int __connman_network_clear_ipconfig(struct connman_network *network,
 	return 0;
 }
 
-int __connman_network_set_ipconfig(struct connman_network *network,
-					struct connman_ipconfig *ipconfig_ipv4,
-					struct connman_ipconfig *ipconfig_ipv6)
+int __connman_network_enable_ipconfig(struct connman_network *network,
+				struct connman_ipconfig *ipconfig)
 {
+	int r = 0;
+	enum connman_ipconfig_type type;
 	enum connman_ipconfig_method method;
-	int ret;
+#if defined TIZEN_EXT
+	struct connman_service *service;
+#endif
 
-	if (!network)
+	if (!network || !ipconfig)
 		return -EINVAL;
 
-	if (ipconfig_ipv6) {
-		method = __connman_ipconfig_get_method(ipconfig_ipv6);
+	type = __connman_ipconfig_get_config_type(ipconfig);
+
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+		return -ENOSYS;
+
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		set_configuration(network, type);
+
+		method = __connman_ipconfig_get_method(ipconfig);
+
+		DBG("ipv6 ipconfig method %d", method);
 
 		switch (method) {
 		case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
-		case CONNMAN_IPCONFIG_METHOD_OFF:
 			break;
+
+		case CONNMAN_IPCONFIG_METHOD_OFF:
+			__connman_ipconfig_disable_ipv6(ipconfig);
+			break;
+
 		case CONNMAN_IPCONFIG_METHOD_AUTO:
+#if defined TIZEN_EXT
+		service = connman_service_lookup_from_network(network);
+
+		if(network->type == CONNMAN_NETWORK_TYPE_CELLULAR)
+			__connman_service_ipconfig_indicate_state(service,
+				CONNMAN_SERVICE_STATE_CONFIGURATION,
+					CONNMAN_IPCONFIG_TYPE_IPV6);
+#endif
 			autoconf_ipv6_set(network);
 			break;
+
 		case CONNMAN_IPCONFIG_METHOD_FIXED:
 		case CONNMAN_IPCONFIG_METHOD_MANUAL:
-			ret = manual_ipv6_set(network, ipconfig_ipv6);
-			if (ret != 0) {
-				connman_network_set_error(network,
-					CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
-				return ret;
-			}
+			r = manual_ipv6_set(network, ipconfig);
 			break;
+
 		case CONNMAN_IPCONFIG_METHOD_DHCP:
+			r = -ENOSYS;
 			break;
 		}
-	}
 
-	if (ipconfig_ipv4) {
-		method = __connman_ipconfig_get_method(ipconfig_ipv4);
+		break;
+
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+		set_configuration(network, type);
+
+		method = __connman_ipconfig_get_method(ipconfig);
+
+		DBG("ipv4 ipconfig method %d", method);
 
 		switch (method) {
 		case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
 		case CONNMAN_IPCONFIG_METHOD_OFF:
-		case CONNMAN_IPCONFIG_METHOD_FIXED:
+			break;
+
 		case CONNMAN_IPCONFIG_METHOD_AUTO:
-			return -EINVAL;
+			r = -ENOSYS;
+			break;
+
+		case CONNMAN_IPCONFIG_METHOD_FIXED:
 		case CONNMAN_IPCONFIG_METHOD_MANUAL:
-			return manual_ipv4_set(network, ipconfig_ipv4);
+			r = set_connected_manual(network);
+			break;
+
 		case CONNMAN_IPCONFIG_METHOD_DHCP:
-			return __connman_dhcp_start(ipconfig_ipv4,
-						network, dhcp_callback, NULL);
+			r = set_connected_dhcp(network);
+			break;
 		}
+
+		break;
 	}
 
-	return 0;
+	if (r < 0)
+		connman_network_set_error(network,
+					CONNMAN_NETWORK_ERROR_CONFIGURE_FAIL);
+
+	return r;
 }
 
 int connman_network_set_ipaddress(struct connman_network *network,
@@ -1921,7 +1848,9 @@ unsigned char *connman_network_get_bssid(struct connman_network *network)
 int connman_network_set_maxrate(struct connman_network *network,
 				unsigned int maxrate)
 {
+#if !defined TIZEN_EXT
 	DBG("network %p maxrate %d", network, maxrate);
+#endif
 
 	network->wifi.maxrate = maxrate;
 
@@ -1969,6 +1898,25 @@ int connman_network_set_proxy(struct connman_network *network,
 				CONNMAN_SERVICE_PROXY_METHOD_MANUAL);
 
 	return 0;
+}
+
+int connman_network_set_is_hs20AP(struct connman_network *network,
+				unsigned int isHS20AP)
+{
+	if (!network)
+		return 0;
+
+	network->wifi.isHS20AP = isHS20AP;
+
+	return 0;
+}
+
+unsigned int connman_network_get_is_hs20AP(struct connman_network *network)
+{
+	if (!network)
+		return 0;
+
+	return network->wifi.isHS20AP;
 }
 #endif
 
@@ -2047,7 +1995,9 @@ int connman_network_set_name(struct connman_network *network,
 int connman_network_set_strength(struct connman_network *network,
 						uint8_t strength)
 {
+#if !defined TIZEN_EXT
 	DBG("network %p strengh %d", network, strength);
+#endif
 
 	network->strength = strength;
 
@@ -2062,7 +2012,9 @@ uint8_t connman_network_get_strength(struct connman_network *network)
 int connman_network_set_frequency(struct connman_network *network,
 						uint16_t frequency)
 {
+#if !defined TIZEN_EXT
 	DBG("network %p frequency %d", network, frequency);
+#endif
 
 	network->frequency = frequency;
 
@@ -2100,7 +2052,9 @@ uint16_t connman_network_get_wifi_channel(struct connman_network *network)
 int connman_network_set_string(struct connman_network *network,
 					const char *key, const char *value)
 {
+#if !defined TIZEN_EXT
 	DBG("network %p key %s value %s", network, key, value);
+#endif
 
 	if (g_strcmp0(key, "Name") == 0)
 		return connman_network_set_name(network, value);
@@ -2164,7 +2118,9 @@ int connman_network_set_string(struct connman_network *network,
 const char *connman_network_get_string(struct connman_network *network,
 							const char *key)
 {
+#if !defined TIZEN_EXT
 	DBG("network %p key %s", network, key);
+#endif
 
 	if (g_str_equal(key, "Path"))
 		return network->path;
@@ -2211,7 +2167,9 @@ const char *connman_network_get_string(struct connman_network *network,
 int connman_network_set_bool(struct connman_network *network,
 					const char *key, bool value)
 {
+#if !defined TIZEN_EXT
 	DBG("network %p key %s value %d", network, key, value);
+#endif
 
 	if (g_strcmp0(key, "Roaming") == 0)
 		network->roaming = value;
@@ -2237,7 +2195,9 @@ int connman_network_set_bool(struct connman_network *network,
 bool connman_network_get_bool(struct connman_network *network,
 							const char *key)
 {
+#if !defined TIZEN_EXT
 	DBG("network %p key %s", network, key);
+#endif
 
 	if (g_str_equal(key, "Roaming"))
 		return network->roaming;
@@ -2265,7 +2225,9 @@ bool connman_network_get_bool(struct connman_network *network,
 int connman_network_set_blob(struct connman_network *network,
 			const char *key, const void *data, unsigned int size)
 {
+#if !defined TIZEN_EXT
 	DBG("network %p key %s size %d", network, key, size);
+#endif
 
 	if (g_str_equal(key, "WiFi.SSID")) {
 		g_free(network->wifi.ssid);

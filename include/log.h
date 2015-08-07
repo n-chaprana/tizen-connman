@@ -52,7 +52,11 @@ void connman_debug(const char *format, ...)
 struct connman_debug_desc {
 	const char *name;
 	const char *file;
+#if defined TIZEN_EXT
+#define CONNMAN_DEBUG_FLAG_DEFAULT (1)
+#else
 #define CONNMAN_DEBUG_FLAG_DEFAULT (0)
+#endif
 #define CONNMAN_DEBUG_FLAG_PRINT   (1 << 0)
 #define CONNMAN_DEBUG_FLAG_ALIAS   (1 << 1)
 	unsigned int flags;

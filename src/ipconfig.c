@@ -45,8 +45,6 @@ struct connman_ipconfig {
 	int index;
 	enum connman_ipconfig_type type;
 
-	struct connman_ipconfig *origin;
-
 	const struct connman_ipconfig_ops *ops;
 	void *ops_data;
 
@@ -135,6 +133,7 @@ const char *__connman_ipconfig_type2string(enum connman_ipconfig_type type)
 {
 	switch (type) {
 	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+	case CONNMAN_IPCONFIG_TYPE_ALL:
 		return "unknown";
 	case CONNMAN_IPCONFIG_TYPE_IPV4:
 		return "IPv4";
@@ -445,12 +444,9 @@ static void update_stats(struct connman_ipdevice *ipdevice,
 	if (!ipdevice->config_ipv4 && !ipdevice->config_ipv6)
 		return;
 
-	if (ipdevice->config_ipv4)
-		service = __connman_ipconfig_get_data(ipdevice->config_ipv4);
-	else if (ipdevice->config_ipv6)
-		service = __connman_ipconfig_get_data(ipdevice->config_ipv6);
-	else
-		return;
+	service = __connman_service_lookup_from_index(ipdevice->index);
+
+	DBG("service %p", service);
 
 	if (!service)
 		return;
@@ -512,6 +508,16 @@ void __connman_ipconfig_newlink(int index, unsigned short type,
 						index, type, type2str(type));
 
 update:
+#if defined TIZEN_EXT
+	if (g_strcmp0(ipdevice->address, address) != 0) {
+		/* If an original address is built-in physical device,
+		 * it's hardly get an address at a initial creation
+		 */
+		g_free(ipdevice->address);
+		ipdevice->address = g_strdup(address);
+	}
+#endif
+
 	ipdevice->mtu = mtu;
 
 	update_stats(ipdevice, ifname, stats);
@@ -642,7 +648,7 @@ static inline gint check_duplicate_address(gconstpointer a, gconstpointer b)
 	return g_strcmp0(addr1->local, addr2->local);
 }
 
-void __connman_ipconfig_newaddr(int index, int family, const char *label,
+int __connman_ipconfig_newaddr(int index, int family, const char *label,
 				unsigned char prefixlen, const char *address)
 {
 	struct connman_ipdevice *ipdevice;
@@ -655,11 +661,11 @@ void __connman_ipconfig_newaddr(int index, int family, const char *label,
 
 	ipdevice = g_hash_table_lookup(ipdevice_hash, GINT_TO_POINTER(index));
 	if (!ipdevice)
-		return;
+		return -ENXIO;
 
 	ipaddress = connman_ipaddress_alloc(family);
 	if (!ipaddress)
-		return;
+		return -ENOMEM;
 
 	ipaddress->prefixlen = prefixlen;
 	ipaddress->local = g_strdup(address);
@@ -667,7 +673,7 @@ void __connman_ipconfig_newaddr(int index, int family, const char *label,
 	if (g_slist_find_custom(ipdevice->address_list, ipaddress,
 					check_duplicate_address)) {
 		connman_ipaddress_free(ipaddress);
-		return;
+		return -EALREADY;
 	}
 
 	if (family == AF_INET)
@@ -675,7 +681,7 @@ void __connman_ipconfig_newaddr(int index, int family, const char *label,
 	else if (family == AF_INET6)
 		type = CONNMAN_IPCONFIG_TYPE_IPV6;
 	else
-		return;
+		return -EINVAL;
 
 	ipdevice->address_list = g_slist_prepend(ipdevice->address_list,
 								ipaddress);
@@ -698,7 +704,7 @@ void __connman_ipconfig_newaddr(int index, int family, const char *label,
 		goto out;
 
 	if ((ipdevice->flags & (IFF_RUNNING | IFF_LOWER_UP)) != (IFF_RUNNING | IFF_LOWER_UP))
-		return;
+		goto out;
 
 	for (list = g_list_first(ipconfig_list); list;
 						list = g_list_next(list)) {
@@ -719,6 +725,7 @@ void __connman_ipconfig_newaddr(int index, int family, const char *label,
 
 out:
 	g_free(ifname);
+	return 0;
 }
 
 void __connman_ipconfig_deladdr(int index, int family, const char *label,
@@ -1261,11 +1268,6 @@ void __connman_ipconfig_unref_debug(struct connman_ipconfig *ipconfig,
 
 	__connman_ipconfig_set_ops(ipconfig, NULL);
 
-	if (ipconfig->origin && ipconfig->origin != ipconfig) {
-		__connman_ipconfig_unref(ipconfig->origin);
-		ipconfig->origin = NULL;
-	}
-
 	connman_ipaddress_free(ipconfig->system);
 	connman_ipaddress_free(ipconfig->address);
 	g_free(ipconfig->last_dhcp_address);
@@ -1309,9 +1311,6 @@ int __connman_ipconfig_get_index(struct connman_ipconfig *ipconfig)
 {
 	if (!ipconfig)
 		return -1;
-
-	if (ipconfig->origin)
-		return ipconfig->origin->index;
 
 	return ipconfig->index;
 }
@@ -2136,6 +2135,7 @@ int __connman_ipconfig_set_config(struct connman_ipconfig *ipconfig,
 			type = AF_INET6;
 			break;
 		case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		case CONNMAN_IPCONFIG_TYPE_ALL:
 			type = -1;
 			break;
 		}
@@ -2225,6 +2225,7 @@ int __connman_ipconfig_load(struct connman_ipconfig *ipconfig,
 			ipconfig->method = CONNMAN_IPCONFIG_METHOD_AUTO;
 			break;
 		case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		case CONNMAN_IPCONFIG_TYPE_ALL:
 			ipconfig->method = CONNMAN_IPCONFIG_METHOD_OFF;
 			break;
 		}
@@ -2264,42 +2265,59 @@ int __connman_ipconfig_load(struct connman_ipconfig *ipconfig,
 	g_free(method);
 	g_free(key);
 
-	key = g_strdup_printf("%snetmask_prefixlen", prefix);
-	ipconfig->address->prefixlen = g_key_file_get_integer(
-				keyfile, identifier, key, NULL);
-	g_free(key);
+	switch (ipconfig->method) {
+	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
+	case CONNMAN_IPCONFIG_METHOD_OFF:
+		break;
 
-	key = g_strdup_printf("%slocal_address", prefix);
-	g_free(ipconfig->address->local);
-	ipconfig->address->local = g_key_file_get_string(
+	case CONNMAN_IPCONFIG_METHOD_FIXED:
+	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+
+		key = g_strdup_printf("%snetmask_prefixlen", prefix);
+		ipconfig->address->prefixlen = g_key_file_get_integer(
+				keyfile, identifier, key, NULL);
+		g_free(key);
+
+		key = g_strdup_printf("%slocal_address", prefix);
+		g_free(ipconfig->address->local);
+		ipconfig->address->local = g_key_file_get_string(
 			keyfile, identifier, key, NULL);
-	g_free(key);
+		g_free(key);
 
-	key = g_strdup_printf("%speer_address", prefix);
-	g_free(ipconfig->address->peer);
-	ipconfig->address->peer = g_key_file_get_string(
+		key = g_strdup_printf("%speer_address", prefix);
+		g_free(ipconfig->address->peer);
+		ipconfig->address->peer = g_key_file_get_string(
 				keyfile, identifier, key, NULL);
-	g_free(key);
+		g_free(key);
 
-	key = g_strdup_printf("%sbroadcast_address", prefix);
-	g_free(ipconfig->address->broadcast);
-	ipconfig->address->broadcast = g_key_file_get_string(
+		key = g_strdup_printf("%sbroadcast_address", prefix);
+		g_free(ipconfig->address->broadcast);
+		ipconfig->address->broadcast = g_key_file_get_string(
 				keyfile, identifier, key, NULL);
-	g_free(key);
+		g_free(key);
 
-	key = g_strdup_printf("%sgateway", prefix);
-	g_free(ipconfig->address->gateway);
-	ipconfig->address->gateway = g_key_file_get_string(
+		key = g_strdup_printf("%sgateway", prefix);
+		g_free(ipconfig->address->gateway);
+		ipconfig->address->gateway = g_key_file_get_string(
 				keyfile, identifier, key, NULL);
-	g_free(key);
+		g_free(key);
+		break;
 
-	key = g_strdup_printf("%sDHCP.LastAddress", prefix);
-	str = g_key_file_get_string(keyfile, identifier, key, NULL);
-	if (str) {
-		g_free(ipconfig->last_dhcp_address);
-		ipconfig->last_dhcp_address = str;
+	case CONNMAN_IPCONFIG_METHOD_DHCP:
+
+		key = g_strdup_printf("%sDHCP.LastAddress", prefix);
+		str = g_key_file_get_string(keyfile, identifier, key, NULL);
+		if (str) {
+			g_free(ipconfig->last_dhcp_address);
+			ipconfig->last_dhcp_address = str;
+		}
+		g_free(key);
+
+		break;
+
+	case CONNMAN_IPCONFIG_METHOD_AUTO:
+		break;
 	}
-	g_free(key);
 
 	return 0;
 }

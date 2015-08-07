@@ -1,15 +1,12 @@
 [Unit]
 Description=Connection service
-Requires=dbus.socket
-After=dbus.socket
-Before=remote-fs.target
+After=tizen-system.target shutdown.target
 
 [Service]
-EnvironmentFile=-/etc/sysconfig/connman
 Type=dbus
 BusName=net.connman
 Restart=on-failure
-ExecStart=@prefix@/sbin/connmand -n $OPTIONS
+ExecStart=@sbindir@/connmand -n
 StandardOutput=null
 
 [Install]

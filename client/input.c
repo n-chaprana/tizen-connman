@@ -271,7 +271,9 @@ int __connmanctl_input_init(int argc, char *argv[])
 		__connmanctl_monitor_completions(NULL);
 
 		rl_callback_handler_remove();
+#if !defined TIZEN_EXT
 		rl_message("");
+#endif
 	}
 
 	dbus_connection_unref(connection);

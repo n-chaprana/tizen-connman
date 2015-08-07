@@ -41,6 +41,10 @@
 
 #include "connman.h"
 
+#if defined TIZEN_EXT
+#include <sys/smack.h>
+#endif
+
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 struct domain_hdr {
 	uint16_t id;
@@ -233,7 +237,11 @@ static struct server_data *create_server_sec(int index,
 
 static guint16 get_id(void)
 {
-	return random();
+	uint64_t rand;
+
+	__connman_util_get_random(&rand);
+
+	return rand;
 }
 
 static int protocol_offset(int protocol)
@@ -541,6 +549,8 @@ static void destroy_request_data(struct request_data *req)
 static gboolean request_timeout(gpointer user_data)
 {
 	struct request_data *req = user_data;
+	struct sockaddr *sa;
+	int sk;
 
 	if (!req)
 		return FALSE;
@@ -548,47 +558,38 @@ static gboolean request_timeout(gpointer user_data)
 	DBG("id 0x%04x", req->srcid);
 
 	request_list = g_slist_remove(request_list, req);
-	req->numserv--;
+
+	if (req->protocol == IPPROTO_UDP) {
+		sk = get_req_udp_socket(req);
+		sa = &req->sa;
+	} else if (req->protocol == IPPROTO_TCP) {
+		sk = req->client_sk;
+		sa = NULL;
+	} else
+		goto out;
 
 	if (req->resplen > 0 && req->resp) {
-		int sk, err;
+		/*
+		 * Here we have received at least one reply (probably telling
+		 * "not found" result), so send that back to client instead
+		 * of more fatal server failed error.
+		 */
+		if (sk >= 0)
+			sendto(sk, req->resp, req->resplen, MSG_NOSIGNAL,
+				sa, req->sa_len);
 
-		if (req->protocol == IPPROTO_UDP) {
-			sk = get_req_udp_socket(req);
-			if (sk < 0)
-				return FALSE;
-
-			err = sendto(sk, req->resp, req->resplen, MSG_NOSIGNAL,
-				&req->sa, req->sa_len);
-		} else {
-			sk = req->client_sk;
-			err = send(sk, req->resp, req->resplen, MSG_NOSIGNAL);
-			if (err < 0)
-				close(sk);
-		}
-		if (err < 0)
-			return FALSE;
-	} else if (req->request && req->numserv == 0) {
+	} else if (req->request) {
+		/*
+		 * There was not reply from server at all.
+		 */
 		struct domain_hdr *hdr;
 
-		if (req->protocol == IPPROTO_TCP) {
-			hdr = (void *) (req->request + 2);
-			hdr->id = req->srcid;
-			send_response(req->client_sk, req->request,
-				req->request_len, NULL, 0, IPPROTO_TCP);
+		hdr = (void *)(req->request + protocol_offset(req->protocol));
+		hdr->id = req->srcid;
 
-		} else if (req->protocol == IPPROTO_UDP) {
-			int sk;
-
-			hdr = (void *) (req->request);
-			hdr->id = req->srcid;
-
-			sk = get_req_udp_socket(req);
-			if (sk >= 0)
-				send_response(sk, req->request,
-					req->request_len, &req->sa,
-					req->sa_len, IPPROTO_UDP);
-		}
+		if (sk >= 0)
+			send_response(sk, req->request, req->request_len,
+				sa, req->sa_len, req->protocol);
 	}
 
 	/*
@@ -601,6 +602,7 @@ static gboolean request_timeout(gpointer user_data)
 				GINT_TO_POINTER(req->client_sk));
 	}
 
+out:
 	req->timeout = 0;
 	destroy_request_data(req);
 
@@ -779,6 +781,8 @@ static void cache_element_destroy(gpointer value)
 
 static gboolean try_remove_cache(gpointer user_data)
 {
+	cache_timer = 0;
+
 	if (__sync_fetch_and_sub(&cache_refcount, 1) == 1) {
 		DBG("No cache users, removing it.");
 
@@ -2244,8 +2248,8 @@ static void destroy_server(struct server_data *server)
 	 * without any good reason. The small delay allows the new RDNSS to
 	 * create a new DNS server instance and the refcount does not go to 0.
 	 */
-	if (cache)
-		g_timeout_add_seconds(3, try_remove_cache, NULL);
+	if (cache && !cache_timer)
+		cache_timer = g_timeout_add_seconds(3, try_remove_cache, NULL);
 
 	g_free(server);
 }
@@ -2902,6 +2906,34 @@ static void append_domain(int index, const char *domain)
 	}
 }
 
+static void flush_requests(struct server_data *server)
+{
+	GSList *list;
+
+	list = request_list;
+	while (list) {
+		struct request_data *req = list->data;
+
+		list = list->next;
+
+		if (ns_resolv(server, req, req->request, req->name)) {
+			/*
+			 * A cached result was sent,
+			 * so the request can be released
+			 */
+			request_list =
+				g_slist_remove(request_list, req);
+			destroy_request_data(req);
+			continue;
+		}
+
+		if (req->timeout > 0)
+			g_source_remove(req->timeout);
+
+		req->timeout = g_timeout_add_seconds(5, request_timeout, req);
+	}
+}
+
 int __connman_dnsproxy_append(int index, const char *domain,
 							const char *server)
 {
@@ -2933,6 +2965,8 @@ int __connman_dnsproxy_append(int index, const char *domain,
 	data = create_server(index, domain, server, IPPROTO_UDP);
 	if (!data)
 		return -EIO;
+
+	flush_requests(data);
 
 	return 0;
 }
@@ -2971,33 +3005,6 @@ int __connman_dnsproxy_remove(int index, const char *domain,
 #endif
 
 	return 0;
-}
-
-void __connman_dnsproxy_flush(void)
-{
-	GSList *list;
-
-	list = request_list;
-	while (list) {
-		struct request_data *req = list->data;
-
-		list = list->next;
-
-		if (resolv(req, req->request, req->name)) {
-			/*
-			 * A cached result was sent,
-			 * so the request can be released
-			 */
-			request_list =
-				g_slist_remove(request_list, req);
-			destroy_request_data(req);
-			continue;
-		}
-
-		if (req->timeout > 0)
-			g_source_remove(req->timeout);
-		req->timeout = g_timeout_add_seconds(5, request_timeout, req);
-	}
 }
 
 static void dnsproxy_offline_mode(bool enabled)
@@ -3911,6 +3918,13 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 	}
 
 #if defined TIZEN_EXT
+	if (smack_fsetlabel(sk, "system::use_internet", SMACK_LABEL_IPOUT) != 0)
+		connman_error("Failed to label system::use_internet");
+
+	if (smack_fsetlabel(sk, "system::use_internet", SMACK_LABEL_IPIN) != 0)
+		connman_error("Failed to label system::use_internet");
+#endif
+#if defined TIZEN_EXT
 	/* When ConnMan crashed,
 	 * probably DNS listener cannot bind existing address */
 	option = 1;
@@ -4200,8 +4214,6 @@ int __connman_dnsproxy_init(void)
 
 	DBG("");
 
-	srandom(time(NULL));
-
 	listener_table = g_hash_table_new_full(g_direct_hash, g_direct_equal,
 							NULL, g_free);
 
@@ -4232,6 +4244,16 @@ destroy:
 void __connman_dnsproxy_cleanup(void)
 {
 	DBG("");
+
+	if (cache_timer) {
+		g_source_remove(cache_timer);
+		cache_timer = 0;
+	}
+
+	if (cache) {
+		g_hash_table_destroy(cache);
+		cache = NULL;
+	}
 
 	connman_notifier_unregister(&dnsproxy_notifier);
 

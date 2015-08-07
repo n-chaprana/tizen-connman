@@ -67,8 +67,15 @@ static void detect_newlink(unsigned short type, int index,
 	}
 
 	device = find_device(index);
+#if defined TIZEN_EXT
+	if (device) {
+		connman_inet_update_device_ident(device);
+		return;
+	}
+#else
 	if (device)
 		return;
+#endif
 
 	device = connman_device_create_from_index(index);
 	if (!device)

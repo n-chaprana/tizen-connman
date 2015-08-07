@@ -528,6 +528,9 @@ int connman_dbus_get_connection_unix_user_sync(DBusConnection *connection,
 						const char *bus_name,
 						unsigned int *user_id)
 {
+#if defined TIZEN_EXT
+	*user_id = 0;
+#else
 	unsigned long uid;
 	DBusError err;
 
@@ -545,6 +548,7 @@ int connman_dbus_get_connection_unix_user_sync(DBusConnection *connection,
 	}
 
 	*user_id = (unsigned int)uid;
+#endif
 
 	return 0;
 }
