@@ -13,7 +13,7 @@ BuildRequires:  pkgconfig(xtables)
 BuildRequires:  pkgconfig(gnutls)
 BuildRequires:  pkgconfig(libsmack)
 BuildRequires:  readline-devel
-%systemd_requires
+#%systemd_requires
 Requires:       iptables
 Requires:         systemd
 Requires(post):   systemd
