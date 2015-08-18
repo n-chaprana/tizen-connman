@@ -1,6 +1,6 @@
 Name:           connman
 Version:        1.26
-Release:        1
+Release:        2
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -105,8 +105,8 @@ mkdir -p %{buildroot}/etc/connman
 cp src/main.conf %{buildroot}/etc/connman/main.conf
 
 rm %{buildroot}%{_sysconfdir}/dbus-1/system.d/*.conf
-#mkdir -p %{buildroot}%{_sysconfdir}/dbus-1/system.d/
-#cp src/connman.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/
+mkdir -p %{buildroot}%{_sysconfdir}/dbus-1/system.d/
+cp src/connman.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/
 
 #License
 mkdir -p %{buildroot}%{_datadir}/license
@@ -131,9 +131,9 @@ cp COPYING %{buildroot}%{_datadir}/license/connman
 %attr(600,root,root) /%{_localstatedir}/lib/connman/settings
 #%{_libdir}/connman/plugins/*.so
 #%{_datadir}/dbus-1/services/*
-#%{_sysconfdir}/dbus-1/system.d/*
+%{_sysconfdir}/dbus-1/system.d/*
 %attr(644,root,root) %{_sysconfdir}/connman/main.conf
-#%{_sysconfdir}/dbus-1/system.d/*.conf
+%{_sysconfdir}/dbus-1/system.d/*.conf
 %attr(644,root,root) %{_libdir}/systemd/system/connman.service
 %attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman.service
 %if "%{?_lib}" == "lib64"
