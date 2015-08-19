@@ -1,6 +1,6 @@
 Name:           connman
 Version:        1.26
-Release:        2
+Release:        3
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net

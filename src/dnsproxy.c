@@ -3918,13 +3918,6 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 	}
 
 #if defined TIZEN_EXT
-	if (smack_fsetlabel(sk, "system::use_internet", SMACK_LABEL_IPOUT) != 0)
-		connman_error("Failed to label system::use_internet");
-
-	if (smack_fsetlabel(sk, "system::use_internet", SMACK_LABEL_IPIN) != 0)
-		connman_error("Failed to label system::use_internet");
-#endif
-#if defined TIZEN_EXT
 	/* When ConnMan crashed,
 	 * probably DNS listener cannot bind existing address */
 	option = 1;
