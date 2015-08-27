@@ -50,7 +50,7 @@ Header files and development files for connman.
 
 %build
 CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
-%if "%{?tizen_profile_name}" == "tv"
+%if "%{profile}" == "tv"
 CFLAGS+=" -DTIZEN_TV_EXT"
 %endif
 
@@ -83,7 +83,7 @@ mkdir -p %{buildroot}%{_libdir}/systemd/system/
 mkdir -p %{buildroot}%{_unitdir}
 %endif
 
-%if "%{?tizen_profile_name}" == "tv"
+%if "%{profile}" == "tv"
 cp src/connman_tv.service %{buildroot}%{_libdir}/systemd/system/connman.service
 %else
 cp src/connman.service %{buildroot}%{_libdir}/systemd/system/connman.service
