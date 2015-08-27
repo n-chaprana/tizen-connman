@@ -2584,13 +2584,18 @@ static int server_create_socket(struct server_data *data)
 static void destroy_server_sec(struct server_data *server)
 {
 	GList *list;
+	int fd;
 
-	DBG("index %d server %s sock %d", server->index, server->server,
-			server->channel != NULL ?
-			g_io_channel_unix_get_fd(server->channel): -1);
+	if(server->channel)
+		fd = g_io_channel_unix_get_fd(server->channel);
+	else
+		fd = -1;
+
+	DBG("index %d server %s sock %d", server->index, server->server, fd);
 
 	server_list_sec = g_slist_remove(server_list_sec, server);
-	close(g_io_channel_unix_get_fd(server->channel));
+	if(fd > 0)
+		close(fd);
 	server_destroy_socket(server);
 
 	if (server->protocol == IPPROTO_UDP && server->enabled)
