@@ -1845,6 +1845,11 @@ void __connman_ipconfig_append_ipv4(struct connman_ipconfig *ipconfig,
 	case CONNMAN_IPCONFIG_METHOD_MANUAL:
 	case CONNMAN_IPCONFIG_METHOD_DHCP:
 		append_addr = ipconfig->system;
+#if defined TIZEN_EXT
+		/* TIZEN enables get_properties before __connman_ipconfig_newaddr */
+		if (append_addr && append_addr->local == NULL)
+			append_addr = ipconfig->address;
+#endif
 		break;
 	}
 
@@ -1908,6 +1913,11 @@ void __connman_ipconfig_append_ipv6(struct connman_ipconfig *ipconfig,
 	case CONNMAN_IPCONFIG_METHOD_DHCP:
 	case CONNMAN_IPCONFIG_METHOD_AUTO:
 		append_addr = ipconfig->system;
+#if defined TIZEN_EXT
+		/* TIZEN enables get_properties before __connman_ipconfig_newaddr */
+		if (append_addr && append_addr->local == NULL)
+			append_addr = ipconfig->address;
+#endif
 		break;
 	}
 

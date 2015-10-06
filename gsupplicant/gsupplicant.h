@@ -157,9 +157,21 @@ struct _GSupplicantSSID {
 	const char *pin_wps;
 	const char *bgscan;
 	int ignore_broadcast_ssid;
+#if defined TIZEN_EXT
+	unsigned char *bssid;
+#endif
 };
 
 typedef struct _GSupplicantSSID GSupplicantSSID;
+
+/*
+ * Max number of SSIDs that can be scanned.
+ * In wpa_s 0.7x the limit is 4.
+ * In wps_s 0.8 or later it is 16.
+ * The value is only used if wpa_supplicant does not return any max limit
+ * for number of scannable SSIDs.
+ */
+#define WPAS_MAX_SCAN_SSIDS 4
 
 struct scan_ssid {
 	unsigned char ssid[32];
@@ -369,6 +381,9 @@ struct _GSupplicantCallbacks {
 #endif
 	void (*network_changed) (GSupplicantNetwork *network,
 					const char *property);
+#if defined TIZEN_EXT
+	void (*system_power_off) (void);
+#endif
 	void (*add_station) (const char *mac);
 	void (*remove_station) (const char *mac);
 	void (*peer_found) (GSupplicantPeer *peer);

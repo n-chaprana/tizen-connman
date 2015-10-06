@@ -1932,8 +1932,14 @@ static int wifi_scan(enum connman_service_type type,
 	reset_autoscan(device);
 
 #if defined TIZEN_EXT
-	ret = g_supplicant_interface_scan(wifi->interface, NULL,
-						scan_callback_hidden, device);
+	if (wifi->hidden) {
+		ret = g_supplicant_interface_scan(wifi->interface, scan_params,
+						scan_callback, device);
+	}
+	else {
+		ret = g_supplicant_interface_scan(wifi->interface, NULL,
+							scan_callback_hidden, device);
+	}
 #else
 	ret = g_supplicant_interface_scan(wifi->interface, scan_params,
 						scan_callback, device);
@@ -2148,6 +2154,10 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 
 	ssid->use_wps = connman_network_get_bool(network, "WiFi.UseWPS");
 	ssid->pin_wps = connman_network_get_string(network, "WiFi.PinWPS");
+
+#if defined TIZEN_EXT
+	ssid->bssid = connman_network_get_bssid(network);
+#endif
 
 	if (connman_setting_get_bool("BackgroundScanning"))
 		ssid->bgscan = BGSCAN_DEFAULT;
@@ -2932,8 +2942,13 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 		/* Is AP advertizing for WPS association?
 		 * If so, we decide to use WPS by default */
 		if (wps_ready && wps_pbc &&
-						wps_advertizing)
+						wps_advertizing) {
+#if !defined TIZEN_EXT
 			connman_network_set_bool(network, "WiFi.UseWPS", true);
+#else
+			DBG("wps is activating by ap but ignore it.");
+#endif
+		}
 	}
 
 	connman_network_set_frequency(network,
@@ -3003,6 +3018,13 @@ static void network_removed(GSupplicantNetwork *network)
 
 	if (connman_network == wifi->interface_disconnected_network)
 		wifi->interface_disconnected_network = NULL;
+
+	if (connman_network == wifi->pending_network)
+		wifi->pending_network = NULL;
+
+	if(connman_network_get_connecting(connman_network) == true){
+		connman_network_set_connected(connman_network, false);
+	}
 #endif
 
 	wifi->networks = g_slist_remove(wifi->networks, connman_network);
@@ -3022,6 +3044,7 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	const unsigned char *bssid;
 	unsigned int maxrate;
 	uint16_t frequency;
+	bool wps;
 #endif
 
 	interface = g_supplicant_network_get_interface(network);
@@ -3048,10 +3071,12 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	bssid = g_supplicant_network_get_bssid(network);
 	maxrate = g_supplicant_network_get_maxrate(network);
 	frequency = g_supplicant_network_get_frequency(network);
+	wps = g_supplicant_network_get_wps(network);
 
 	connman_network_set_bssid(connman_network, bssid);
 	connman_network_set_maxrate(connman_network, maxrate);
 	connman_network_set_frequency(connman_network, frequency);
+	connman_network_set_bool(connman_network, "WiFi.WPS", wps);
 #endif
 }
 
@@ -3233,6 +3258,26 @@ static void peer_request(GSupplicantPeer *peer)
 }
 
 #if defined TIZEN_EXT
+static void system_power_off(void)
+{
+	GList *list;
+	struct wifi_data *wifi;
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv4;
+
+	if (connman_setting_get_bool("WiFiDHCPRelease") == true) {
+		for (list = iface_list; list; list = list->next) {
+			wifi = list->data;
+
+			if (wifi->network != NULL) {
+				service = connman_service_lookup_from_network(wifi->network);
+				ipconfig_ipv4 = __connman_service_get_ip4config(service);
+				__connman_dhcp_stop(ipconfig_ipv4);
+			}
+		}
+	}
+}
+
 static void network_merged(GSupplicantNetwork *network)
 {
 	GSupplicantInterface *interface;
@@ -3326,6 +3371,7 @@ static const GSupplicantCallbacks callbacks = {
 	.peer_changed		= peer_changed,
 	.peer_request		= peer_request,
 #if defined TIZEN_EXT
+	.system_power_off	= system_power_off,
 	.network_merged	= network_merged,
 #endif
 	.debug			= debug,

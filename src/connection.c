@@ -1022,6 +1022,9 @@ bool __connman_connection_update_gateway(void)
 	bool updated = false;
 	GHashTableIter iter;
 	gpointer value, key;
+#if defined TIZEN_EXT
+	static struct gateway_data *old_default = NULL;
+#endif
 
 	if (!gateway_hash)
 		return updated;
@@ -1063,6 +1066,12 @@ bool __connman_connection_update_gateway(void)
 		}
 	}
 
+#if defined TIZEN_EXT
+	if (updated == false && old_default != default_gateway) {
+		updated = true;
+		old_default = default_gateway;
+	}
+#endif
 	if (updated && default_gateway) {
 		if (default_gateway->ipv4_gateway)
 			set_default_gateway(default_gateway,

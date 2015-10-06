@@ -416,6 +416,7 @@ static void callback_interface_removed(GSupplicantInterface *interface)
 	callbacks_pointer->interface_removed(interface);
 }
 
+#if !defined TIZEN_EXT
 static void callback_p2p_support(GSupplicantInterface *interface)
 {
 	SUPPLICANT_DBG("");
@@ -426,6 +427,7 @@ static void callback_p2p_support(GSupplicantInterface *interface)
 	if (callbacks_pointer && callbacks_pointer->p2p_support)
 		callbacks_pointer->p2p_support(interface);
 }
+#endif
 
 static void callback_scan_started(GSupplicantInterface *interface)
 {
@@ -584,6 +586,9 @@ static void remove_interface(gpointer data)
 	g_free(interface->wps_cred.key);
 	g_free(interface->path);
 	g_free(interface->network_path);
+#if defined TIZEN_EXT
+	interface->network_path = NULL;
+#endif
 	g_free(interface->ifname);
 	g_free(interface->driver);
 	g_free(interface->bridge);
@@ -920,6 +925,9 @@ unsigned int g_supplicant_interface_get_max_scan_ssids(
 {
 	if (!interface)
 		return 0;
+
+	if (interface->max_scan_ssids == 0)
+		return WPAS_MAX_SCAN_SSIDS;
 
 	return interface->max_scan_ssids;
 }
@@ -2606,8 +2614,23 @@ static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 		return;
 	}
 
+#if defined TIZEN_EXT
+	if ((bss->keymgmt & G_SUPPLICANT_KEYMGMT_WPS) != 0) {
+		network->wps = TRUE;
+		network->wps_capabilities |= bss->wps_capabilities;
+	} else
+		network->wps = FALSE;
+#endif
+
 	if (bss->signal == network->signal)
+#ifndef TIZEN_EXT
 		return;
+#else
+	{
+		callback_network_changed(network, "");
+		return;
+	}
+#endif
 
 	/*
 	 * If the new signal is lower than the SSID signal, we need
@@ -2615,7 +2638,14 @@ static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 	 */
 	if (bss->signal < network->signal) {
 		if (bss != network->best_bss)
+#ifndef TIZEN_EXT
 			return;
+#else
+		{
+			callback_network_changed(network, "");
+			return;
+		}
+#endif
 		network->signal = bss->signal;
 		update_network_signal(network);
 	} else {
@@ -2717,7 +2747,7 @@ static void signal_wps_event(const char *path, DBusMessageIter *iter)
 
 	if (g_strcmp0(name, "success") == 0)
 		interface->wps_state = G_SUPPLICANT_WPS_STATE_SUCCESS;
-	else if (g_strcmp0(name, "fail") == 0)
+	else if (g_strcmp0(name, "failed") == 0)
 		interface->wps_state = G_SUPPLICANT_WPS_STATE_FAIL;
 	else
 		interface->wps_state = G_SUPPLICANT_WPS_STATE_UNKNOWN;
@@ -2729,6 +2759,29 @@ static void signal_wps_event(const char *path, DBusMessageIter *iter)
 
 	supplicant_dbus_property_foreach(iter, wps_event_args, interface);
 }
+
+#if defined TIZEN_EXT
+static void signal_power_off(const char *path, DBusMessageIter *iter)
+{
+	int poweroff_state = 0;
+
+	dbus_message_iter_get_basic(iter, &poweroff_state);
+
+	SUPPLICANT_DBG("poweroff_state(%d)", poweroff_state);
+
+	/* POWER_OFF_DIRECT 2 && POWER_OFF_RESTART 3 */
+	if (poweroff_state != 2 && poweroff_state != 3)
+		return;
+
+	if (callbacks_pointer == NULL)
+		return;
+
+	if (callbacks_pointer->system_power_off == NULL)
+		return;
+
+	callbacks_pointer->system_power_off();
+}
+#endif
 
 static void signal_station_connected(const char *path, DBusMessageIter *iter)
 {
@@ -3344,6 +3397,9 @@ static struct {
 
 	{ SUPPLICANT_INTERFACE ".Interface.WPS", "Credentials", signal_wps_credentials },
 	{ SUPPLICANT_INTERFACE ".Interface.WPS", "Event",       signal_wps_event       },
+#if defined TIZEN_EXT
+	{ "org.tizen.system.deviced.PowerOff", "ChangeState", signal_power_off },
+#endif
 
 	{ SUPPLICANT_INTERFACE".Interface", "StaAuthorized", signal_station_connected      },
 	{ SUPPLICANT_INTERFACE".Interface", "StaDeauthorized", signal_station_disconnected },
@@ -3687,7 +3743,9 @@ static void interface_create_property(const char *key, DBusMessageIter *iter,
 	if (!key) {
 		if (data->callback) {
 			data->callback(0, data->interface, data->user_data);
+#if !defined TIZEN_EXT
 			callback_p2p_support(interface);
+#endif
 		}
 
 		interface_create_data_free(data);
@@ -3797,7 +3855,9 @@ static void interface_get_result(const char *error,
 
 	if (data->callback) {
 		data->callback(0, interface, data->user_data);
+#if !defined TIZEN_EXT
 		callback_p2p_support(interface);
+#endif
 	}
 
 	interface_create_data_free(data);
@@ -4782,6 +4842,12 @@ static void interface_add_wps_params(DBusMessageIter *iter, void *user_data)
 	supplicant_dbus_dict_append_basic(&dict, "Type",
 					DBUS_TYPE_STRING, &type);
 
+#if defined TIZEN_EXT
+	if (ssid->bssid)
+		supplicant_dbus_dict_append_fixed_array(&dict, "Bssid",
+						DBUS_TYPE_BYTE, &ssid->bssid, 6);
+#endif
+
 	supplicant_dbus_dict_close(iter, &dict);
 }
 
@@ -4798,7 +4864,17 @@ static void wps_start(const char *error, DBusMessageIter *iter, void *user_data)
 		dbus_free(data);
 		return;
 	}
-
+#if defined TIZEN_EXT
+	GSupplicantSSID *ssid = data->ssid;
+	if (ssid->pin_wps != NULL) {
+		if (!g_utf8_validate(ssid->pin_wps, 8, NULL)) {
+			SUPPLICANT_DBG("Invalid characters in WPS_PIN");
+			g_free(data->ssid);
+			dbus_free(data);
+			return;
+		}
+	}
+#endif
 	supplicant_dbus_method_call(data->interface->path,
 			SUPPLICANT_INTERFACE ".Interface.WPS", "Start",
 			interface_add_wps_params,
@@ -5515,6 +5591,11 @@ int g_supplicant_register(const GSupplicantCallbacks *callbacks)
 	dbus_bus_add_match(connection, g_supplicant_rule3, NULL);
 	dbus_bus_add_match(connection, g_supplicant_rule4, NULL);
 	dbus_bus_add_match(connection, g_supplicant_rule5, NULL);
+#if defined TIZEN_EXT
+	dbus_bus_add_match(connection,
+			"type=signal,interface=org.tizen.system.deviced.PowerOff,"
+			"member=ChangeState", NULL);
+#endif
 #if !defined TIZEN_EXT
 	dbus_bus_add_match(connection, g_supplicant_rule6, NULL);
 	dbus_bus_add_match(connection, g_supplicant_rule7, NULL);

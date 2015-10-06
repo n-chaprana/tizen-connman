@@ -1355,7 +1355,8 @@ int connman_network_set_associating(struct connman_network *network,
 	}
 
 #if defined TIZEN_EXT
-	if (associating == FALSE)
+	if (associating == FALSE &&
+			connman_network_get_bool(network, "WiFi.UseWPS") == FALSE)
 		g_timeout_add_seconds(1,
 				__connman_network_clear_associating_delayed,
 				network);

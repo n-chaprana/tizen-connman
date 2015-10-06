@@ -1,6 +1,6 @@
 Name:           connman
 Version:        1.26
-Release:        5
+Release:        6
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -101,6 +101,8 @@ ln -s ../connman.service %{buildroot}%{_unitdir}/multi-user.target.wants/connman
 
 mkdir -p %{buildroot}/%{_localstatedir}/lib/connman
 cp resources/var/lib/connman/settings %{buildroot}/%{_localstatedir}/lib/connman/settings
+mkdir -p %{buildroot}%{_datadir}/dbus-1/system-services
+cp resources/usr/share/dbus-1/system-services/net.connman.service %{buildroot}%{_datadir}/dbus-1/system-services/net.connman.service
 mkdir -p %{buildroot}/etc/connman
 cp src/main.conf %{buildroot}/etc/connman/main.conf
 
@@ -130,6 +132,7 @@ cp COPYING %{buildroot}%{_datadir}/license/connman
 %attr(500,root,root) %{_bindir}/connmanctl
 %attr(600,root,root) /%{_localstatedir}/lib/connman/settings
 #%{_libdir}/connman/plugins/*.so
+%attr(644,root,root) %{_datadir}/dbus-1/system-services/*
 #%{_datadir}/dbus-1/services/*
 %{_sysconfdir}/dbus-1/system.d/*
 %attr(644,root,root) %{_sysconfdir}/connman/main.conf

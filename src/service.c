@@ -4040,6 +4040,14 @@ static void set_error(struct connman_service *service,
 				DBUS_TYPE_STRING, &str);
 }
 
+static void set_idle(struct connman_service *service)
+{
+	service->state = service->state_ipv4 = service->state_ipv6 =
+						CONNMAN_SERVICE_STATE_IDLE;
+	set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+	state_changed(service);
+}
+
 static DBusMessage *clear_property(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
@@ -4344,7 +4352,23 @@ void __connman_service_auto_connect(enum connman_service_connect_reason reason)
 	if (!__connman_session_policy_autoconnect(reason))
 		return;
 
+#if defined TIZEN_EXT
+	/* Adding Timeout of 500ms before trying to auto connect.
+	 * This is done because of below scenario
+	 * 1. Device is connected to AP1
+	 * 2. WPS Connection request is initiated for AP2
+	 * 3. Immediately WPS Connection is Cancelled
+	 * When WPS Connection Connection is initiated for AP2 then
+	 * sometimes there is a scenario where connman gets in ASSOCIATED
+	 * state with AP1 due to autoconnect and subsequently the connection
+	 * initiated by AP1 fails and connman service for AP1 comes in
+	 * FAILURE state due to this when connection with AP2 is cancelled
+	 * then autoconnect with AP1 doesn't works because its autoconnection
+	 * is ignored as its last state was FAILURE rather than IDLE */
+	autoconnect_timeout = g_timeout_add(500, run_auto_connect,
+#else
 	autoconnect_timeout = g_timeout_add_seconds(0, run_auto_connect,
+#endif
 						GUINT_TO_POINTER(reason));
 }
 
@@ -4696,6 +4720,38 @@ bool __connman_service_remove(struct connman_service *service)
 	g_free(service->eap);
 	service->eap = NULL;
 
+#if defined TIZEN_EXT
+	g_free(service->ca_cert_file);
+	service->ca_cert_file = NULL;
+
+	g_free(service->client_cert_file);
+	service->client_cert_file = NULL;
+
+	g_free(service->private_key_file);
+	service->private_key_file = NULL;
+
+	g_free(service->private_key_passphrase);
+	service->private_key_passphrase = NULL;
+
+	g_free(service->phase2);
+	service->phase2 = NULL;
+
+	__connman_ipconfig_set_method(service->ipconfig_ipv4, CONNMAN_IPCONFIG_METHOD_DHCP);
+	__connman_ipconfig_set_method(service->ipconfig_ipv6, CONNMAN_IPCONFIG_METHOD_AUTO);
+	connman_service_set_proxy(service, NULL, false);
+
+	__connman_service_nameserver_clear(service);
+
+	g_strfreev(service->nameservers_config);
+	service->nameservers_config = NULL;
+
+#endif
+
+#if defined TIZEN_EXT
+	if (service->security != CONNMAN_SERVICE_SECURITY_8021X)
+#endif
+	set_idle(service);
+
 	service->error = CONNMAN_SERVICE_ERROR_UNKNOWN;
 
 	service->user.favorite_user = USER_NONE;
@@ -4704,7 +4760,11 @@ bool __connman_service_remove(struct connman_service *service)
 
 	__connman_ipconfig_ipv6_reset_privacy(service->ipconfig_ipv6);
 
+#if defined TIZEN_EXT
+	__connman_storage_remove_service(service->identifier);
+#else
 	service_save(service);
+#endif
 
 	return true;
 }
