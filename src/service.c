@@ -472,6 +472,7 @@ connman_service_is_user_allowed(struct connman_service *service, uid_t uid)
 	return true;
 }
 
+#if !defined TIZEN_EXT
 static GList *connman_service_get_login_users()
 {
 	struct utmpx *utmp;
@@ -497,9 +498,13 @@ static GList *connman_service_get_login_users()
 
 	return user_list;
 }
+#endif
 
 static bool is_service_owner_user_login(struct connman_service *service)
 {
+#if defined TIZEN_EXT
+	return true;
+#else
 	GList *list, *user_list;
 	bool ret = false;
 
@@ -529,6 +534,7 @@ static bool is_service_owner_user_login(struct connman_service *service)
 	g_list_free(user_list);
 
 	return ret;
+#endif
 }
 
 int __connman_service_load_modifiable(struct connman_service *service)
