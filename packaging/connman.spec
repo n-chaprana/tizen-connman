@@ -12,6 +12,7 @@ BuildRequires:  pkgconfig(libiptc)
 BuildRequires:  pkgconfig(xtables)
 BuildRequires:  pkgconfig(gnutls)
 BuildRequires:  pkgconfig(libsmack)
+BuildRequires:  pkgconfig(tpkp-gnutls)
 BuildRequires:  readline-devel
 #%systemd_requires
 Requires:       iptables

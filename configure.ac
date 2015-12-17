@@ -261,6 +261,11 @@ PKG_CHECK_MODULES(XTABLES, xtables >= 1.4.11, dummy=yes,
 AC_SUBST(XTABLES_CFLAGS)
 AC_SUBST(XTABLES_LIBS)
 
+PKG_CHECK_MODULES(TPKP_GNUTLS, tpkp-gnutls, dummy=yes,
+								AC_MSG_ERROR(tpkp-gnutls library is required))
+AC_SUBST(TPKP_GNUTLS_CFLAGS)
+AC_SUBST(TPKP_GNUTLS_LIBS)
+
 AC_ARG_ENABLE(test, AC_HELP_STRING([--enable-test],
 		[enable test/example scripts]), [enable_test=${enableval}])
 AM_CONDITIONAL(TEST, test "${enable_test}" = "yes")
