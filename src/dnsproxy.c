@@ -2698,6 +2698,7 @@ static struct server_data *create_server_sec(int index,
 	if (ret) {
 		connman_error("Failed to parse server %s address: %s\n",
 				data->server, gai_strerror(ret));
+		freeaddrinfo(rp);
 		destroy_server_sec(data);
 		return NULL;
 	}
