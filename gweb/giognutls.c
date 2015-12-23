@@ -461,16 +461,20 @@ GIOChannel *g_io_channel_gnutls_new(int fd)
 	gnutls_priority_set_direct(gnutls_channel->session,
 		"NORMAL:-VERS-TLS-ALL:+VERS-TLS1.0:+VERS-SSL3.0:%COMPAT", NULL);
 #endif
+	gnutls_certificate_allocate_credentials(&gnutls_channel->cred);
+	gnutls_credentials_set(gnutls_channel->session,
+				GNUTLS_CRD_CERTIFICATE, gnutls_channel->cred);
 
+#if defined TIZEN_SYS_CA_BUNDLE
+#define QUOTEME(x) #x
 	gnutls_certificate_set_verify_function(gnutls_channel->cred, &tpkp_gnutls_verify_callback);
 	/*
 	*	TODO: get ca-bundle path build-time configuration unless gnutls set it as a default
 	*/
-	gnutls_certificate_set_x509_trust_file(gnutls_channel->cred, "/etc/ssl/ca-bundle.pem", GNUTLS_X509_FMT_PEM);
-
-	gnutls_certificate_allocate_credentials(&gnutls_channel->cred);
-	gnutls_credentials_set(gnutls_channel->session,
-				GNUTLS_CRD_CERTIFICATE, gnutls_channel->cred);
+	DBG("tizen sys ca bundle : %s", QUOTEME(TIZEN_SYS_CA_BUNDLE));
+	gnutls_certificate_set_x509_trust_file(gnutls_channel->cred,
+				QUOTEME(TIZEN_SYS_CA_BUNDLE), GNUTLS_X509_FMT_PEM);
+#endif
 
 	DBG("channel %p", channel);
 

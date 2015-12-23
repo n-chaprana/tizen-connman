@@ -13,6 +13,7 @@ BuildRequires:  pkgconfig(xtables)
 BuildRequires:  pkgconfig(gnutls)
 BuildRequires:  pkgconfig(libsmack)
 BuildRequires:  pkgconfig(tpkp-gnutls)
+BuildRequires:  ca-certificates-devel
 BuildRequires:  readline-devel
 #%systemd_requires
 Requires:       iptables
@@ -51,6 +52,7 @@ Header files and development files for connman.
 
 %build
 CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
+CFLAGS+=" -DTIZEN_SYS_CA_BUNDLE=\"%TZ_SYS_CA_BUNDLE\""
 %if "%{profile}" == "tv"
 CFLAGS+=" -DTIZEN_TV_EXT"
 %endif
