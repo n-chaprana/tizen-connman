@@ -45,6 +45,7 @@
 #define CONFIGMAINFILE CONFIGDIR "/connman-vpn.conf"
 
 #define DEFAULT_INPUT_REQUEST_TIMEOUT 300 * 1000
+#define DEFAULT_BROWSER_LAUNCH_TIMEOUT 300 * 1000
 
 static GMainLoop *main_loop = NULL;
 
@@ -52,8 +53,10 @@ static unsigned int __terminated = 0;
 
 static struct {
 	unsigned int timeout_inputreq;
+	unsigned int timeout_browserlaunch;
 } connman_vpn_settings  = {
 	.timeout_inputreq = DEFAULT_INPUT_REQUEST_TIMEOUT,
+	.timeout_browserlaunch = DEFAULT_BROWSER_LAUNCH_TIMEOUT,
 };
 
 static GKeyFile *load_config(const char *file)
@@ -224,6 +227,21 @@ static GOptionEntry options[] = {
 	{ NULL },
 };
 
+bool connman_setting_get_bool(const char *key)
+{
+	return false;
+}
+
+char **connman_setting_get_string_list(const char *key)
+{
+	return NULL;
+}
+
+unsigned int *connman_setting_get_uint_list(const char *key)
+{
+	return NULL;
+}
+
 /*
  * This function will be called from generic src/agent.c code so we have
  * to use connman_ prefix instead of vpn_ one.
@@ -231,6 +249,11 @@ static GOptionEntry options[] = {
 unsigned int connman_timeout_input_request(void)
 {
 	return connman_vpn_settings.timeout_inputreq;
+}
+
+unsigned int connman_timeout_browser_launch(void)
+{
+	return connman_vpn_settings.timeout_browserlaunch;
 }
 
 int main(int argc, char *argv[])
