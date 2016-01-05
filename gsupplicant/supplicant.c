@@ -2141,8 +2141,10 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 	if (g_strcmp0(key, "Capabilities") == 0) {
 		supplicant_dbus_property_foreach(iter, interface_capability,
 								interface);
+#if !defined TIZEN_EXT
 		if (interface->mode_capa & G_SUPPLICANT_CAPABILITY_MODE_P2P)
 			interface->p2p_support = true;
+#endif
 	} else if (g_strcmp0(key, "State") == 0) {
 		const char *str = NULL;
 
