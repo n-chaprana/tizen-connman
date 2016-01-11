@@ -21,6 +21,7 @@ Requires:         systemd
 Requires(post):   systemd
 Requires(preun):  systemd
 Requires(postun): systemd
+Requires:         net-config
 
 %description
 Connection Manager provides a daemon for managing Internet connections
