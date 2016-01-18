@@ -1705,7 +1705,7 @@ static gboolean property_changed(DBusConnection *conn,
 	struct connection_data *data = NULL;
 	DBusMessageIter iter, value;
 	bool ip_set = false;
-	int err;
+	int err = 0;
 	char *str;
 	const char *key;
 	const char *signature =	DBUS_TYPE_STRING_AS_STRING
