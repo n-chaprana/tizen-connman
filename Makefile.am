@@ -136,18 +136,32 @@ builtin_vpn_cflags =
 
 sbin_PROGRAMS += vpn/connman-vpnd
 
-vpn_connman_vpnd_SOURCES = $(builtin_vpn_sources) \
+vpn_connman_vpnd_SOURCES = $(gdhcp_sources) $(builtin_vpn_sources) \
 			$(gweb_sources) vpn/vpn.ver vpn/main.c vpn/vpn.h \
-			src/log.c src/error.c src/plugin.c src/task.c \
 			vpn/vpn-manager.c vpn/vpn-provider.c \
 			vpn/vpn-provider.h vpn/vpn-rtnl.h \
 			vpn/vpn-ipconfig.c src/inet.c vpn/vpn-rtnl.c \
-			src/dbus.c src/storage.c src/ipaddress.c src/agent.c \
-			vpn/vpn-agent.c vpn/vpn-agent.h src/inotify.c \
+			src/log.c src/error.c src/plugin.c src/task.c \
+			src/device.c src/network.c src/connection.c \
+			src/manager.c src/service.c \
+			src/clock.c src/timezone.c src/agent-connman.c \
+			src/agent.c src/notifier.c src/provider.c \
+			src/resolver.c src/ipconfig.c src/detect.c \
+			src/dhcp.c src/dhcpv6.c src/rtnl.c src/proxy.c \
+			src/utsname.c src/timeserver.c src/rfkill.c \
+			src/storage.c src/dbus.c src/config.c \
+			src/technology.c src/counter.c src/ntp.c \
+			src/session.c src/tethering.c src/wpad.c src/wispr.c \
+			src/stats.c src/iptables.c src/dnsproxy.c src/6to4.c \
+			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
+			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
+			src/peer_service.c src/machine.c src/util.c \
+			vpn/vpn-agent.c vpn/vpn-agent.h \
 			vpn/vpn-config.c
 
 vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
-				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ @TPKP_GNUTLS_LIBS@ \
+				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
+				@TPKP_GNUTLS_LIBS@ \
 				-lresolv -ldl
 
 vpn_connman_vpnd_LDFLAGS = -Wl,--export-dynamic \
@@ -204,9 +218,9 @@ AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				-DCONFIGDIR=\""$(configdir)\""
 
 if VPN
-AM_CPPFLAGS = -I$(builddir)/include -I$(srcdir)/gdbus
+AM_CPPFLAGS = @TPKP_GNUTLS_CFLAGS@ -I$(builddir)/include -I$(srcdir)/gdbus
 else
-AM_CPPFLAGS = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/gdbus
+AM_CPPFLAGS = @TPKP_GNUTLS_CFLAGS@ -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/gdbus
 endif
 
 src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
@@ -225,7 +239,7 @@ EXTRA_DIST = src/genbuiltin src/connman-dbus.conf src/connman-polkit.conf \
 				$(service_files_sources) scripts/connman.in
 
 if VPN
-vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ \
+vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				$(builtin_vpn_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DVPN_STATEDIR=\""$(vpn_statedir)"\" \

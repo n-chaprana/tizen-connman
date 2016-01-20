@@ -1,11 +1,16 @@
+%bcond_with     connman_openconnect
+%bcond_without  connman_openvpn
+%bcond_without  connman_vpnd
+
 Name:           connman
 Version:        1.26
-Release:        6
+Release:        7
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
 Group:          Network & Connectivity/Connection Management
 Source0:        %{name}-%{version}.tar.gz
+BuildRequires:  systemd-devel
 BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(libiptc)
@@ -13,6 +18,12 @@ BuildRequires:  pkgconfig(xtables)
 BuildRequires:  pkgconfig(gnutls)
 BuildRequires:  pkgconfig(libsmack)
 BuildRequires:  pkgconfig(tpkp-gnutls)
+%if %{with connman_openconnect}
+BuildRequires:  openconnect
+%endif
+%if %{with connman_openvpn}
+BuildRequires:  openvpn
+%endif
 BuildRequires:  ca-certificates-devel
 BuildRequires:  readline-devel
 #%systemd_requires
@@ -27,6 +38,35 @@ Requires:         net-config
 Connection Manager provides a daemon for managing Internet connections
 within embedded devices running the Linux operating system.
 
+%if %{with connman_openconnect}
+%package plugin-openconnect
+Summary:        Openconnect Support for Connman
+Requires:       %{name} = %{version}
+Requires:       openconnect
+
+%description plugin-openconnect
+Openconnect Support for Connman.
+%endif
+
+%if %{with connman_openvpn}
+%package plugin-openvpn
+Summary:        Openvpn Support for Connman
+Requires:       %{name} = %{version}
+Requires:       openvpn
+
+%description plugin-openvpn
+OpenVPN support for Connman.
+%endif
+
+%if %{with connman_vpnd}
+%package connman-vpnd
+Summary:        VPN Support for Connman
+BuildRequires:  %{name} = %{version}
+Requires:       %{name} = %{version}
+
+%description connman-vpnd
+Provides VPN support for Connman
+%endif
 
 %package test
 Summary:        Test Scripts for Connection Manager
@@ -58,6 +98,10 @@ CFLAGS+=" -DTIZEN_SYS_CA_BUNDLE=\"%TZ_SYS_CA_BUNDLE\""
 CFLAGS+=" -DTIZEN_TV_EXT"
 %endif
 
+%if %{with connman_vpnd}
+VPN_CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
+%endif
+
 chmod +x bootstrap
 ./bootstrap
 %configure \
@@ -65,6 +109,12 @@ chmod +x bootstrap
             --enable-client \
             --enable-pacrunner \
             --enable-wifi=builtin \
+%if %{with connman_openconnect}
+            --enable-openconnect \
+%endif
+%if %{with connman_openvpn}
+            --enable-openvpn \
+%endif
 %if 0%{?enable_connman_features}
             %connman_features \
 %endif
@@ -118,15 +168,26 @@ cp src/connman.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/
 mkdir -p %{buildroot}%{_datadir}/license
 cp COPYING %{buildroot}%{_datadir}/license/connman
 
+%if %{with connman_vpnd}
+#%install_service multi-user.target.wants connman-vpn.service
+cp vpn/vpn-dbus.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
+%endif
+
 %post
 #systemctl daemon-reload
 #systemctl restart connman.service
+%if %{with connman_vpnd}
+systemctl restart connman-vpn.service
+%endif
 
 %preun
 #systemctl stop connman.service
+%if %{with connman_vpnd}
+systemctl stop connman-vpn.service
+%endif
 
 %postun
-#systemctl daemon-reload
+systemctl daemon-reload
 
 %docs_package
 
@@ -143,17 +204,54 @@ cp COPYING %{buildroot}%{_datadir}/license/connman
 %{_sysconfdir}/dbus-1/system.d/*.conf
 %attr(644,root,root) %{_libdir}/systemd/system/connman.service
 %attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman.service
+%attr(644,root,root) %{_libdir}/systemd/system/connman-vpn.service
+%attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman-vpn.service
 %if "%{?_lib}" == "lib64"
 %attr(644,root,root) %{_unitdir}/connman.service
 %attr(644,root,root) %{_unitdir}/multi-user.target.wants/connman.service
+%attr(644,root,root) %{_unitdir}/connman-vpn.service
+%attr(644,root,root) %{_unitdir}/multi-user.target.wants/connman-vpn.service
 %endif
 %{_datadir}/license/connman
 
 %files test
+%manifest connman.manifest
 %{_libdir}/%{name}/test/*
 
 %files devel
+%manifest connman.manifest
 %{_includedir}/*
 %{_libdir}/pkgconfig/*.pc
+
+%if %{with connman_openconnect}
+%files plugin-openconnect
+%manifest %{name}.manifest
+%{_unitdir}/connman-vpn.service
+%{_libdir}/connman/plugins-vpn/openconnect.so
+%{_libdir}/connman/scripts/openconnect-script
+%{_datadir}/dbus-1/system-services/net.connman.vpn.service
+%endif
+
+%if %{with connman_openvpn}
+%files plugin-openvpn
+%manifest %{name}.manifest
+%{_unitdir}/connman-vpn.service
+%{_libdir}/%{name}/plugins-vpn/openvpn.so
+%{_libdir}/%{name}/scripts/openvpn-script
+%{_datadir}/dbus-1/system-services/net.connman.vpn.service
+%endif
+
+%if %{with connman_vpnd}
+%files connman-vpnd
+%manifest %{name}.manifest
+%{_sbindir}/connman-vpnd
+%{_unitdir}/connman-vpn.service
+#%{_unitdir}/multi-user.target.wants/connman-vpn.service
+%dir %{_libdir}/%{name}
+%dir %{_libdir}/%{name}/scripts
+%dir %{_libdir}/%{name}/plugins-vpn
+%config %{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
+%{_datadir}/dbus-1/system-services/net.connman.vpn.service
+%endif
 
 
