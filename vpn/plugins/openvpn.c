@@ -366,8 +366,10 @@ static int ov_connect(struct vpn_provider *provider,
 
 	connman_task_add_argument(task, "--persist-tun", NULL);
 
+#if !defined TIZEN_EXT
 	connman_task_add_argument(task, "--route-noexec", NULL);
 	connman_task_add_argument(task, "--ifconfig-noexec", NULL);
+#endif
 
 	/*
 	 * Disable client restarts because we can't handle this at the
