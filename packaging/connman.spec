@@ -140,7 +140,6 @@ mkdir -p %{buildroot}%{_unitdir}
 %if "%{profile}" == "tv"
 cp src/connman_tv.service %{buildroot}%{_libdir}/systemd/system/connman.service
 %else
-cp src/connman.service %{buildroot}%{_libdir}/systemd/system/connman.service
 %if "%{?_lib}" == "lib64"
 cp src/connman.service %{buildroot}%{_unitdir}/connman.service
 %endif
@@ -169,7 +168,17 @@ mkdir -p %{buildroot}%{_datadir}/license
 cp COPYING %{buildroot}%{_datadir}/license/connman
 
 %if %{with connman_vpnd}
-#%install_service multi-user.target.wants connman-vpn.service
+#Systemd service file
+%if "%{?_lib}" == "lib64"
+cp vpn/connman-vpn.service %{buildroot}%{_unitdir}/connman-vpn.service
+%endif
+
+mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
+ln -s ../connman-vpn.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/connman-vpn.service
+%if "%{?_lib}" == "lib64"
+mkdir -p %{buildroot}%{_unitdir}/multi-user.target.wants
+ln -s ../connman-vpn.service %{buildroot}%{_unitdir}/multi-user.target.wants/connman-vpn.service
+%endif
 cp vpn/vpn-dbus.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
 %endif
 
@@ -245,8 +254,12 @@ systemctl daemon-reload
 %files connman-vpnd
 %manifest %{name}.manifest
 %{_sbindir}/connman-vpnd
-%{_unitdir}/connman-vpn.service
-#%{_unitdir}/multi-user.target.wants/connman-vpn.service
+%attr(644,root,root) %{_libdir}/systemd/system/connman-vpn.service
+%attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman-vpn.service
+%if "%{?_lib}" == "lib64"
+%attr(644,root,root) %{_unitdir}/connman-vpn.service
+%attr(644,root,root) %{_unitdir}/multi-user.target.wants/connman-vpn.service
+%endif
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/scripts
 %dir %{_libdir}/%{name}/plugins-vpn
