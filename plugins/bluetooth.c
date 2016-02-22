@@ -723,7 +723,7 @@ static bool tethering_create(const char *path,
 		struct connman_technology *technology, const char *bridge,
 		bool enabled)
 {
-	struct tethering_info *tethering = g_new0(struct tethering_info, 1);
+	struct tethering_info *tethering;
 	GDBusProxy *proxy;
 	const char *method;
 	bool result;
@@ -736,6 +736,8 @@ static bool tethering_create(const char *path,
 	proxy = g_dbus_proxy_new(client, path, "org.bluez.NetworkServer1");
 	if (!proxy)
 		return false;
+
+	tethering = g_new0(struct tethering_info, 1);
 
 	tethering->technology = technology;
 	tethering->bridge = g_strdup(bridge);
