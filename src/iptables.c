@@ -2364,8 +2364,10 @@ int __connman_iptables_iterate_chains(const char *table_name,
 	struct connman_iptables *table;
 
 	table = get_table(table_name);
-	if (!table)
+	if (!table) {
+		g_free(cbd);
 		return -EINVAL;
+	}
 
 	iterate_entries(table->blob_entries->entrytable,
 			table->info->valid_hooks,
