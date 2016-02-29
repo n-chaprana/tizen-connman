@@ -61,7 +61,7 @@ OpenVPN support for Connman.
 %if %{with connman_vpnd}
 %package connman-vpnd
 Summary:        VPN Support for Connman
-BuildRequires:  %{name} = %{version}
+#BuildRequires:  %{name} = %{version}
 Requires:       %{name} = %{version}
 
 %description connman-vpnd
