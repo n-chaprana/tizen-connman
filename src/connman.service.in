@@ -7,7 +7,7 @@ DefaultDependencies=no
 Type=dbus
 BusName=net.connman
 Restart=on-failure
-ExecStart=@sbindir@/connmand -n
+ExecStart=@sbindir@/connmand -n --noplugin vpn
 StandardOutput=null
 
 [Install]

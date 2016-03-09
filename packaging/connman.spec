@@ -168,32 +168,12 @@ mkdir -p %{buildroot}%{_datadir}/license
 cp COPYING %{buildroot}%{_datadir}/license/connman
 
 %if %{with connman_vpnd}
-#Systemd service file
-%if "%{?_lib}" == "lib64"
-cp vpn/connman-vpn.service %{buildroot}%{_unitdir}/connman-vpn.service
-%endif
-
-mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
-ln -s ../connman-vpn.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/connman-vpn.service
-%if "%{?_lib}" == "lib64"
-mkdir -p %{buildroot}%{_unitdir}/multi-user.target.wants
-ln -s ../connman-vpn.service %{buildroot}%{_unitdir}/multi-user.target.wants/connman-vpn.service
-%endif
 cp vpn/vpn-dbus.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
 %endif
 
 %post
-#systemctl daemon-reload
-#systemctl restart connman.service
-%if %{with connman_vpnd}
-systemctl restart connman-vpn.service
-%endif
 
 %preun
-#systemctl stop connman.service
-%if %{with connman_vpnd}
-systemctl stop connman-vpn.service
-%endif
 
 %postun
 systemctl daemon-reload
@@ -213,13 +193,9 @@ systemctl daemon-reload
 %{_sysconfdir}/dbus-1/system.d/*.conf
 %attr(644,root,root) %{_libdir}/systemd/system/connman.service
 %attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman.service
-%attr(644,root,root) %{_libdir}/systemd/system/connman-vpn.service
-%attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman-vpn.service
 %if "%{?_lib}" == "lib64"
 %attr(644,root,root) %{_unitdir}/connman.service
 %attr(644,root,root) %{_unitdir}/multi-user.target.wants/connman.service
-%attr(644,root,root) %{_unitdir}/connman-vpn.service
-%attr(644,root,root) %{_unitdir}/multi-user.target.wants/connman-vpn.service
 %endif
 %{_datadir}/license/connman
 
@@ -235,7 +211,6 @@ systemctl daemon-reload
 %if %{with connman_openconnect}
 %files plugin-openconnect
 %manifest %{name}.manifest
-%{_unitdir}/connman-vpn.service
 %{_libdir}/connman/plugins-vpn/openconnect.so
 %{_libdir}/connman/scripts/openconnect-script
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
@@ -244,7 +219,6 @@ systemctl daemon-reload
 %if %{with connman_openvpn}
 %files plugin-openvpn
 %manifest %{name}.manifest
-%{_unitdir}/connman-vpn.service
 %{_libdir}/%{name}/plugins-vpn/openvpn.so
 %{_libdir}/%{name}/scripts/openvpn-script
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
@@ -254,12 +228,6 @@ systemctl daemon-reload
 %files connman-vpnd
 %manifest %{name}.manifest
 %{_sbindir}/connman-vpnd
-%attr(644,root,root) %{_libdir}/systemd/system/connman-vpn.service
-%attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman-vpn.service
-%if "%{?_lib}" == "lib64"
-%attr(644,root,root) %{_unitdir}/connman-vpn.service
-%attr(644,root,root) %{_unitdir}/multi-user.target.wants/connman-vpn.service
-%endif
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/scripts
 %dir %{_libdir}/%{name}/plugins-vpn
