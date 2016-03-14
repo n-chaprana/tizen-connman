@@ -66,17 +66,12 @@ systemdunitdir = @SYSTEMD_UNITDIR@
 
 systemdunit_DATA = src/connman.service
 
-if VPN
-systemdunit_DATA += vpn/connman-vpn.service
-endif
 endif
 endif
 
 service_files_sources = src/connman.service.in src/net.connman.service.in \
-				vpn/connman-vpn.service.in \
 				vpn/net.connman.vpn.service.in
 service_files = src/connman.service src/net.connman.service \
-				vpn/connman-vpn.service \
 				vpn/net.connman.vpn.service
 
 plugin_LTLIBRARIES =

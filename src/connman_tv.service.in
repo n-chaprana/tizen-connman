@@ -6,7 +6,7 @@ Type=dbus
 BusName=net.connman
 RemainAfterExit=yes
 ExecStartPre=/usr/bin/dbus-send --system --dest=net.netconfig / net.netconfig.auto.activate
-ExecStart=/usr/sbin/connmand
+ExecStart=/usr/sbin/connmand --noplugin vpn
 
 [Install]
 WantedBy=multi-user.target
