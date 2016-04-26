@@ -338,7 +338,7 @@ void __connman_ipconfig_newlink(int index, unsigned short type,
 							unsigned short mtu,
 						struct rtnl_link_stats *stats);
 void __connman_ipconfig_dellink(int index, struct rtnl_link_stats *stats);
-void __connman_ipconfig_newaddr(int index, int family, const char *label,
+int __connman_ipconfig_newaddr(int index, int family, const char *label,
 				unsigned char prefixlen, const char *address);
 void __connman_ipconfig_deladdr(int index, int family, const char *label,
 				unsigned char prefixlen, const char *address);
@@ -451,6 +451,7 @@ typedef void (* dhcpv6_cb) (struct connman_network *network,
 typedef void (* dhcp_cb) (struct connman_ipconfig *ipconfig,
 			struct connman_network *opt_network,
 			bool success, gpointer data);
+char *__connman_dhcp_get_server_address(struct connman_ipconfig *ipconfig);
 int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
 			struct connman_network *network, dhcp_cb callback,
 			gpointer user_data);
@@ -586,9 +587,8 @@ int __connman_network_connect(struct connman_network *network);
 int __connman_network_disconnect(struct connman_network *network);
 int __connman_network_clear_ipconfig(struct connman_network *network,
 					struct connman_ipconfig *ipconfig);
-int __connman_network_set_ipconfig(struct connman_network *network,
-				struct connman_ipconfig *ipconfig_ipv4,
-				struct connman_ipconfig *ipconfig_ipv6);
+int __connman_network_enable_ipconfig(struct connman_network *network,
+				struct connman_ipconfig *ipconfig);
 
 const char *__connman_network_get_type(struct connman_network *network);
 const char *__connman_network_get_group(struct connman_network *network);
@@ -1034,3 +1034,7 @@ void __connman_nfacct_cleanup(void);
 
 int __connman_machine_init(void);
 void __connman_machine_cleanup(void);
+
+int __connman_util_get_random(uint64_t *val);
+int __connman_util_init(void);
+void __connman_util_cleanup(void);

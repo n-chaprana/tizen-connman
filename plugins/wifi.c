@@ -992,7 +992,7 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 	GKeyFile *keyfile;
 	gchar **services;
 	char *ssid, *name;
-	int i, freq, ret;
+	int i, ret;
 	bool value;
 	int num_ssids = 0, add_param_failed = 0;
 
@@ -1022,13 +1022,10 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 		ssid = g_key_file_get_string(keyfile,
 					services[i], "SSID", NULL);
 
-		freq = g_key_file_get_integer(keyfile, services[i],
-					"Frequency", NULL);
-
 		name = g_key_file_get_string(keyfile, services[i], "Name",
 								NULL);
 
-		ret = add_scan_param(ssid, NULL, 0, freq, scan_data, 0, name);
+		ret = add_scan_param(ssid, NULL, 0, 0, scan_data, 0, name);
 		if (ret < 0)
 			add_param_failed++;
 		else if (ret > 0)
@@ -1311,7 +1308,7 @@ static gboolean autoscan_timeout(gpointer data)
 	} else
 		interval = autoscan->interval * autoscan->base;
 
-	if (autoscan->interval >= autoscan->limit)
+	if (interval > autoscan->limit)
 		interval = autoscan->limit;
 
 	throw_wifi_scan(wifi->device, scan_callback_hidden);
@@ -1338,6 +1335,9 @@ static void start_autoscan(struct connman_device *device)
 		return;
 
 	if (wifi->p2p_device)
+		return;
+
+	if (wifi->connected)
 		return;
 
 	autoscan = wifi->autoscan;
@@ -1396,22 +1396,8 @@ static void setup_autoscan(struct wifi_data *wifi)
 	start_autoscan(wifi->device);
 }
 
-static void interface_autoscan_callback(int result,
-					GSupplicantInterface *interface,
-							void *user_data)
-{
-	struct wifi_data *wifi = user_data;
-
-	if (result < 0) {
-		DBG("Could not enable Autoscan, falling back...");
-		setup_autoscan(wifi);
-	}
-}
-
 static void finalize_interface_creation(struct wifi_data *wifi)
 {
-	GSupplicantInterface *interface = wifi->interface;
-
 	DBG("interface is ready wifi %p tethering %d", wifi, wifi->tethering);
 
 	if (!wifi->device) {
@@ -1427,12 +1413,7 @@ static void finalize_interface_creation(struct wifi_data *wifi)
 	if (wifi->p2p_device)
 		return;
 
-	/* Setting up automatic scanning */
-	if (g_supplicant_interface_autoscan(interface, AUTOSCAN_DEFAULT,
-				interface_autoscan_callback, wifi) < 0) {
-		DBG("Could not enable Autoscan, falling back...");
-		setup_autoscan(wifi);
-	}
+	setup_autoscan(wifi);
 }
 
 static void interface_create_callback(int result,
@@ -1839,6 +1820,9 @@ static int wifi_scan(enum connman_service_type type,
 
 			return 0;
 		}
+	} else if (wifi->connected) {
+		g_supplicant_free_scan_params(scan_params);
+		return wifi_scan_simple(device);
 	} else {
 		ret = get_latest_connections(driver_max_ssids, scan_params);
 		if (ret <= 0) {
@@ -2781,9 +2765,8 @@ static void peer_changed(GSupplicantPeer *peer, GSupplicantPeerState state)
 		p_state = CONNMAN_PEER_STATE_IDLE;
 		break;
 	case G_SUPPLICANT_PEER_GROUP_JOINED:
-		if (!g_supplicant_peer_is_in_a_group(peer))
-			break;
-		p_state = CONNMAN_PEER_STATE_READY;
+		connman_peer_set_iface_address(connman_peer,
+				g_supplicant_peer_get_iface_address(peer));
 		break;
 	case G_SUPPLICANT_PEER_GROUP_DISCONNECTED:
 		p_state = CONNMAN_PEER_STATE_IDLE;

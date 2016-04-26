@@ -639,6 +639,7 @@ int main(int argc, char *argv[])
 	else
 		config_init(option_config);
 
+	__connman_util_init();
 	__connman_inotify_init();
 	__connman_technology_init();
 	__connman_notifier_init();
@@ -729,6 +730,7 @@ int main(int argc, char *argv[])
 	__connman_technology_cleanup();
 	__connman_inotify_cleanup();
 
+	__connman_util_cleanup();
 	__connman_dbus_cleanup();
 
 	__connman_log_cleanup(option_backtrace);
@@ -747,6 +749,7 @@ int main(int argc, char *argv[])
 	g_strfreev(connman_settings.tethering_technologies);
 
 	g_free(option_debug);
+	g_free(option_wifi);
 
 	return 0;
 }

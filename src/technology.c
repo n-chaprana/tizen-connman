@@ -84,6 +84,9 @@ struct connman_technology {
 
 static GSList *driver_list = NULL;
 
+static int technology_enabled(struct connman_technology *technology);
+static int technology_disabled(struct connman_technology *technology);
+
 static gint compare_priority(gconstpointer a, gconstpointer b)
 {
 	const struct connman_technology_driver *driver1 = a;
@@ -615,19 +618,27 @@ static gboolean technology_pending_reply(gpointer user_data)
 static int technology_affect_devices(struct connman_technology *technology,
 						bool enable_device)
 {
+	int err = 0, err_dev;
 	GSList *list;
-	int err = -ENXIO;
 
-	if (technology->type == CONNMAN_SERVICE_TYPE_P2P)
+	if (technology->type == CONNMAN_SERVICE_TYPE_P2P) {
+		if (enable_device)
+			__connman_technology_enabled(technology->type);
+		else
+			__connman_technology_disabled(technology->type);
 		return 0;
+	}
 
 	for (list = technology->device_list; list; list = list->next) {
 		struct connman_device *device = list->data;
 
 		if (enable_device)
-			err = __connman_device_enable(device);
+			err_dev = __connman_device_enable(device);
 		else
-			err = __connman_device_disable(device);
+			err_dev = __connman_device_disable(device);
+
+		if (err_dev < 0 && err_dev != -EALREADY)
+			err = err_dev;
 	}
 
 	return err;
@@ -1186,13 +1197,6 @@ static struct connman_technology *technology_get(enum connman_service_type type)
 	technology->type = type;
 	technology->path = g_strdup_printf("%s/technology/%s",
 							CONNMAN_PATH, str);
-	if (type == CONNMAN_SERVICE_TYPE_P2P) {
-		struct connman_technology *wifi;
-
-		wifi = technology_find(CONNMAN_SERVICE_TYPE_WIFI);
-		if (wifi)
-			technology->enabled = wifi->enabled;
-	}
 
 	technology_load(technology);
 	technology_list = g_slist_prepend(technology_list, technology);
@@ -1211,7 +1215,20 @@ static struct connman_technology *technology_get(enum connman_service_type type)
 		return NULL;
 	}
 
-	DBG("technology %p", technology);
+	if (type == CONNMAN_SERVICE_TYPE_P2P) {
+		struct connman_technology *wifi;
+		bool enable;
+
+		enable = technology->enable_persistent;
+
+		wifi = technology_find(CONNMAN_SERVICE_TYPE_WIFI);
+		if (enable && wifi)
+			enable = wifi->enabled;
+
+		technology_affect_devices(technology, enable);
+	}
+
+	DBG("technology %p %s", technology, get_name(technology->type));
 
 	return technology;
 }
@@ -1796,6 +1813,12 @@ int __connman_technology_init(void)
 void __connman_technology_cleanup(void)
 {
 	DBG("");
+
+	while (technology_list) {
+		struct connman_technology *technology = technology_list->data;
+		technology_list = g_slist_remove(technology_list, technology);
+		technology_put(technology);
+	}
 
 	g_hash_table_destroy(rfkill_list);
 

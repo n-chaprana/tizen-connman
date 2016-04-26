@@ -170,6 +170,9 @@ static void read_uevent(struct interface_data *interface)
 		} else if (strcmp(line + 8, "gadget") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_GADGET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_GADGET;
+		} else if (strcmp(line + 8, "vlan") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
+			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
 
 		} else {
 			interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
@@ -612,17 +615,18 @@ static void process_newaddr(unsigned char family, unsigned char prefixlen,
 	if (!inet_ntop(family, src, ip_string, INET6_ADDRSTRLEN))
 		return;
 
-	__connman_ipconfig_newaddr(index, family, label,
-					prefixlen, ip_string);
-
-	if (family == AF_INET6) {
-		/*
-		 * Re-create RDNSS configured servers if there are any
-		 * for this interface. This is done because we might
-		 * have now properly configured interface with proper
-		 * autoconfigured address.
-		 */
-		__connman_resolver_redo_servers(index);
+	if (__connman_ipconfig_newaddr(index, family, label,
+					prefixlen, ip_string) >= 0) {
+		if (family == AF_INET6) {
+			/*
+			 * Re-create RDNSS configured servers if there
+			 * are any for this interface. This is done
+			 * because we might have now properly
+			 * configured interface with proper
+			 * autoconfigured address.
+			 */
+			__connman_resolver_redo_servers(index);
+		}
 	}
 }
 
@@ -1083,6 +1087,8 @@ static void rtnl_route(struct nlmsghdr *hdr)
 
 static bool is_route_rtmsg(struct rtmsg *msg)
 {
+	if (msg->rtm_flags & RTM_F_CLONED)
+		return false;
 
 	if (msg->rtm_table != RT_TABLE_MAIN)
 		return false;
@@ -1291,6 +1297,7 @@ static const char *type2string(uint16_t type)
 }
 
 static GIOChannel *channel = NULL;
+static guint channel_watch = 0;
 
 struct rtnl_request {
 	struct nlmsghdr hdr;
@@ -1621,8 +1628,9 @@ int __connman_rtnl_init(void)
 	g_io_channel_set_encoding(channel, NULL, NULL);
 	g_io_channel_set_buffered(channel, FALSE);
 
-	g_io_add_watch(channel, G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
-							netlink_event, NULL);
+	channel_watch = g_io_add_watch(channel,
+				G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
+				netlink_event, NULL);
 
 	return 0;
 }
@@ -1671,6 +1679,11 @@ void __connman_rtnl_cleanup(void)
 
 	g_slist_free(request_list);
 	request_list = NULL;
+
+	if (channel_watch) {
+		g_source_remove(channel_watch);
+		channel_watch = 0;
+	}
 
 	g_io_channel_shutdown(channel, TRUE, NULL);
 	g_io_channel_unref(channel);
