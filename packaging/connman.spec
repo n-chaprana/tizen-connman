@@ -3,7 +3,7 @@
 %bcond_without  connman_vpnd
 
 Name:           connman
-Version:        1.26
+Version:        1.29
 Release:        7
 License:        GPL-2.0+
 Summary:        Connection Manager
