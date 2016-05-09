@@ -4,7 +4,7 @@
 
 Name:           connman
 Version:        1.29
-Release:        8
+Release:        9
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -227,7 +227,7 @@ systemctl daemon-reload
 %if %{with connman_vpnd}
 %files connman-vpnd
 %manifest %{name}.manifest
-%{_sbindir}/connman-vpnd
+#%{_sbindir}/connman-vpnd
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/scripts
 %dir %{_libdir}/%{name}/plugins-vpn
