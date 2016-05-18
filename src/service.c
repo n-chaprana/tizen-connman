@@ -6232,6 +6232,11 @@ static void single_connected_tech(struct connman_service *allowed)
 
 	DBG("keeping %p %s", allowed, allowed->path);
 
+#if defined TIZEN_EXT
+	if (!allowed || allowed->type == CONNMAN_SERVICE_TYPE_CELLULAR)
+		return;
+#endif
+
 	for (iter = service_list; iter; iter = iter->next) {
 		service = iter->data;
 
