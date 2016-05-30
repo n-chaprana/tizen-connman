@@ -2189,12 +2189,30 @@ static struct _peer_service *fill_in_peer_service(unsigned char *bjr_query,
 
 	service = dbus_malloc0(sizeof(*service));
 
+#if defined TIZEN_EXT
+	if (!service)
+		return NULL;
+#endif
+
 	if (bjr_query_len && bjr_response_len) {
 		service->bjr_query = dbus_malloc0(bjr_query_len);
+#if defined TIZEN_EXT
+		if(!service->bjr_query) {
+			dbus_free(service);
+			return NULL;
+		}
+#endif
 		memcpy(service->bjr_query, bjr_query, bjr_query_len);
 		service->bjr_query_len = bjr_query_len;
 
 		service->bjr_response = dbus_malloc0(bjr_response_len);
+#if defined TIZEN_EXT
+		if(!service->bjr_response) {
+			dbus_free(service->bjr_query);
+			dbus_free(service);
+			return NULL;
+		}
+#endif
 		memcpy(service->bjr_response, bjr_response, bjr_response_len);
 		service->bjr_response_len = bjr_response_len;
 	} else if (upnp_service && version) {
@@ -2202,6 +2220,12 @@ static struct _peer_service *fill_in_peer_service(unsigned char *bjr_query,
 		service->version = version;
 	} else if (wfd_ies && wfd_ies_len) {
 		service->wfd_ies = dbus_malloc0(wfd_ies_len);
+#if defined TIZEN_EXT
+		if (!service->wfd_ies) {
+			dbus_free(service);
+			return NULL;
+		}
+#endif
 		memcpy(service->wfd_ies, wfd_ies, wfd_ies_len);
 		service->wfd_ies_len = wfd_ies_len;
 	} else {
