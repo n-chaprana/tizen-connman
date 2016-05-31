@@ -2311,6 +2311,10 @@ int __connman_iptables_commit(const char *table_name)
 		return -EINVAL;
 
 	repl = iptables_blob(table);
+#if defined TIZEN_EXT
+	if(!repl)
+		return -ENOMEM;
+#endif
 
 	if (debug_enabled)
 		dump_ipt_replace(repl);
