@@ -6846,6 +6846,19 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 			is_connected_state(service, new_state))
 		nameserver_add_all(service);
 
+#if defined TIZEN_EXT
+	int ret = service_indicate_state(service);
+	/*Sent the Ready changed signal again in case IPv4 IP set
+	  after IPv6 IP set*/
+
+	if(ret == -EALREADY && type == CONNMAN_IPCONFIG_TYPE_IPV4
+			&& new_state == CONNMAN_SERVICE_STATE_READY) {
+		DBG("Notify IPv4 state new/old %d/%d", new_state,old_state);
+		state_changed(service);
+	}
+
+	return ret;
+#endif
 	return service_indicate_state(service);
 }
 
