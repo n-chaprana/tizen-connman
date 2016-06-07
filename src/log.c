@@ -40,6 +40,7 @@ static const char *program_path;
 
 #if defined TIZEN_EXT
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #define LOG_FILE_PATH "/opt/usr/data/network/connman.log"
 #define MAX_LOG_SIZE	1 * 1024 * 1024
@@ -106,14 +107,15 @@ static void __connman_log_make_backup(void)
 
 static void __connman_log_get_local_time(char *strtime, const int size)
 {
-	time_t buf;
+	struct timeval tv;
 	struct tm *local_ptm;
+	char buf[32];
 
-	time(&buf);
-	buf = time(NULL);
-	local_ptm = localtime(&buf);
+	gettimeofday(&tv, NULL);
+	local_ptm = localtime(&tv.tv_sec);
 
-	strftime(strtime, size, "%m/%d %H:%M:%S", local_ptm);
+	strftime(buf, sizeof(buf), "%m/%d %H:%M:%S", local_ptm);
+	snprintf(strtime, size, "%s.%03ld", buf, tv.tv_usec / 1000);
 }
 
 void __connman_log(const int log_priority, const char *format, va_list ap)
