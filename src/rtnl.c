@@ -100,6 +100,7 @@ static bool ether_blacklisted(const char *name)
 	return false;
 }
 
+#if !defined TIZEN_EXT
 static bool wext_interface(char *ifname)
 {
 	struct iwreq wrq;
@@ -121,6 +122,7 @@ static bool wext_interface(char *ifname)
 
 	return true;
 }
+#endif
 
 #if defined TIZEN_EXT
 static bool __connman_rtnl_is_cellular_device(const char *name)
@@ -222,6 +224,8 @@ static void read_uevent(struct interface_data *interface)
 	if (found_devtype)
 		goto out;
 
+#if !defined TIZEN_EXT
+	/* TIZEN does not use old wext interface */
 	/* We haven't got a DEVTYPE, let's check if it's a wireless device */
 	if (wext_interface(name)) {
 		interface->service_type = CONNMAN_SERVICE_TYPE_WIFI;
@@ -229,6 +233,7 @@ static void read_uevent(struct interface_data *interface)
 
 		connman_error("%s runs an unsupported 802.11 driver", name);
 	}
+#endif
 
 out:
 	g_free(name);
