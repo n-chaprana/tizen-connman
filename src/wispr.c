@@ -926,6 +926,11 @@ int __connman_wispr_start(struct connman_service *service,
 
 	DBG("service %p", service);
 
+#if defined TIZEN_EXT
+	if (connman_service_get_type(service) == CONNMAN_SERVICE_TYPE_CELLULAR)
+		return -EPERM;
+#endif
+
 	if (!wispr_portal_list)
 		return -EINVAL;
 
