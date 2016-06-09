@@ -7,6 +7,8 @@ BusName=net.connman
 RemainAfterExit=yes
 ExecStartPre=/usr/bin/dbus-send --system --dest=net.netconfig / net.netconfig.auto.activate
 ExecStart=/usr/sbin/connmand --noplugin vpn
+CapabilityBoundingSet=~CAP_MAC_ADMIN
+CapabilityBoundingSet=~CAP_MAC_OVERRIDE
 
 [Install]
 WantedBy=multi-user.target
