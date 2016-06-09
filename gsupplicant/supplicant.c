@@ -4216,8 +4216,13 @@ int g_supplicant_interface_scan(GSupplicantInterface *interface,
 
 	data->interface = interface;
 	data->path = g_strdup(interface->path);
+#if defined TIZEN_EXT
+	data->interface->scan_callback = data->callback = callback;
+	data->interface->scan_data = data->user_data = user_data;
+#else
 	data->callback = callback;
 	data->user_data = user_data;
+#endif
 	data->scan_params = scan_data;
 
         interface->scan_callback = callback;
