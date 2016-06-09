@@ -15,7 +15,6 @@ BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(libiptc)
 BuildRequires:  pkgconfig(xtables)
-BuildRequires:  pkgconfig(gnutls)
 BuildRequires:  pkgconfig(libsmack)
 BuildRequires:  pkgconfig(tpkp-gnutls)
 %if %{with connman_openconnect}
@@ -124,7 +123,8 @@ chmod +x bootstrap
 			--enable-loopback \
 			--enable-ethernet \
             --with-systemdunitdir=%{_libdir}/systemd/system \
-            --enable-pie
+            --enable-pie \
+			--disable-wispr
 
 make %{?_smp_mflags}
 
