@@ -1896,8 +1896,10 @@ static void state_changed(struct connman_service *service)
 	if (!str)
 		return;
 
+#if !defined TIZEN_EXT
 	if (!allow_property_changed(service))
 		return;
+#endif
 
 	connman_dbus_property_changed_basic(service->path,
 				CONNMAN_SERVICE_INTERFACE, "State",
