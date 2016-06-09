@@ -1,4 +1,5 @@
 [D-BUS Service]
 Name=net.connman.vpn
-Exec=@sbindir@/connman-vpnd -n
+Exec=/bin/false
 User=root
+SystemdService=connman-vpn.service

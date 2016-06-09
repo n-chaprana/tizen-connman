@@ -4,7 +4,7 @@
 
 Name:           connman
 Version:        1.29
-Release:        9
+Release:        10
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -193,9 +193,11 @@ systemctl daemon-reload
 %{_sysconfdir}/dbus-1/system.d/*.conf
 %attr(644,root,root) %{_libdir}/systemd/system/connman.service
 %attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman.service
+%attr(644,root,root) %{_libdir}/systemd/system/connman-vpn.service
 %if "%{?_lib}" == "lib64"
 %attr(644,root,root) %{_unitdir}/connman.service
 %attr(644,root,root) %{_unitdir}/multi-user.target.wants/connman.service
+%attr(644,root,root) %{_unitdir}/connman-vpn.service
 %endif
 %{_datadir}/license/connman
 

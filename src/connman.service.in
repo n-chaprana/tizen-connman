@@ -9,6 +9,8 @@ BusName=net.connman
 Restart=on-failure
 ExecStart=@sbindir@/connmand -n --noplugin vpn
 StandardOutput=null
+CapabilityBoundingSet=~CAP_MAC_ADMIN
+CapabilityBoundingSet=~CAP_MAC_OVERRIDE
 
 [Install]
 WantedBy=multi-user.target

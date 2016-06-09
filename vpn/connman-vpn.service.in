@@ -8,6 +8,8 @@ Type=dbus
 BusName=net.connman.vpn
 ExecStart=@sbindir@/connman-vpnd -n
 StandardOutput=null
+CapabilityBoundingSet=~CAP_MAC_ADMIN
+CapabilityBoundingSet=~CAP_MAC_OVERRIDE
 
 [Install]
 WantedBy=multi-user.target
