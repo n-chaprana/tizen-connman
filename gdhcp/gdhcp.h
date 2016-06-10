@@ -238,6 +238,10 @@ void g_dhcp_server_set_save_ack_lease(GDHCPServer *dhcp_server,
 int dhcp_get_random(uint64_t *val);
 void dhcp_cleanup_random(void);
 
+#if defined TIZEN_EXT
+void g_dhcp_client_set_address_known(GDHCPClient *client, gboolean known);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
