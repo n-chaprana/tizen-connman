@@ -685,6 +685,9 @@ static bool load_service(GKeyFile *keyfile, const char *group,
 
 		if (str) {
 			if (security == CONNMAN_SERVICE_SECURITY_PSK ||
+#if defined TIZEN_EXT
+			    security == CONNMAN_SERVICE_SECURITY_RSN ||
+#endif
 					security == CONNMAN_SERVICE_SECURITY_WEP) {
 				service->security = security;
 			} else {

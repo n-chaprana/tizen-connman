@@ -359,6 +359,7 @@ const unsigned char *g_supplicant_network_get_bssid(
 						GSupplicantNetwork *network);
 unsigned int g_supplicant_network_get_maxrate(GSupplicantNetwork *network);
 const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network);
+bool g_supplicant_network_get_rsn_selected(GSupplicantNetwork *network);
 unsigned int g_supplicant_network_is_hs20AP(GSupplicantNetwork *network);
 const char *g_supplicant_network_get_eap(GSupplicantNetwork *network);
 const char *g_supplicant_network_get_identity(GSupplicantNetwork *network);
