@@ -5144,6 +5144,10 @@ static void service_schedule_removed(struct connman_service *service)
 
 static bool allow_property_changed(struct connman_service *service)
 {
+#if defined TIZEN_EXT
+	if (service->path == NULL)
+		return FALSE;
+#endif
 	if (g_hash_table_lookup_extended(services_notify->add, service->path,
 					NULL, NULL)) {
 		DBG("no property updates for service %p", service);
