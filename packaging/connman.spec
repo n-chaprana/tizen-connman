@@ -4,7 +4,7 @@
 
 Name:           connman
 Version:        1.29
-Release:        10
+Release:        11
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -142,6 +142,7 @@ cp src/connman_tv.service %{buildroot}%{_libdir}/systemd/system/connman.service
 %else
 %if "%{?_lib}" == "lib64"
 cp src/connman.service %{buildroot}%{_unitdir}/connman.service
+cp vpn/connman-vpn.service %{buildroot}%{_unitdir}/connman-vpn.service
 %endif
 %endif
 
