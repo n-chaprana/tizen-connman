@@ -4490,8 +4490,10 @@ static void add_network_security_tls(DBusMessageIter *dict,
 	if (!ssid->private_key_path)
 		return;
 
+#if !defined TIZEN_EXT
 	if (!ssid->private_key_passphrase)
 		return;
+#endif
 
 	if (ssid->ca_cert_path)
 		supplicant_dbus_dict_append_basic(dict, "ca_cert",
@@ -4500,9 +4502,11 @@ static void add_network_security_tls(DBusMessageIter *dict,
 	supplicant_dbus_dict_append_basic(dict, "private_key",
 						DBUS_TYPE_STRING,
 						&ssid->private_key_path);
+#if !defined TIZEN_EXT
 	supplicant_dbus_dict_append_basic(dict, "private_key_passwd",
 						DBUS_TYPE_STRING,
 						&ssid->private_key_passphrase);
+#endif
 	supplicant_dbus_dict_append_basic(dict, "client_cert",
 						DBUS_TYPE_STRING,
 						&ssid->client_cert_path);
@@ -4534,8 +4538,10 @@ static void add_network_security_peap(DBusMessageIter *dict,
 		if (!ssid->private_key_path)
 			return;
 
+#if !defined TIZEN_EXT
 		if (!ssid->private_key_passphrase)
 			return;
+#endif
 
 		supplicant_dbus_dict_append_basic(dict, "client_cert",
 						DBUS_TYPE_STRING,
@@ -4545,9 +4551,11 @@ static void add_network_security_peap(DBusMessageIter *dict,
 						DBUS_TYPE_STRING,
 						&ssid->private_key_path);
 
+#if !defined TIZEN_EXT
 		supplicant_dbus_dict_append_basic(dict, "private_key_passwd",
 						DBUS_TYPE_STRING,
 						&ssid->private_key_passphrase);
+#endif
 
 	}
 
