@@ -290,6 +290,11 @@ static void ts_recheck_enable(void)
  */
 int __connman_timeserver_sync(struct connman_service *default_service)
 {
+#if defined TIZEN_EXT && !defined TIZEN_CONNMAN_NTP
+	/* Tizen updates time (ntp) by system service */
+
+	return 0;
+#endif
 	struct connman_service *service;
 
 	if (default_service)

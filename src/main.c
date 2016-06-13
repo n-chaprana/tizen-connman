@@ -721,7 +721,9 @@ int main(int argc, char *argv[])
 	__connman_proxy_init();
 	__connman_detect_init();
 	__connman_session_init();
+#if !defined TIZEN_EXT || defined TIZEN_CONNMAN_NTP
 	__connman_timeserver_init();
+#endif
 	__connman_connection_init();
 
 	__connman_plugin_init(option_plugin, option_noplugin);
@@ -753,7 +755,9 @@ int main(int argc, char *argv[])
 	__connman_plugin_cleanup();
 	__connman_provider_cleanup();
 	__connman_connection_cleanup();
+#if !defined TIZEN_EXT || defined TIZEN_CONNMAN_NTP
 	__connman_timeserver_cleanup();
+#endif
 	__connman_detect_cleanup();
 	__connman_proxy_cleanup();
 	__connman_task_cleanup();

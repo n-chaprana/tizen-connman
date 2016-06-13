@@ -241,6 +241,11 @@ static DBusMessage *set_property(DBusConnection *conn,
 	type = dbus_message_iter_get_arg_type(&value);
 
 	if (g_str_equal(name, "Time")) {
+#if defined TIZEN_EXT
+		/* Tizen updates time (ntp) by system service */
+
+		return __connman_error_permission_denied(msg);
+#else
 		struct timeval tv;
 		dbus_uint64_t newval;
 
@@ -261,6 +266,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		connman_dbus_property_changed_basic(CONNMAN_MANAGER_PATH,
 				CONNMAN_CLOCK_INTERFACE, "Time",
 				DBUS_TYPE_UINT64, &newval);
+#endif
 	} else if (g_str_equal(name, "TimeUpdates")) {
 		const char *strval;
 		enum time_updates newval;
