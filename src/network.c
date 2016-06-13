@@ -1311,15 +1311,8 @@ static gboolean __connman_network_clear_associating_delayed(gpointer user_data)
 
 	if (network->associating == FALSE &&
 			state_ipv4 == CONNMAN_SERVICE_STATE_ASSOCIATION &&
-			state_ipv6 == CONNMAN_SERVICE_STATE_ASSOCIATION) {
-		__connman_service_ipconfig_indicate_state(service,
-							CONNMAN_SERVICE_STATE_IDLE,
-							CONNMAN_IPCONFIG_TYPE_IPV4);
-
-		__connman_service_ipconfig_indicate_state(service,
-							CONNMAN_SERVICE_STATE_IDLE,
-							CONNMAN_IPCONFIG_TYPE_IPV6);
-	}
+			state_ipv6 == CONNMAN_SERVICE_STATE_ASSOCIATION)
+		connman_network_clear_associating(network);
 
 	return FALSE;
 }
