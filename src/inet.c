@@ -2706,7 +2706,14 @@ char **__connman_inet_get_running_interfaces(void)
 	g_free(ifr);
 
 	if (count < numif)
+	{
+		char **prev_result = result;
 		result = g_try_realloc(result, (count + 1) * sizeof(char *));
+		if (!result) {
+			g_free(prev_result);
+			goto error;
+		}
+	}
 
 	return result;
 
