@@ -156,6 +156,9 @@ struct _GDHCPClient {
 	bool retransmit;
 	struct timeval start_time;
 	bool request_bcast;
+#if defined TIZEN_EXT
+	gboolean init_reboot;
+#endif
 };
 
 static inline void debug(GDHCPClient *client, const char *format, ...)
@@ -480,6 +483,9 @@ static int send_request(GDHCPClient *dhcp_client)
 	init_packet(dhcp_client, &packet, DHCPREQUEST);
 
 	packet.xid = dhcp_client->xid;
+#if defined TIZEN_EXT
+	if (dhcp_client->init_reboot != TRUE)
+#endif
 	packet.secs = dhcp_attempt_secs(dhcp_client);
 
 	if (dhcp_client->state == REQUESTING || dhcp_client->state == REBOOTING)
@@ -1513,6 +1519,21 @@ static gboolean request_timeout(gpointer user_data)
 {
 	GDHCPClient *dhcp_client = user_data;
 
+#if defined TIZEN_EXT
+	if (dhcp_client->init_reboot) {
+		debug(dhcp_client, "DHCPREQUEST of INIT-REBOOT has failed");
+
+		/* Start DHCPDISCOVERY when DHCPREQUEST of INIT-REBOOT has failed */
+		g_dhcp_client_set_address_known(dhcp_client, FALSE);
+
+		dhcp_client->retry_times = 0;
+		dhcp_client->requested_ip = 0;
+
+		g_dhcp_client_start(dhcp_client, dhcp_client->last_address);
+
+		return FALSE;
+	}
+#endif
 	debug(dhcp_client, "request timeout (retries %d)",
 					dhcp_client->retry_times);
 
@@ -2362,6 +2383,18 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 
 			remove_timeouts(dhcp_client);
 
+#if defined TIZEN_EXT
+			if (dhcp_client->init_reboot) {
+				g_dhcp_client_set_address_known(dhcp_client, FALSE);
+				dhcp_client->timeout = g_idle_add_full(
+								G_PRIORITY_HIGH,
+								restart_dhcp_timeout,
+								dhcp_client,
+								NULL);
+
+				break;
+			}
+#endif
 			dhcp_client->timeout = g_timeout_add_seconds_full(
 							G_PRIORITY_HIGH, 3,
 							restart_dhcp_timeout,
@@ -3205,3 +3238,19 @@ GSList *g_dhcpv6_copy_prefixes(GSList *prefixes)
 
 	return copy;
 }
+
+#if defined TIZEN_EXT
+void g_dhcp_client_set_address_known(GDHCPClient *dhcp_client, gboolean known)
+{
+	/* DHCPREQUEST during INIT-REBOOT state (rfc2131)
+	 * 4.4.3 Initialization with known network address
+	 * 4.3.2 DHCPREQUEST generated during INIT-REBOOT state
+	 */
+	debug(dhcp_client, "known network address (%d)", known);
+
+	if (dhcp_client->init_reboot == known)
+		return;
+
+	dhcp_client->init_reboot = known;
+}
+#endif
