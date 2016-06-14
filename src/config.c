@@ -1066,6 +1066,10 @@ static void provision_service_wifi(struct connman_config_service *config,
 
 	if (config->phase2)
 		__connman_service_set_string(service, "Phase2", config->phase2);
+#if defined TIZEN_EXT
+	else
+		__connman_service_set_string(service, "Phase2", NULL);
+#endif
 
 	if (config->passphrase)
 		__connman_service_set_string(service, "Passphrase",
