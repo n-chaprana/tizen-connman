@@ -326,6 +326,66 @@ static void decode_msg(void *base, size_t len, struct timeval *tv,
 
 	connman_info("ntp: time slew %+.6f s", offset);
 
+#if defined TIZEN_EXT
+	//send the dbus message to alram-manager
+	{
+#define TIME_BUS_NAME "org.tizen.alarm.manager"
+#define TIME_INTERFACE "org.tizen.alarm.manager"
+#define TIME_PATH "/org/tizen/alarm/manager"
+#define TIME_METHOD "alarm_set_time_with_propagation_delay"
+
+		struct timespec cur = {0};
+		struct timespec req = {0};
+		double dtime;
+
+		DBusConnection *connection = NULL;
+		DBusMessage *msg = NULL, *reply = NULL;
+		DBusError error;
+
+		dbus_error_init(&error);
+
+		connection = connman_dbus_get_connection();
+		if(!connection){
+			DBG("dbus connection does not exist");
+			return;
+		}
+
+		clock_gettime(CLOCK_REALTIME, &cur);
+		dtime = offset + cur.tv_sec + 1.0e-9 * cur.tv_nsec;
+		cur.tv_sec = (long) dtime;
+		cur.tv_nsec = (dtime - cur.tv_sec) * 1000000000;
+
+		clock_gettime(CLOCK_REALTIME, &req);
+		msg = dbus_message_new_method_call(TIME_BUS_NAME, TIME_PATH,
+			TIME_INTERFACE, TIME_METHOD);
+		dbus_message_append_args(msg, DBUS_TYPE_UINT32, &(cur.tv_sec),
+			DBUS_TYPE_UINT32, &(cur.tv_nsec),
+			DBUS_TYPE_UINT32, &(req.tv_sec),
+			DBUS_TYPE_UINT32, &(req.tv_nsec), DBUS_TYPE_INVALID);
+		reply = dbus_connection_send_with_reply_and_block(connection, msg,
+				DBUS_TIMEOUT_USE_DEFAULT, &error);
+		if(reply == NULL){
+			if(dbus_error_is_set(&error)){
+				DBG("%s", error.message);
+				dbus_error_free(&error);
+			}
+			else{
+				DBG("Failed to request set time");
+			}
+			dbus_connection_unref(connection);
+			dbus_message_unref(msg);
+			return;
+		}
+
+		dbus_message_unref(msg);
+		dbus_message_unref(reply);
+		dbus_connection_unref(connection);
+
+		DBG("%lu cur seconds, %lu cur nsecs, %lu req seconds, %lu req nsecs",
+			cur.tv_sec, cur.tv_nsec, req.tv_sec, req.tv_nsec);
+		DBG("setting time");
+	}
+#else
 	if (offset < STEPTIME_MIN_OFFSET && offset > -STEPTIME_MIN_OFFSET) {
 		struct timeval adj;
 
@@ -358,6 +418,7 @@ static void decode_msg(void *base, size_t len, struct timeval *tv,
 
 		DBG("%lu seconds, %lu msecs", cur.tv_sec, cur.tv_usec);
 	}
+#endif
 }
 
 static gboolean received_data(GIOChannel *channel, GIOCondition condition,
