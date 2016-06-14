@@ -4721,6 +4721,24 @@ static DBusMessage *disconnect_service(DBusConnection *conn,
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
+#if defined TIZEN_EXT
+static void __connman_service_cleanup_network_8021x(struct connman_service *service)
+{
+	if (service == NULL)
+		return;
+
+	DBG("service %p ", service);
+
+	connman_network_set_string(service->network, "WiFi.EAP", NULL);
+	connman_network_set_string(service->network, "WiFi.Identity", NULL);
+	connman_network_set_string(service->network, "WiFi.CACertFile", NULL);
+	connman_network_set_string(service->network, "WiFi.ClientCertFile", NULL);
+	connman_network_set_string(service->network, "WiFi.PrivateKeyFile", NULL);
+	connman_network_set_string(service->network, "WiFi.PrivateKeyPassphrase", NULL);
+	connman_network_set_string(service->network, "WiFi.Phase2", NULL);
+}
+#endif
+
 bool __connman_service_remove(struct connman_service *service)
 {
 	if (service->type == CONNMAN_SERVICE_TYPE_ETHERNET ||
@@ -4764,6 +4782,8 @@ bool __connman_service_remove(struct connman_service *service)
 
 	g_free(service->phase2);
 	service->phase2 = NULL;
+
+	__connman_service_cleanup_network_8021x(service);
 
 	__connman_ipconfig_set_method(service->ipconfig_ipv4, CONNMAN_IPCONFIG_METHOD_DHCP);
 	__connman_ipconfig_set_method(service->ipconfig_ipv6, CONNMAN_IPCONFIG_METHOD_AUTO);
