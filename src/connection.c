@@ -837,6 +837,32 @@ static void add_host_route(int family, int index, const char *gateway,
 	}
 }
 
+#if defined TIZEN_EXT
+static bool __connman_service_is_not_cellular_internet_profile(
+		struct connman_service *cellular)
+{
+	char *suffix;
+	const char *path;
+	const char internet_suffix[] = "_1";
+	const char prepaid_internet_suffix[] = "_3";
+
+	if (connman_service_get_type(cellular) != CONNMAN_SERVICE_TYPE_CELLULAR)
+		return FALSE;
+
+	path = __connman_service_get_path(cellular);
+
+	suffix = strrchr(path, '_');
+
+	if (g_strcmp0(suffix, internet_suffix) != 0 &&
+			g_strcmp0(suffix, prepaid_internet_suffix) != 0) {
+		DBG("not internet service profile: %s", path);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+#endif
+
 int __connman_connection_gateway_add(struct connman_service *service,
 					const char *gateway,
 					enum connman_ipconfig_type type,
@@ -863,6 +889,28 @@ int __connman_connection_gateway_add(struct connman_service *service,
 	if (!gateway && type == CONNMAN_IPCONFIG_TYPE_IPV6)
 		gateway = "::";
 
+#if defined TIZEN_EXT
+	if (__connman_service_is_not_cellular_internet_profile(service) == TRUE) {
+		/* not internet service should not be default gateway */
+
+		DBG("no internet service %p index %d gateway %s vpn ip %s type %d",
+			service, index, gateway, peer, type);
+
+		if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+			add_host_route(AF_INET, index, gateway, service_type);
+			__connman_service_nameserver_add_routes(service, gateway);
+			type4 = CONNMAN_IPCONFIG_TYPE_IPV4;
+		}
+
+		if (type == CONNMAN_IPCONFIG_TYPE_IPV6) {
+			add_host_route(AF_INET6, index, gateway, service_type);
+			__connman_service_nameserver_add_routes(service, gateway);
+			type6 = CONNMAN_IPCONFIG_TYPE_IPV6;
+		}
+
+		goto done;
+	}
+#endif
 	DBG("service %p index %d gateway %s vpn ip %s type %d",
 		service, index, gateway, peer, type);
 
