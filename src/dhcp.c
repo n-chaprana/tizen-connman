@@ -476,11 +476,24 @@ done:
 static void ipv4ll_available_cb(GDHCPClient *ipv4ll_client, gpointer user_data)
 {
 	struct connman_dhcp *dhcp = user_data;
-	char *address, *netmask;
-	unsigned char prefixlen;
+#if !defined TIZEN_EXT
+		char *address, *netmask;
+		unsigned char prefixlen;
+#endif
 
 	DBG("IPV4LL available");
 
+#if defined TIZEN_EXT
+		/*
+		 * Description: When DHCP is failed,
+		 *		 most of normal users cannot understand auto-generated IP
+		 *		(IPV4 link local) and serious troubles to make Internet connection.
+		 */
+		dhcp_invalidate(dhcp, true);
+
+		connman_network_set_error(dhcp->network,
+					CONNMAN_NETWORK_ERROR_DHCP_FAIL);
+#else
 	address = g_dhcp_client_get_address(ipv4ll_client);
 	netmask = g_dhcp_client_get_netmask(ipv4ll_client);
 
@@ -496,6 +509,7 @@ static void ipv4ll_available_cb(GDHCPClient *ipv4ll_client, gpointer user_data)
 
 	g_free(address);
 	g_free(netmask);
+#endif
 }
 
 static int dhcp_initialize(struct connman_dhcp *dhcp)

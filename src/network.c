@@ -1399,6 +1399,21 @@ static void set_connect_error(struct connman_network *network)
 					CONNMAN_SERVICE_ERROR_CONNECT_FAILED);
 }
 
+#if defined TIZEN_EXT
+static void set_dhcp_error(struct connman_network *network)
+{
+	struct connman_service *service;
+
+	if (network->associating != FALSE)
+		network->associating = FALSE;
+
+	service = connman_service_lookup_from_network(network);
+
+	__connman_service_indicate_error(service,
+					CONNMAN_SERVICE_ERROR_DHCP_FAILED);
+}
+#endif
+
 void connman_network_set_ipv4_method(struct connman_network *network,
 					enum connman_ipconfig_method method)
 {
@@ -1456,6 +1471,11 @@ void connman_network_set_error(struct connman_network *network,
 	case CONNMAN_NETWORK_ERROR_CONNECT_FAIL:
 		set_connect_error(network);
 		break;
+#if defined TIZEN_EXT
+	case CONNMAN_NETWORK_ERROR_DHCP_FAIL:
+		set_dhcp_error(network);
+		break;
+#endif
 	}
 
 	network_change(network);
