@@ -125,6 +125,10 @@ int __connman_agent_request_peer_authorization(struct connman_peer *peer,
 						bool wps_requested,
 						const char *dbus_sender,
 						void *user_data);
+#if defined TIZEN_CONNMAN_USE_BLACKLIST
+dbus_bool_t __connman_agent_request_blacklist_check(
+				const char *name, const char *security, const char *eap);
+#endif
 
 #include <connman/log.h>
 

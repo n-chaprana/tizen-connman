@@ -595,6 +595,73 @@ int __connman_agent_request_login_input(struct connman_service *service,
 	return -EINPROGRESS;
 }
 
+#if defined TIZEN_CONNMAN_USE_BLACKLIST
+dbus_bool_t __connman_agent_request_blacklist_check(
+		const char *name, const char *security, const char *eap)
+{
+	DBusMessage *message;
+	DBusMessage *reply;
+	DBusMessageIter iter;
+	DBusError error;
+	dbus_bool_t allowed = TRUE;
+	const char *no_eap = "";
+
+	if (agent_path == NULL) {
+		DBG("agent is not registered");
+		return FALSE;
+	}
+
+	if (name == NULL || security == NULL)
+		return FALSE;
+
+	message = dbus_message_new_method_call(agent_sender, agent_path,
+					"net.netconfig.wifi",
+					"CheckBlackList");
+	if (message == NULL) {
+		DBG("dbus_message_new_method_call() failed");
+		return TRUE;
+	}
+
+	dbus_message_iter_init_append(message, &iter);
+	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &name);
+	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &security);
+
+	if (eap)
+		dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &eap);
+	else
+		dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &no_eap);
+
+	dbus_error_init(&error);
+
+	reply = dbus_connection_send_with_reply_and_block(connection, message, 2000, &error);
+	if (reply == NULL) {
+		if (dbus_error_is_set(&error) == TRUE) {
+			DBG("dbus_connection_send_with_reply_and_block() failed. "
+					"dbus error [%s: %s]", error.name, error.message);
+
+			dbus_error_free(&error);
+		} else
+			DBG("failed to get properties");
+
+		dbus_message_unref(message);
+
+		return TRUE;
+	}
+
+	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
+		DBG("failed to request blacklist check");
+		return TRUE;
+	}
+
+	dbus_message_iter_init(reply, &iter);
+	dbus_message_iter_get_basic(&iter, &allowed);
+
+	dbus_message_unref(message);
+
+	return allowed;
+}
+#endif
+
 struct request_browser_reply_data {
 	struct connman_service *service;
 	browser_authentication_cb_t callback;
