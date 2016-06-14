@@ -156,6 +156,7 @@ struct connman_service {
 	 *		manage open/close connection requests by each application.
 	 */
 	int user_pdn_connection_refcount;
+	bool storage_reload;
 #endif
 #if defined TIZEN_TV_EXT
 	enum connman_dnsconfig_method dns_config_method;
@@ -5368,6 +5369,7 @@ static void service_initialize(struct connman_service *service)
 
 	service->wps = false;
 #if defined TIZEN_EXT
+	service->storage_reload = false;
 	/*
 	 * Description: TIZEN implements system global connection management.
 	 */
@@ -5758,6 +5760,13 @@ int __connman_service_get_connected_count_of_iface(
 	DBG("Interface index %d, count %d", index1, count);
 
 	return count;
+}
+
+void __connman_service_set_storage_reload(struct connman_service *service,
+					bool storage_reload)
+{
+	if (service != NULL)
+		service->storage_reload = storage_reload;
 }
 #endif
 
@@ -8002,6 +8011,13 @@ void __connman_service_update_from_network(struct connman_network *network)
 
 	if (!service->network)
 		return;
+
+#if defined TIZEN_EXT
+	if (service->storage_reload) {
+		service_load(service);
+		__connman_service_set_storage_reload(service, false);
+	}
+#endif
 
 	name = connman_network_get_string(service->network, "Name");
 	if (g_strcmp0(service->name, name) != 0) {
