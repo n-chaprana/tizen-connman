@@ -58,8 +58,10 @@ struct GDBusClient {
 	void *signal_data;
 	GDBusProxyFunction proxy_added;
 	GDBusProxyFunction proxy_removed;
+#if !defined TIZEN_EXT
 	GDBusClientFunction ready;
 	void *ready_data;
+#endif
 	GDBusPropertyFunction property_changed;
 	void *user_data;
 	GList *proxy_list;
@@ -729,6 +731,7 @@ gboolean g_dbus_proxy_set_property_basic(GDBusProxy *proxy,
 	return TRUE;
 }
 
+#if !defined TIZEN_EXT
 gboolean g_dbus_proxy_set_property_array(GDBusProxy *proxy,
 				const char *name, int type, const void *value,
 				size_t size, GDBusResultFunction function,
@@ -815,6 +818,7 @@ gboolean g_dbus_proxy_set_property_array(GDBusProxy *proxy,
 
 	return TRUE;
 }
+#endif
 
 struct method_call_data {
 	GDBusReturnFunction function;
@@ -1073,9 +1077,10 @@ static void parse_managed_objects(GDBusClient *client, DBusMessage *msg)
 
 		dbus_message_iter_next(&dict);
 	}
-
+#if !defined TIZEN_EXT
 	if (client->ready)
 		client->ready(client, client->ready_data);
+#endif
 }
 
 static void get_managed_objects_reply(DBusPendingCall *call, void *user_data)
@@ -1365,6 +1370,7 @@ gboolean g_dbus_client_set_signal_watch(GDBusClient *client,
 	return TRUE;
 }
 
+#if !defined TIZEN_EXT
 gboolean g_dbus_client_set_ready_watch(GDBusClient *client,
 				GDBusClientFunction ready, void *user_data)
 {
@@ -1376,6 +1382,7 @@ gboolean g_dbus_client_set_ready_watch(GDBusClient *client,
 
 	return TRUE;
 }
+#endif
 
 gboolean g_dbus_client_set_proxy_handlers(GDBusClient *client,
 					GDBusProxyFunction proxy_added,
