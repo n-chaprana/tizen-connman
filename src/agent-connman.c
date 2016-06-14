@@ -225,6 +225,9 @@ static void request_input_append_passphrase(DBusMessageIter *iter,
 		value = "wep";
 		break;
 	case CONNMAN_SERVICE_SECURITY_PSK:
+#if defined TIZEN_EXT
+	case CONNMAN_SERVICE_SECURITY_RSN:
+#endif
 		value = "psk";
 		break;
 	case CONNMAN_SERVICE_SECURITY_8021X:
@@ -358,6 +361,9 @@ static void previous_passphrase_handler(DBusMessageIter *iter,
 			data.type = "wep";
 			break;
 		case CONNMAN_SERVICE_SECURITY_PSK:
+#if defined TIZEN_EXT
+		case CONNMAN_SERVICE_SECURITY_RSN:
+#endif
 			data.type  = "psk";
 			break;
 		/*

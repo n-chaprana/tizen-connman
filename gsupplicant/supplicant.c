@@ -1292,6 +1292,18 @@ const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network)
 
 	return NULL;
 }
+
+bool g_supplicant_network_get_rsn_selected(GSupplicantNetwork *network)
+{
+	if (network == NULL || network->best_bss == NULL)
+		return 0;
+
+	if (network->best_bss->rsn_selected)
+		return true;
+	else
+		return false;
+}
+
 #endif
 
 static void merge_network(GSupplicantNetwork *network)

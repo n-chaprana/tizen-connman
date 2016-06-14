@@ -327,6 +327,10 @@ enum connman_service_security __connman_service_string2security(const char *str)
 		return CONNMAN_SERVICE_SECURITY_NONE;
 	if (!strcmp(str, "wep"))
 		return CONNMAN_SERVICE_SECURITY_WEP;
+#if defined TIZEN_EXT
+	if (!strcmp(str, "rsn"))
+		return CONNMAN_SERVICE_SECURITY_RSN;
+#endif
 
 	return CONNMAN_SERVICE_SECURITY_UNKNOWN;
 }
@@ -342,8 +346,14 @@ static const char *security2string(enum connman_service_security security)
 		return "wep";
 	case CONNMAN_SERVICE_SECURITY_PSK:
 	case CONNMAN_SERVICE_SECURITY_WPA:
+#if defined TIZEN_EXT
+		return "psk";
+	case CONNMAN_SERVICE_SECURITY_RSN:
+		return "rsn";
+#else
 	case CONNMAN_SERVICE_SECURITY_RSN:
 		return "psk";
+#endif
 	case CONNMAN_SERVICE_SECURITY_8021X:
 		return "ieee8021x";
 	}
@@ -3377,7 +3387,9 @@ static int check_passphrase(enum connman_service_security security,
 	case CONNMAN_SERVICE_SECURITY_UNKNOWN:
 	case CONNMAN_SERVICE_SECURITY_NONE:
 	case CONNMAN_SERVICE_SECURITY_WPA:
+#if !defined TIZEN_EXT
 	case CONNMAN_SERVICE_SECURITY_RSN:
+#endif
 
 		DBG("service security '%s' (%d) not handled",
 				security2string(security), security);
@@ -3385,6 +3397,9 @@ static int check_passphrase(enum connman_service_security security,
 		return -EOPNOTSUPP;
 
 	case CONNMAN_SERVICE_SECURITY_PSK:
+#if defined TIZEN_EXT
+	case CONNMAN_SERVICE_SECURITY_RSN:
+#endif
 		/* A raw key is always 64 bytes length,
 		 * its content is in hex representation.
 		 * A PSK key must be between [8..63].
