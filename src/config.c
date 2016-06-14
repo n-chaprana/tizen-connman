@@ -1363,6 +1363,13 @@ int __connman_config_provision_service(struct connman_service *service)
 			type != CONNMAN_SERVICE_TYPE_GADGET)
 		return -ENOSYS;
 
+#if defined TIZEN_EXT
+	if(type == CONNMAN_SERVICE_TYPE_WIFI &&
+			__connman_service_get_security(service) ==
+			CONNMAN_SERVICE_SECURITY_NONE)
+		return -ENOSYS;
+#endif
+
 	return find_and_provision_service(service);
 }
 
