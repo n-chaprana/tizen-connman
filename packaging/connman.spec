@@ -109,6 +109,10 @@ VPN_CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
 %if 0%{?sec_product_feature_profile_wearable}
 	CFLAGS+=" -DTIZEN_WEARABLE"
 %endif
+
+%if 0%{?sec_product_feature_wlan_always_powered}
+       CFLAGS+=" -DTIZEN_ALWAYS_POWERED"
+%endif
 %endif
 
 chmod +x bootstrap

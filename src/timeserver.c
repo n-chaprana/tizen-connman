@@ -88,6 +88,15 @@ static void resolv_result(GResolvResultStatus status, char **results,
 {
 	int i;
 
+#if defined TIZEN_EXT
+	gchar *server = NULL;
+
+	server = (gchar *)user_data;
+	ts_list = g_slist_append(ts_list, server);
+
+	DBG("added server %s", server);
+#endif
+
 	DBG("status %d", status);
 
 	if (status == G_RESOLV_RESULT_STATUS_SUCCESS) {
@@ -148,8 +157,13 @@ void __connman_timeserver_sync_next()
 
 	DBG("Resolving timeserver %s", ts_current);
 
+#if defined TIZEN_EXT
+	resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
+						resolv_result, ts_current);
+#else
 	resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
 						resolv_result, NULL);
+#endif
 
 	return;
 }
@@ -179,13 +193,21 @@ GSList *__connman_timeserver_add_list(GSList *server_list,
 GSList *__connman_timeserver_get_all(struct connman_service *service)
 {
 	GSList *list = NULL;
+#if !defined TIZEN_ALWAYS_POWERED
 	struct connman_network *network;
+#endif
 	char **timeservers;
 	char **service_ts;
 	char **service_ts_config;
+#if !defined TIZEN_ALWAYS_POWERED
 	const char *service_gw;
+#endif
 	char **fallback_ts;
+#if !defined TIZEN_ALWAYS_POWERED
 	int index, i;
+#else
+	int i;
+#endif
 
 	if (__connman_clock_timeupdates() == TIME_UPDATES_MANUAL)
 		return NULL;
@@ -204,6 +226,7 @@ GSList *__connman_timeserver_get_all(struct connman_service *service)
 	for (i = 0; service_ts && service_ts[i]; i++)
 		list = __connman_timeserver_add_list(list, service_ts[i]);
 
+#if !defined TIZEN_ALWAYS_POWERED
 	network = __connman_service_get_network(service);
 	if (network) {
 		index = connman_network_get_index(network);
@@ -214,6 +237,7 @@ GSList *__connman_timeserver_get_all(struct connman_service *service)
 		if (service_gw)
 			list = __connman_timeserver_add_list(list, service_gw);
 	}
+#endif
 
 	/* Then add Global Timeservers to the list */
 	timeservers = load_timeservers();
