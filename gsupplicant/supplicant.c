@@ -2297,15 +2297,30 @@ static void scan_bss_data(const char *key, DBusMessageIter *iter,
 {
 	GSupplicantInterface *interface = user_data;
 
+/*Fixed : stucking in scanning state when scan failed*/
+#if defined TIZEN_EXT
+		GSupplicantInterfaceCallback scan_callback;
+#endif
+
 	if (iter)
 		supplicant_dbus_array_foreach(iter, scan_network_update,
 						interface);
 
+#if defined TIZEN_EXT
+		scan_callback = interface->scan_callback;
+#endif
+
 	if (interface->scan_callback)
 		interface->scan_callback(0, interface, interface->scan_data);
 
+#if defined TIZEN_EXT
+		if (interface->scan_callback == scan_callback) {
+#endif
 	interface->scan_callback = NULL;
 	interface->scan_data = NULL;
+#if defined TIZEN_EXT
+	}
+#endif
 }
 
 static GSupplicantInterface *interface_alloc(const char *path)

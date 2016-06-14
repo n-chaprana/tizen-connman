@@ -115,7 +115,7 @@ src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@TPKP_GNUTLS_LIBS@ \
 			-lresolv -ldl -lrt
 
-src_connmand_LDFLAGS = -Wl,--export-dynamic \
+src_connmand_LDFLAGS = -Wl,--export-dynamic -pie \
 				-Wl,--version-script=$(srcdir)/src/connman.ver
 
 if VPN
@@ -209,7 +209,8 @@ AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
 				-DSTORAGEDIR=\""$(storagedir)\"" \
 				-DVPN_STORAGEDIR=\""$(vpn_storagedir)\"" \
-				-DCONFIGDIR=\""$(configdir)\""
+				-DCONFIGDIR=\""$(configdir)\"" \
+				-fPIE
 
 if VPN
 AM_CPPFLAGS = @TPKP_GNUTLS_CFLAGS@ -I$(builddir)/include -I$(srcdir)/gdbus

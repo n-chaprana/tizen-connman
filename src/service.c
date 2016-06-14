@@ -6602,6 +6602,18 @@ int __connman_service_indicate_error(struct connman_service *service,
 
 	set_error(service, error);
 
+/* default internet service: fix not cleared if pdp activation*/
+#if defined TIZEN_EXT
+		/*
+		 * If connection failed for default service(DefaultInternet),
+		 * default_connecting_device should be cleared.
+		 */
+		if (service->type == CONNMAN_SERVICE_TYPE_CELLULAR &&
+				service->error == CONNMAN_SERVICE_ERROR_CONNECT_FAILED)
+			__connman_service_disconnect_default(service);
+
+#endif
+
 	__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_FAILURE,
 						CONNMAN_IPCONFIG_TYPE_IPV4);

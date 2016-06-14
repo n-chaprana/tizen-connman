@@ -2684,7 +2684,6 @@ static void interface_state(GSupplicantInterface *interface)
 		/* To avoid unnecessary repeated association in wpa_supplicant,
 		 * "RemoveNetwork" should be made when Wi-Fi is disconnected */
 		if (wps != true && wifi->network && wifi->disconnecting == false) {
-#if 0 /* temporary disabled */
 			int err;
 
 			wifi->disconnecting = true;
@@ -2692,7 +2691,6 @@ static void interface_state(GSupplicantInterface *interface)
 							disconnect_callback, wifi->network);
 			if (err < 0)
 				wifi->disconnecting = false;
-#endif
 
 			if (wifi->connected)
 				wifi->interface_disconnected_network = wifi->network;
