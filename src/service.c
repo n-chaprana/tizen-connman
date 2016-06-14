@@ -6320,6 +6320,23 @@ static void single_connected_tech(struct connman_service *allowed)
 	g_slist_free(services);
 }
 
+#if defined TIZEN_EXT
+static void set_priority_connected_service(void)
+{
+	struct connman_service *service;
+	GList *list;
+
+	for (list = service_list; list; list = list->next) {
+		service = list->data;
+
+		if (is_connected(service) == FALSE)
+			service->order = 5;
+		else
+			service->order = 6;
+	}
+}
+#endif
+
 static const char *get_dbus_sender(struct connman_service *service)
 {
 	if (!service->pending)
@@ -6463,6 +6480,11 @@ static int service_indicate_state(struct connman_service *service)
 		else if (service->type != CONNMAN_SERVICE_TYPE_VPN)
 			vpn_auto_connect();
 
+#if defined TIZEN_EXT
+		if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
+			set_priority_connected_service();
+#endif
+
 		break;
 
 	case CONNMAN_SERVICE_STATE_ONLINE:
@@ -6514,7 +6536,10 @@ static int service_indicate_state(struct connman_service *service)
 		break;
 
 	case CONNMAN_SERVICE_STATE_FAILURE:
-
+#if defined TIZEN_EXT
+		if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
+			service->order = 5;
+#endif
 		if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER &&
 			connman_agent_report_error(service, service->path,
 					error2string(service->error),
