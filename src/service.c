@@ -7824,6 +7824,12 @@ static enum connman_service_security convert_wifi_security(const char *security)
 		return CONNMAN_SERVICE_SECURITY_WPA;
 	else if (g_str_equal(security, "rsn"))
 		return CONNMAN_SERVICE_SECURITY_RSN;
+#if defined TIZEN_EXT
+	else if (g_str_equal(security, "ft_psk") == TRUE)
+		return CONNMAN_SERVICE_SECURITY_PSK;
+	else if (g_str_equal(security, "ft_ieee8021x") == TRUE)
+		return CONNMAN_SERVICE_SECURITY_8021X;
+#endif
 	else
 		return CONNMAN_SERVICE_SECURITY_UNKNOWN;
 }

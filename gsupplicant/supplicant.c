@@ -205,6 +205,10 @@ struct g_supplicant_bss {
 	dbus_bool_t privacy;
 	dbus_bool_t psk;
 	dbus_bool_t ieee8021x;
+#if defined TIZEN_EXT
+	dbus_bool_t ft_psk;
+	dbus_bool_t ft_ieee8021x;
+#endif
 	unsigned int wps_capabilities;
 };
 
@@ -316,6 +320,12 @@ static const char *security2string(GSupplicantSecurity security)
 		return "psk";
 	case G_SUPPLICANT_SECURITY_IEEE8021X:
 		return "ieee8021x";
+#if defined TIZEN_EXT
+	case G_SUPPLICANT_SECURITY_FT_PSK:
+		return "ft_psk";
+	case G_SUPPLICANT_SECURITY_FT_IEEE8021X:
+		return "ft_ieee8021x";
+#endif
 	}
 
 	return NULL;
@@ -1846,23 +1856,51 @@ static void bss_compute_security(struct g_supplicant_bss *bss)
 
 	bss->ieee8021x = FALSE;
 	bss->psk = FALSE;
+#if defined TIZEN_EXT
+	bss->ft_ieee8021x = FALSE;
+	bss->ft_psk = FALSE;
+#endif
 
+#if defined TIZEN_EXT
+	if (bss->keymgmt &
+			(G_SUPPLICANT_KEYMGMT_WPA_EAP |
+					G_SUPPLICANT_KEYMGMT_WPA_EAP_256))
+		bss->ieee8021x = TRUE;
+	else if (bss->keymgmt & G_SUPPLICANT_KEYMGMT_WPA_FT_EAP)
+		bss->ft_ieee8021x = TRUE;
+#else
 	if (bss->keymgmt &
 			(G_SUPPLICANT_KEYMGMT_WPA_EAP |
 				G_SUPPLICANT_KEYMGMT_WPA_FT_EAP |
 				G_SUPPLICANT_KEYMGMT_WPA_EAP_256))
 		bss->ieee8021x = TRUE;
+#endif
 
+#if defined TIZEN_EXT
+	if (bss->keymgmt &
+			(G_SUPPLICANT_KEYMGMT_WPA_PSK |
+					G_SUPPLICANT_KEYMGMT_WPA_PSK_256))
+		bss->psk = TRUE;
+	else if (bss->keymgmt & G_SUPPLICANT_KEYMGMT_WPA_FT_PSK)
+		bss->ft_psk = TRUE;
+#else
 	if (bss->keymgmt &
 			(G_SUPPLICANT_KEYMGMT_WPA_PSK |
 				G_SUPPLICANT_KEYMGMT_WPA_FT_PSK |
 				G_SUPPLICANT_KEYMGMT_WPA_PSK_256))
 		bss->psk = TRUE;
+#endif
 
 	if (bss->ieee8021x)
 		bss->security = G_SUPPLICANT_SECURITY_IEEE8021X;
 	else if (bss->psk)
 		bss->security = G_SUPPLICANT_SECURITY_PSK;
+#if defined TIZEN_EXT
+	else if (bss->ft_psk)
+		bss->security = G_SUPPLICANT_SECURITY_FT_PSK;
+	else if (bss->ft_ieee8021x == TRUE)
+		bss->security = G_SUPPLICANT_SECURITY_IEEE8021X;
+#endif
 	else if (bss->privacy)
 		bss->security = G_SUPPLICANT_SECURITY_WEP;
 	else
@@ -4761,6 +4799,20 @@ static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
 		add_network_security_ciphers(dict, ssid);
 		add_network_security_proto(dict, ssid);
 		break;
+#if defined TIZEN_EXT
+	case G_SUPPLICANT_SECURITY_FT_PSK:
+		key_mgmt = "FT-PSK";
+		add_network_security_psk(dict, ssid);
+		add_network_security_ciphers(dict, ssid);
+		add_network_security_proto(dict, ssid);
+		break;
+	case G_SUPPLICANT_SECURITY_FT_IEEE8021X:
+		key_mgmt = "FT-EAP";
+		add_network_security_eap(dict, ssid);
+		add_network_security_ciphers(dict, ssid);
+		add_network_security_proto(dict, ssid);
+		break;
+#endif
 	}
 
 	supplicant_dbus_dict_append_basic(dict, "key_mgmt",

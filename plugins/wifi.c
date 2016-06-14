@@ -2104,6 +2104,12 @@ static GSupplicantSecurity network_security(const char *security)
 		return G_SUPPLICANT_SECURITY_PSK;
 	else if (g_str_equal(security, "ieee8021x"))
 		return G_SUPPLICANT_SECURITY_IEEE8021X;
+#if defined TIZEN_EXT
+	else if (g_str_equal(security, "ft_psk") == TRUE)
+		return G_SUPPLICANT_SECURITY_FT_PSK;
+	else if (g_str_equal(security, "ft_ieee8021x") == TRUE)
+		return G_SUPPLICANT_SECURITY_FT_IEEE8021X;
+#endif
 
 	return G_SUPPLICANT_SECURITY_UNKNOWN;
 }
