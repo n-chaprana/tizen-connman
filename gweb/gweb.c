@@ -1262,6 +1262,16 @@ static void resolv_result(GResolvResultStatus status,
 		return;
 	}
 
+#if defined TIZEN_EXT
+	// check the DNS address validation
+	// if dns is the class c private address
+	// wispr should be stopped - non internet connection
+	if(g_str_has_prefix(results[0],"192.168.")){
+		call_result_func(session, 404);
+		return;
+	}
+#endif
+
 	g_free(session->address);
 	session->address = g_strdup(results[0]);
 
