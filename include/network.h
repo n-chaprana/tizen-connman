@@ -92,6 +92,9 @@ void connman_network_set_group(struct connman_network *network,
 const char *connman_network_get_group(struct connman_network *network);
 
 bool connman_network_get_connecting(struct connman_network *network);
+#if defined TIZEN_EXT
+void connman_network_set_connecting(struct connman_network *network);
+#endif
 int connman_network_set_available(struct connman_network *network,
 						bool available);
 bool connman_network_get_available(struct connman_network *network);

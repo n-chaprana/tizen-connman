@@ -1204,6 +1204,15 @@ bool __connman_network_get_weakness(struct connman_network *network)
 	return false;
 }
 
+#if defined TIZEN_EXT
+void connman_network_set_connecting(struct connman_network *network)
+{
+	DBG("set network connecting true");
+	network->connecting = TRUE;
+	return;
+}
+#endif
+
 bool connman_network_get_connecting(struct connman_network *network)
 {
 	return network->connecting;

@@ -130,7 +130,6 @@ struct wifi_data {
 	int servicing;
 #if defined TIZEN_EXT
 	int assoc_retry_count;
-	struct connman_network *interface_disconnected_network;
 	struct connman_network *scan_pending_network;
 #endif
 };
@@ -138,7 +137,7 @@ struct wifi_data {
 #if defined TIZEN_EXT
 #include "connman.h"
 
-#define TIZEN_ASSOC_RETRY_COUNT		3
+#define TIZEN_ASSOC_RETRY_COUNT		4
 
 static gboolean wifi_first_scan = false;
 static gboolean found_with_first_scan = false;
@@ -1320,9 +1319,10 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 		connman_device_unref(device);
 
 #if defined TIZEN_EXT
-	if (wifi && wifi->scan_pending_network) {
+	if (wifi && wifi->scan_pending_network && result != -EIO) {
 		network_connect(wifi->scan_pending_network);
 		wifi->scan_pending_network = NULL;
+		connman_network_set_connecting(wifi->network);
 	}
 
 	if (is_wifi_notifier_registered != true &&
@@ -1589,7 +1589,6 @@ static int wifi_disable(struct connman_device *device)
 
 #if defined TIZEN_EXT
 	wifi->scan_pending_network = NULL;
-	wifi->interface_disconnected_network = NULL;
 
 	if (is_wifi_notifier_registered == true) {
 		connman_notifier_unregister(&notifier);
@@ -2048,9 +2047,6 @@ static void network_remove(struct connman_network *network)
 
 	if (wifi->scan_pending_network == network)
 		wifi->scan_pending_network = NULL;
-
-	if (wifi->interface_disconnected_network == network)
-		wifi->interface_disconnected_network = NULL;
 #endif
 }
 
@@ -2077,7 +2073,6 @@ static void connect_callback(int result, GSupplicantInterface *interface,
 	return;
 
 found:
-	wifi->interface_disconnected_network = NULL;
 #endif
 	if (result == -ENOKEY) {
 		connman_network_set_error(network,
@@ -2193,20 +2188,6 @@ static int network_connect(struct connman_network *network)
 
 	ssid_init(ssid, network);
 
-#if defined TIZEN_EXT
-	if (wifi->interface_disconnected_network == network) {
-		g_free(ssid);
-		throw_wifi_scan(device, scan_callback);
-
-		if (wifi->disconnecting != TRUE) {
-			wifi->scan_pending_network = network;
-			wifi->interface_disconnected_network = NULL;
-		}
-
-		return -EINPROGRESS;
-	}
-#endif
-
 	if (wifi->disconnecting) {
 		wifi->pending_network = network;
 		g_free(ssid);
@@ -2214,7 +2195,6 @@ static int network_connect(struct connman_network *network)
 		wifi->network = connman_network_ref(network);
 		wifi->retries = 0;
 #if defined TIZEN_EXT
-		wifi->interface_disconnected_network = NULL;
 		wifi->scan_pending_network = NULL;
 #endif
 
@@ -2322,8 +2302,6 @@ static int network_disconnect(struct connman_network *network)
 	if (wifi->scan_pending_network == network)
 		wifi->scan_pending_network = NULL;
 
-	if (wifi->interface_disconnected_network == network)
-		wifi->interface_disconnected_network = NULL;
 #endif
 	connman_network_set_associating(network, false);
 
@@ -2632,6 +2610,8 @@ static void interface_state(GSupplicantInterface *interface)
 		reset_autoscan(device);
 
 		wifi->assoc_retry_count = 0;
+
+		wifi->scan_pending_network = NULL;
 #else
 		/* though it should be already stopped: */
 		stop_autoscan(device);
@@ -2703,11 +2683,6 @@ static void interface_state(GSupplicantInterface *interface)
 							disconnect_callback, wifi->network);
 			if (err < 0)
 				wifi->disconnecting = false;
-
-			if (wifi->connected)
-				wifi->interface_disconnected_network = wifi->network;
-			else
-				wifi->interface_disconnected_network = NULL;
 
 		connman_network_set_connected(network, false);
 		connman_network_set_associating(network, false);
@@ -2865,6 +2840,8 @@ static void scan_finished(GSupplicantInterface *interface)
 {
 #if defined TIZEN_EXT
 	struct wifi_data *wifi;
+	bool is_associating = false;
+	static bool is_scanning = true;
 #endif
 
 	DBG("");
@@ -2875,6 +2852,23 @@ static void scan_finished(GSupplicantInterface *interface)
 		network_connect(wifi->scan_pending_network);
 		wifi->scan_pending_network = NULL;
 	}
+
+	//service state - associating
+	if(!wifi || !wifi->network)
+		return;
+
+	is_associating = connman_network_get_associating(wifi->network);
+	if(is_associating && is_scanning){
+		is_scanning = false;
+		DBG("send scan for connecting");
+		throw_wifi_scan(wifi->device, scan_callback);
+
+		return;
+	}
+	is_scanning = true;
+
+	//go scan
+
 #endif
 }
 
@@ -3035,9 +3029,6 @@ static void network_removed(GSupplicantNetwork *network)
 #if defined TIZEN_EXT
 	if (connman_network == wifi->scan_pending_network)
 		wifi->scan_pending_network = NULL;
-
-	if (connman_network == wifi->interface_disconnected_network)
-		wifi->interface_disconnected_network = NULL;
 
 	if (connman_network == wifi->pending_network)
 		wifi->pending_network = NULL;
