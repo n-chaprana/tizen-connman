@@ -233,6 +233,7 @@ struct _GSupplicantNetwork {
 	char *eap;
 	char *identity;
 	char *phase2;
+	unsigned int keymgmt;
 #endif
 };
 
@@ -1171,6 +1172,14 @@ const char *g_supplicant_network_get_phase2(GSupplicantNetwork *network)
 
 	return network->phase2;
 }
+
+unsigned int g_supplicant_network_get_keymgmt(GSupplicantNetwork *network)
+{
+	if (network == NULL)
+		return 0;
+
+	return network->keymgmt;
+}
 #endif
 
 const unsigned char *g_supplicant_peer_get_widi_ies(GSupplicantPeer *peer,
@@ -1605,6 +1614,10 @@ static void add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 	network->signal = bss->signal;
 	network->frequency = bss->frequency;
 	network->best_bss = bss;
+
+#if defined TIZEN_EXT
+	network->keymgmt = bss->keymgmt;
+#endif
 
 	SUPPLICANT_DBG("New network %s created", network->name);
 

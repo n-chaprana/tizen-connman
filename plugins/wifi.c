@@ -2970,6 +2970,8 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 			g_supplicant_network_get_enc_mode(supplicant_network));
 	connman_network_set_rsn_selected(network,
 			g_supplicant_network_get_rsn_selected(supplicant_network));
+	connman_network_set_keymgmt(network,
+			g_supplicant_network_get_keymgmt(supplicant_network));
 #endif
 	connman_network_set_available(network, true);
 	connman_network_set_string(network, "WiFi.Mode", mode);

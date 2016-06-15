@@ -2727,6 +2727,7 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 	char *bssid_str = bssid_buff;
 	unsigned char *bssid;
 	unsigned int maxrate;
+	unsigned int keymgmt;
 	uint16_t frequency;
 	const char *enc_mode;
 	gboolean passpoint;
@@ -2736,6 +2737,7 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 	frequency = connman_network_get_frequency(network);
 	enc_mode = connman_network_get_enc_mode(network);
 	passpoint = connman_network_get_is_hs20AP(network);
+	keymgmt = connman_network_get_keymgmt(network);
 
 	snprintf(bssid_str, WIFI_BSSID_STR_LEN, "%02x:%02x:%02x:%02x:%02x:%02x",
 				bssid[0], bssid[1], bssid[2],
@@ -2751,6 +2753,8 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 					DBUS_TYPE_STRING, &enc_mode);
 	connman_dbus_dict_append_basic(dict, "Passpoint",
 					DBUS_TYPE_BOOLEAN, &passpoint);
+	connman_dbus_dict_append_basic(dict, "Keymgmt",
+					DBUS_TYPE_UINT32, &keymgmt);
 }
 #endif
 

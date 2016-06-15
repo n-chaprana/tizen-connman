@@ -97,6 +97,8 @@ struct connman_network {
 		unsigned char bssid[WIFI_BSSID_LEN_MAX];
 		unsigned int maxrate;
 		unsigned int isHS20AP;
+		unsigned int keymgmt;
+		char *keymgmt_type;
 		bool rsn_selected;
 #endif
 	} wifi;
@@ -1940,6 +1942,25 @@ unsigned int connman_network_get_is_hs20AP(struct connman_network *network)
 		return 0;
 
 	return network->wifi.isHS20AP;
+}
+
+int connman_network_set_keymgmt(struct connman_network *network,
+				unsigned int keymgmt)
+{
+	if (network == NULL)
+		return 0;
+
+	network->wifi.keymgmt = keymgmt;
+
+	return 0;
+}
+
+unsigned int connman_network_get_keymgmt(struct connman_network *network)
+{
+	if (network == NULL)
+		return 0;
+
+	return network->wifi.keymgmt;
 }
 #endif
 
