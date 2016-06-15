@@ -2773,6 +2773,15 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 	connman_dbus_dict_append_array(dict, "Security",
 				DBUS_TYPE_STRING, append_security, service);
 
+#if defined TIZEN_EXT
+	unsigned int frequency = 0U;
+	if (service && service->network) {
+		frequency = connman_network_get_frequency(service->network);
+		connman_dbus_dict_append_basic(dict, "Frequency",
+				DBUS_TYPE_UINT16, &frequency);
+	}
+#endif
+
 	str = state2string(service->state);
 	if (str)
 		connman_dbus_dict_append_basic(dict, "State",

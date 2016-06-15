@@ -2663,7 +2663,9 @@ static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 		return;
 
 	supplicant_dbus_property_foreach(iter, bss_property, bss);
-
+#if defined TIZEN_EXT
+	network->frequency = bss->frequency;
+#endif
 	old_security = network->security;
 	bss_compute_security(bss);
 
