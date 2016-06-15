@@ -2254,6 +2254,9 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 	} else if (g_strcmp0(key, "CurrentBSS") == 0) {
 		interface_bss_added_without_keys(iter, interface);
 	} else if (g_strcmp0(key, "CurrentNetwork") == 0) {
+#if defined TIZEN_EXT
+		if (interface->state != G_SUPPLICANT_STATE_COMPLETED)
+#endif
 		interface_network_added(iter, interface);
 	} else if (g_strcmp0(key, "BSSs") == 0) {
 		supplicant_dbus_array_foreach(iter,
@@ -5606,6 +5609,28 @@ int g_supplicant_set_widi_ies(GSupplicantP2PServiceParams *p2p_service_params,
 	return -EINPROGRESS;
 }
 
+#if defined TIZEN_EXT
+int g_supplicant_interface_remove_network(GSupplicantInterface *interface)
+{
+	struct interface_data *data;
+
+	SUPPLICANT_DBG("");
+
+	if (interface == NULL)
+		return -EINVAL;
+
+	if (system_available == FALSE)
+		return -EFAULT;
+
+	data = dbus_malloc0(sizeof(*data));
+	if (data == NULL)
+		return -ENOMEM;
+
+	data->interface = interface;
+
+	return network_remove(data);
+}
+#endif
 
 static const char *g_supplicant_rule0 = "type=signal,"
 					"path=" DBUS_PATH_DBUS ","

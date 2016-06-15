@@ -2673,6 +2673,12 @@ static void interface_state(GSupplicantInterface *interface)
 			DBG("Could not disables selected network");
 
 #if defined TIZEN_EXT
+		int err;
+
+		err = g_supplicant_interface_remove_network(wifi->interface);
+		if (err < 0)
+			DBG("Failed to remove network(%d)", err);
+
 		/* Some of Wi-Fi networks are not comply Wi-Fi specification.
 		 * Retry association until its retry count is expired */
 		if (handle_wifi_assoc_retry(network, wifi) == true) {
@@ -2684,8 +2690,6 @@ static void interface_state(GSupplicantInterface *interface)
 		/* To avoid unnecessary repeated association in wpa_supplicant,
 		 * "RemoveNetwork" should be made when Wi-Fi is disconnected */
 		if (wps != true && wifi->network && wifi->disconnecting == false) {
-			int err;
-
 			wifi->disconnecting = true;
 			err = g_supplicant_interface_disconnect(wifi->interface,
 							disconnect_callback, wifi->network);
