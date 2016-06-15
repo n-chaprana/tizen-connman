@@ -23,6 +23,7 @@
 #include <config.h>
 #endif
 
+#include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -72,6 +73,19 @@ static int storage_save(GKeyFile *keyfile, char *pathname)
 		g_error_free(error);
 		ret = -EIO;
 	}
+
+#if defined TIZEN_EXT
+	{
+		FILE *fp = NULL;
+		fp = fopen(pathname, "a+");
+		if(fp){
+			fflush(fp);
+			fsync(fp->_fileno);
+			fclose(fp);
+			DBG("sync the file to disk");
+		}
+	}
+#endif
 
 	g_free(data);
 

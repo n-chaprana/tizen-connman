@@ -160,7 +160,9 @@ int __connman_wpad_start(struct connman_service *service)
 		return -ENOMEM;
 	}
 
+#if !defined TIZEN_EXT
 	if (getenv("CONNMAN_RESOLV_DEBUG"))
+#endif
 		g_resolv_set_debug(wpad->resolv, resolv_debug, "RESOLV");
 
 	for (i = 0; nameservers[i]; i++)

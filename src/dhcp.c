@@ -192,12 +192,16 @@ static int ipv4ll_start_client(struct connman_dhcp *dhcp)
 	if (error != G_DHCP_CLIENT_ERROR_NONE)
 		return -EINVAL;
 
+#if !defined TIZEN_EXT
 	if (getenv("CONNMAN_DHCP_DEBUG")) {
+#endif
 		dhcp->ipv4ll_debug_prefix = g_strdup_printf("IPv4LL index %d",
 							index);
 		g_dhcp_client_set_debug(ipv4ll_client, dhcp_debug,
 					dhcp->ipv4ll_debug_prefix);
+#if !defined TIZEN_EXT
 	}
+#endif
 
 	g_dhcp_client_set_id(ipv4ll_client);
 
@@ -526,12 +530,16 @@ static int dhcp_initialize(struct connman_dhcp *dhcp)
 	if (error != G_DHCP_CLIENT_ERROR_NONE)
 		return -EINVAL;
 
+#if !defined TIZEN_EXT
 	if (getenv("CONNMAN_DHCP_DEBUG")) {
+#endif
 		dhcp->dhcp_debug_prefix = g_strdup_printf("DHCP index %d",
 							index);
 		g_dhcp_client_set_debug(dhcp_client, dhcp_debug,
 					dhcp->dhcp_debug_prefix);
+#if !defined TIZEN_EXT
 	}
+#endif
 
 	g_dhcp_client_set_id(dhcp_client);
 

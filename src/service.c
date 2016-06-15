@@ -6746,6 +6746,15 @@ done:
 	__connman_wispr_start(service, CONNMAN_IPCONFIG_TYPE_IPV4);
 }
 
+#if defined TIZEN_EXT
+void connman_check_proxy_setup_and_wispr_start(struct connman_service *service){
+
+	DBG("check the proxy and start wispr");
+	check_proxy_setup(service);
+	return;
+}
+#endif
+
 /*
  * How many networks are connected at the same time. If more than 1,
  * then set the rp_filter setting properly (loose mode routing) so that network
@@ -6914,7 +6923,9 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		}
 #endif
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+#if !defined TIZEN_EXT
 			check_proxy_setup(service);
+#endif
 			service_rp_filter(service, true);
 		} else {
 			service->online_check_count = 1;

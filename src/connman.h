@@ -730,6 +730,10 @@ enum connman_service_state __connman_service_ipconfig_get_state(
 					struct connman_service *service,
 					enum connman_ipconfig_type type);
 
+#if defined TIZEN_EXT
+void connman_check_proxy_setup_and_wispr_start(struct connman_service *service);
+#endif
+
 int __connman_service_indicate_error(struct connman_service *service,
 					enum connman_service_error error);
 int __connman_service_clear_error(struct connman_service *service);

@@ -1432,6 +1432,9 @@ static void cleanup_devices(void)
 
 		DBG("cleaning up %s index %d", interfaces[i], index);
 
+#if defined TIZEN_EXT
+		if (strcmp(interfaces[i], "wlan0") != 0)
+#endif
 		connman_inet_ifdown(index);
 
 		/*

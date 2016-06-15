@@ -879,7 +879,9 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 		goto done;
 	}
 
+#if !defined TIZEN_EXT
 	if (getenv("CONNMAN_WEB_DEBUG"))
+#endif
 		g_web_set_debug(wp_context->web, web_debug, "WEB");
 
 	if (wp_context->type == CONNMAN_IPCONFIG_TYPE_IPV4) {

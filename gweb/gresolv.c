@@ -948,10 +948,12 @@ bool g_resolv_add_nameserver(GResolv *resolv, const char *address,
 	nameserver->flags = flags;
 	nameserver->resolv = resolv;
 
+	debug(resolv, "");
 	if (connect_udp_channel(nameserver) < 0) {
 		free_nameserver(nameserver);
 		return false;
 	}
+	debug(resolv, "");
 
 	resolv->nameserver_list = g_list_append(resolv->nameserver_list,
 								nameserver);
@@ -1053,12 +1055,16 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 	lookup->result_data = user_data;
 	lookup->id = resolv->next_lookup_id++;
 
+	debug(resolv, "");
+
 	if (resolv->result_family != AF_INET6) {
 		if (add_query(lookup, hostname, ns_t_a)) {
 			g_free(lookup);
 			return -EIO;
 		}
 	}
+
+	debug(resolv, "");
 
 	if (resolv->result_family != AF_INET) {
 		if (add_query(lookup, hostname, ns_t_aaaa)) {
@@ -1072,6 +1078,8 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 			return -EIO;
 		}
 	}
+
+	debug(resolv, "");
 
 	g_queue_push_tail(resolv->lookup_queue, lookup);
 

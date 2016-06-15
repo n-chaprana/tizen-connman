@@ -30,6 +30,8 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/signalfd.h>
+#include <sys/types.h>
+#include <sys/resource.h>
 #include <getopt.h>
 #include <sys/stat.h>
 #include <net/if.h>
@@ -259,6 +261,21 @@ static void check_Tizen_configuration(GKeyFile *config)
 
 	g_clear_error(&error);
 }
+
+static void set_nofile_inc(void)
+{
+	int err;
+	struct rlimit rlim;
+
+	rlim.rlim_cur = 8192;
+	rlim.rlim_max = 8192;
+
+	err = setrlimit(RLIMIT_NOFILE, &rlim);
+	if (err)
+		DBG("fail to increase FILENO err(%d)", err);
+
+	return;
+}
 #endif
 
 static void parse_config(GKeyFile *config)
@@ -404,6 +421,9 @@ static int config_init(const char *file)
 {
 	GKeyFile *config;
 
+#if defined TIZEN_EXT
+	set_nofile_inc();
+#endif
 	config = load_config(file);
 	check_config(config);
 	parse_config(config);

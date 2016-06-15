@@ -674,8 +674,15 @@ static void connection_newgateway(int index, const char *gateway)
 	}
 
 	if (!found) {
+#if defined TIZEN_EXT
+		if (data->ipv4_gateway != NULL){
+			set_default_gateway(data, CONNMAN_IPCONFIG_TYPE_IPV4);
+			connman_check_proxy_setup_and_wispr_start(data->service);
+		}
+#else
 		if (data->ipv4_gateway)
 			set_default_gateway(data, CONNMAN_IPCONFIG_TYPE_IPV4);
+#endif
 
 		if (data->ipv6_gateway)
 			set_default_gateway(data, CONNMAN_IPCONFIG_TYPE_IPV6);

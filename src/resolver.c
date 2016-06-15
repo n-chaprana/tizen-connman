@@ -356,6 +356,11 @@ static int append_resolver(int index, const char *domain,
 	if (!server && !domain)
 		return -EINVAL;
 
+#ifdef TIZEN_EXT
+	if (g_strcmp0(server, "0.0.0.0") == 0)
+		return -EINVAL;
+#endif
+
 	entry = g_try_new0(struct entry_data, 1);
 	if (!entry)
 		return -ENOMEM;
