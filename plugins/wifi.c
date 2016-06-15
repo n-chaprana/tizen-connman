@@ -2549,7 +2549,7 @@ static bool handle_wifi_assoc_retry(struct connman_network *network,
 		 * however QA team recommends that the invalid-key error
 		 * might be better to display for user experience.
 		 */
-		connman_network_set_error(network, CONNMAN_NETWORK_ERROR_INVALID_KEY);
+		connman_network_set_error(network, CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
 
 		return false;
 	}

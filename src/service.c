@@ -4295,6 +4295,9 @@ static GList *preferred_tech_list_get(void)
 				 */
 				if (service->type == CONNMAN_SERVICE_TYPE_CELLULAR)
 					break;
+
+				if (service->type == CONNMAN_SERVICE_TYPE_BLUETOOTH)
+					break;
 #endif
 				return NULL;
 			}
@@ -5995,7 +5998,14 @@ static void report_error_cb(void *user_context, bool retry,
 		/* It is not relevant to stay on Failure state
 		 * when failing is due to wrong user input */
 		__connman_service_clear_error(service);
+#if defined TIZEN_EXT
+		/* Reseting the state back in case of failure state */
+		service->state_ipv4 = service->state_ipv6 =
+				CONNMAN_SERVICE_STATE_IDLE;
 
+		if (service->error != CONNMAN_SERVICE_ERROR_AUTH_FAILED)
+			set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+#endif
 		service_complete(service);
 		__connman_connection_update_gateway();
 	}
