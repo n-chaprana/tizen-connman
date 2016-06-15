@@ -149,6 +149,9 @@ unsigned int connman_network_get_is_hs20AP(struct connman_network *network);
 int connman_network_set_keymgmt(struct connman_network *network,
 				unsigned int keymgmt);
 unsigned int connman_network_get_keymgmt(struct connman_network *network);
+int connman_network_set_disconnect_reason(struct connman_network *network,
+				int reason_code);
+int connman_network_get_disconnect_reason(struct connman_network *network);
 #endif
 
 int connman_network_set_name(struct connman_network *network,

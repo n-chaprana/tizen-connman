@@ -528,7 +528,14 @@ static int dhcp_initialize(struct connman_dhcp *dhcp)
 
 	dhcp_client = g_dhcp_client_new(G_DHCP_IPV4, index, &error);
 	if (error != G_DHCP_CLIENT_ERROR_NONE)
+#if defined TIZEN_EXT
+	{
+		DBG("failed g_dhcp_client_new(%d), index(%d)", error, index);
+#endif
 		return -EINVAL;
+#if defined TIZEN_EXT
+	}
+#endif
 
 #if !defined TIZEN_EXT
 	if (getenv("CONNMAN_DHCP_DEBUG")) {

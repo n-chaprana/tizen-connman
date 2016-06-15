@@ -293,6 +293,7 @@ int g_supplicant_interface_disconnect(GSupplicantInterface *interface,
 
 #if defined TIZEN_EXT
 int g_supplicant_interface_remove_network(GSupplicantInterface *interface);
+int g_supplicant_interface_get_disconnect_reason(GSupplicantInterface *interface);
 #endif
 int g_supplicant_interface_set_apscan(GSupplicantInterface *interface,
 							unsigned int ap_scan);

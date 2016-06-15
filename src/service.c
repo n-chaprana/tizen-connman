@@ -157,6 +157,13 @@ struct connman_service {
 	 */
 	int user_pdn_connection_refcount;
 	bool storage_reload;
+	/*
+	 * Description: In case of EAP security type,
+	 * 				  user can select the keymgmt type for roaming(802.11r).
+	 * 				  - FT, CCKM, OKC, ...
+	 */
+	char *keymgmt_type;
+	int disconnect_reason;
 #endif
 #if defined TIZEN_TV_EXT
 	enum connman_dnsconfig_method dns_config_method;
@@ -2845,6 +2852,10 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 
 		connman_dbus_dict_append_dict(dict, "Ethernet",
 						append_ethernet, service);
+
+		connman_dbus_dict_append_basic(dict, "DisconnectReason",
+				DBUS_TYPE_INT32, &service->disconnect_reason);
+
 		break;
 #endif
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
@@ -6540,6 +6551,7 @@ static int service_indicate_state(struct connman_service *service)
 		reply_pending(service, ECONNABORTED);
 
 		def_service = __connman_service_get_default();
+		service->disconnect_reason = connman_network_get_disconnect_reason(service->network);
 
 		if (!__connman_notifier_is_connected() &&
 			def_service &&

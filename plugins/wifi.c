@@ -2674,10 +2674,13 @@ static void interface_state(GSupplicantInterface *interface)
 
 #if defined TIZEN_EXT
 		int err;
+		int reason_code = 0;
 
 		err = g_supplicant_interface_remove_network(wifi->interface);
 		if (err < 0)
 			DBG("Failed to remove network(%d)", err);
+
+		reason_code = g_supplicant_interface_get_disconnect_reason(wifi->interface);
 
 		/* Some of Wi-Fi networks are not comply Wi-Fi specification.
 		 * Retry association until its retry count is expired */
@@ -2685,6 +2688,11 @@ static void interface_state(GSupplicantInterface *interface)
 			throw_wifi_scan(wifi->device, scan_callback);
 			wifi->scan_pending_network = wifi->network;
 			break;
+		}
+
+		if(reason_code > 0){
+			DBG("Set disconnect reason code(%d)", reason_code);
+			connman_network_set_disconnect_reason(network, reason_code);
 		}
 
 		/* To avoid unnecessary repeated association in wpa_supplicant,

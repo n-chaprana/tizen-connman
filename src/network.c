@@ -100,6 +100,7 @@ struct connman_network {
 		unsigned int keymgmt;
 		char *keymgmt_type;
 		bool rsn_selected;
+		int disconnect_reason;
 #endif
 	} wifi;
 
@@ -1961,6 +1962,25 @@ unsigned int connman_network_get_keymgmt(struct connman_network *network)
 		return 0;
 
 	return network->wifi.keymgmt;
+}
+
+int connman_network_set_disconnect_reason(struct connman_network *network,
+				int reason_code)
+{
+	if (network == NULL)
+		return 0;
+
+	network->wifi.disconnect_reason = reason_code;
+
+	return 0;
+}
+
+int connman_network_get_disconnect_reason(struct connman_network *network)
+{
+	if (network == NULL)
+		return 0;
+
+	return network->wifi.disconnect_reason;
 }
 #endif
 
