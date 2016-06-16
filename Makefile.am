@@ -111,7 +111,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			src/peer_service.c src/machine.c src/util.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
+			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ @LIBSYSTEMD_LIBS@ \
 			@TPKP_GNUTLS_LIBS@ \
 			-lresolv -ldl -lrt
 
@@ -155,7 +155,7 @@ vpn_connman_vpnd_SOURCES = $(gdhcp_sources) $(builtin_vpn_sources) \
 
 vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
 				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
-				@TPKP_GNUTLS_LIBS@ \
+				@TPKP_GNUTLS_LIBS@ @LIBSYSTEMD_LIBS@\
 				-lresolv -ldl
 
 vpn_connman_vpnd_LDFLAGS = -Wl,--export-dynamic \
@@ -200,7 +200,7 @@ build_vpn_plugindir = $(vpn_plugindir)
 endif
 endif
 
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ @LIBSYSTEMD_CFLAGS@\
 				@GNUTLS_CFLAGS@ @TPKP_GNUTLS_CFLAGS@ $(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DSTATEDIR=\""$(statedir)"\" \

@@ -43,6 +43,7 @@
 
 #if defined TIZEN_EXT
 #include <sys/smack.h>
+#include <systemd/sd-daemon.h>
 #endif
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -3824,18 +3825,22 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 {
 	GIOChannel *channel;
 	const char *proto;
+#if !defined TIZEN_EXT
 	union {
 		struct sockaddr sa;
 		struct sockaddr_in6 sin6;
 		struct sockaddr_in sin;
 	} s;
 	socklen_t slen;
+#endif
 	int sk, type;
 #if !defined TIZEN_EXT
 	char *interface;
 #endif
 #if defined TIZEN_EXT
 	int option;
+	int sd_num = 0;
+	int rv;
 #endif
 
 	DBG("family %d protocol %d index %d", family, protocol, index);
@@ -3854,7 +3859,32 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 	default:
 		return NULL;
 	}
+#if defined TIZEN_EXT
+	sd_num = sd_listen_fds(0);
+	DBG("socket type(%s) systemd number of fds(%d)", proto, sd_num);
+	if(sd_num < 1){
+		DBG("fail to get the fd from systemd");
+		return NULL;
+	}
 
+	if(protocol == IPPROTO_TCP)
+		type = SOCK_STREAM;
+	else
+		type = SOCK_DGRAM;
+
+	for(sk = SD_LISTEN_FDS_START; sk < SD_LISTEN_FDS_START+sd_num; ++sk){
+		rv = sd_is_socket_inet(sk, family, type, -1, 53);
+		if(rv > 0){
+			DBG("socket fd (%d) is passed by systemd", sk);
+			break;
+		}
+	}
+
+	if(sk >= SD_LISTEN_FDS_START+sd_num){
+		DBG("socket fd is not matched what connman requests");
+		return NULL;
+	}
+#else
 	sk = socket(family, type, protocol);
 	if (sk < 0 && family == AF_INET6 && errno == EAFNOSUPPORT) {
 		connman_error("No IPv6 support");
@@ -3866,7 +3896,6 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 		return NULL;
 	}
 
-#if !defined TIZEN_EXT
 	/* ConnMan listens DNS from multiple interfaces
 	 * E.g. various technology based and tethering interfaces
 	 */
@@ -3883,16 +3912,13 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 		return NULL;
 	}
 	g_free(interface);
-#endif
 
 	if (family == AF_INET6) {
 		memset(&s.sin6, 0, sizeof(s.sin6));
 		s.sin6.sin6_family = AF_INET6;
 		s.sin6.sin6_port = htons(53);
 		slen = sizeof(s.sin6);
-#if defined TIZEN_EXT
-		s.sin6.sin6_addr = in6addr_any;
-#else
+
 		if (__connman_inet_get_interface_address(index,
 						AF_INET6,
 						&s.sin6.sin6_addr) < 0) {
@@ -3903,49 +3929,46 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 			close(sk);
 			return NULL;
 		}
-#endif
 
 	} else if (family == AF_INET) {
 		memset(&s.sin, 0, sizeof(s.sin));
 		s.sin.sin_family = AF_INET;
 		s.sin.sin_port = htons(53);
 		slen = sizeof(s.sin);
-#if defined TIZEN_EXT
-		s.sin.sin_addr.s_addr = htonl(INADDR_ANY);
-#else
 		if (__connman_inet_get_interface_address(index,
 						AF_INET,
 						&s.sin.sin_addr) < 0) {
 			close(sk);
 			return NULL;
 		}
-#endif
 	} else {
 		close(sk);
 		return NULL;
 	}
-
+#endif
 #if defined TIZEN_EXT
 	/* When ConnMan crashed,
 	 * probably DNS listener cannot bind existing address */
 	option = 1;
 	setsockopt(sk, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
 #endif
+#if !defined TIZEN_EXT
 	if (bind(sk, &s.sa, slen) < 0) {
 		connman_error("Failed to bind %s listener socket", proto);
 		close(sk);
 		return NULL;
 	}
+#endif
 
 	if (protocol == IPPROTO_TCP) {
-
+#if !defined TIZEN_EXT
 		if (listen(sk, 10) < 0) {
 			connman_error("Failed to listen on TCP socket %d/%s",
 				-errno, strerror(errno));
 			close(sk);
 			return NULL;
 		}
-
+#endif
 		fcntl(sk, F_SETFL, O_NONBLOCK);
 	}
 

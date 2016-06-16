@@ -222,6 +222,11 @@ PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.28, dummy=yes,
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
+PKG_CHECK_MODULES(LIBSYSTEMD, libsystemd-daemon, dummy=yes,
+				AC_MSG_ERROR(libsystemd-daemon library is required))
+AC_SUBST(LIBSYSTEMD_CFLAGS)
+AC_SUBST(LIBSYSTEMD_LIBS)
+
 PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.4, dummy=yes,
 				AC_MSG_ERROR(D-Bus >= 1.4 is required))
 AC_SUBST(DBUS_CFLAGS)

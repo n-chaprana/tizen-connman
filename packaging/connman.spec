@@ -17,6 +17,7 @@ BuildRequires:  pkgconfig(libiptc)
 BuildRequires:  pkgconfig(xtables)
 BuildRequires:  pkgconfig(libsmack)
 BuildRequires:  pkgconfig(tpkp-gnutls)
+BuildRequires:  pkgconfig(libsystemd-daemon)
 %if %{with connman_openconnect}
 BuildRequires:  openconnect
 %endif
