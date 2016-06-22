@@ -1,14 +1,15 @@
 [Unit]
 Description=Connection service
-Requires=dbus.socket
-After=dbus.socket
+After=net-config.service
+DefaultDependencies=no
 
 [Service]
 Type=dbus
 BusName=net.connman
-ExecStartPre=/usr/bin/dbus-send --system --dest=net.netconfig / net.netconfig.auto.activate
 Restart=on-failure
-ExecStart=/usr/sbin/connmand -n
+ExecStart=@sbindir@/connmand -n --noplugin vpn
+StandardOutput=null
+CapabilityBoundingSet=~CAP_MAC_ADMIN
 
 [Install]
 WantedBy=multi-user.target

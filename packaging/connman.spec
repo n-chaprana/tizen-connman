@@ -100,20 +100,6 @@ CFLAGS+=" -DTIZEN_TV_EXT"
 
 %if %{with connman_vpnd}
 VPN_CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
-
-%if 0%{?sec_product_feature_telephony_disable} == 1
-       CFLAGS+=" -DTIZEN_CONNMAN_NTP"
-%endif
-%if 0%{?sec_product_feature_security_fstek_enable} == 1
-        CFLAGS+=" -DTIZEN_CONNMAN_USE_BLACKLIST"
-%endif
-%if 0%{?sec_product_feature_profile_wearable}
-	CFLAGS+=" -DTIZEN_WEARABLE"
-%endif
-
-%if 0%{?sec_product_feature_wlan_always_powered}
-       CFLAGS+=" -DTIZEN_ALWAYS_POWERED"
-%endif
 %endif
 
 chmod +x bootstrap

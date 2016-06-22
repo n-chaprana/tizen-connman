@@ -4222,31 +4222,6 @@ void __connman_service_set_active_session(bool enable, GSList *list)
 			active_count);
 }
 
-#if defined TIZEN_CONNMAN_USE_BLACKLIST
-static connman_bool_t is_allowed(struct connman_service *service)
-{
-	connman_bool_t allowed;
-	const char *security = NULL;
-
-	if (!service)
-		return false;
-
-	security = security2string(service->security);
-	if (!security)
-		return false;
-
-	/* check if service is existed in blacklist */
-	allowed = __connman_agent_request_blacklist_check(service->name,
-			security, service->eap);
-	if (allowed == false) {
-		DBG("service %p is not allowed", service);
-		service->autoconnect = false;
-	}
-
-	return allowed;
-}
-#endif
-
 struct preferred_tech_data {
 	GList *preferred_list;
 	enum connman_service_type type;
@@ -4375,11 +4350,6 @@ static bool auto_connect_service(GList *services,
 		if (is_ignore(service) || service->state !=
 				CONNMAN_SERVICE_STATE_IDLE)
 			continue;
-
-#if defined TIZEN_CONNMAN_USE_BLACKLIST
-		if (is_allowed(service) == false)
-			continue;
-#endif
 
 		if (autoconnecting && !active_sessions[service->type]) {
 			DBG("service %p type %s has no users", service,

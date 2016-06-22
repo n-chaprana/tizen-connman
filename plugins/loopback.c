@@ -68,36 +68,6 @@ static int setup_hostname(void)
 
 #if defined TIZEN_EXT
 		FILE *fp = NULL;
-
-#if defined TIZEN_WEARABLE
-#define BT_MAC "/csa/bluetooth/.bd_addr"
-		{
-			gchar* dev_id = "GearS2";
-			char bt_mac[HOST_NAME_MAX + 1];
-			char addr[5] = {0, };
-
-			fp = fopen(BT_MAC, "r");
-			if(!fp){
-				connman_error("Failed to get current hostname");
-				strncpy(system_hostname, dev_id, strlen(dev_id));
-				goto host_name_end;
-			}
-
-			// get the last line's address
-			while (fgets(bt_mac, HOST_NAME_MAX, fp)) {}
-
-			if (strlen(bt_mac) == 6) {
-				addr[0] = bt_mac[2];
-				addr[1] = bt_mac[3];
-				addr[2] = bt_mac[4];
-				addr[3] = bt_mac[5];
-				g_sprintf(system_hostname, "%s-%s", dev_id, addr);
-			} else
-				strncpy(system_hostname, dev_id, strlen(dev_id));
-
-			fclose(fp);
-		}
-#else
 #define WIFI_MAC "/opt/etc/.mac.info"
 		{
 			char* rv = 0;
@@ -124,7 +94,6 @@ static int setup_hostname(void)
 			g_free(dev_id);
 			fclose(fp);
 		}
-#endif
 
 	host_name_end :
 #else
