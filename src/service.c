@@ -2772,14 +2772,6 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 	const char *str;
 	GSList *list;
 
-	str = __connman_service_type2string(service->type);
-	if (str)
-		connman_dbus_dict_append_basic(dict, "Type",
-						DBUS_TYPE_STRING, &str);
-
-	connman_dbus_dict_append_array(dict, "Security",
-				DBUS_TYPE_STRING, append_security, service);
-
 #if defined TIZEN_EXT
 	unsigned int frequency = 0U;
 	if (service && service->network) {
@@ -2788,6 +2780,14 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 				DBUS_TYPE_UINT16, &frequency);
 	}
 #endif
+
+	str = __connman_service_type2string(service->type);
+	if (str)
+		connman_dbus_dict_append_basic(dict, "Type",
+						DBUS_TYPE_STRING, &str);
+
+	connman_dbus_dict_append_array(dict, "Security",
+				DBUS_TYPE_STRING, append_security, service);
 
 	str = state2string(service->state);
 	if (str)
