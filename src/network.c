@@ -99,7 +99,7 @@ struct connman_network {
 		unsigned int isHS20AP;
 		unsigned int keymgmt;
 		char *keymgmt_type;
-		bool rsn_selected;
+		bool rsn_mode;
 		int disconnect_reason;
 #endif
 	} wifi;
@@ -1913,10 +1913,10 @@ const char *connman_network_get_enc_mode(struct connman_network *network)
 	return (const char *)network->wifi.encryption_mode;
 }
 
-int connman_network_set_rsn_selected(struct connman_network *network,
-				bool rsn_selected)
+int connman_network_set_rsn_mode(struct connman_network *network,
+				bool rsn_mode)
 {
-	network->wifi.rsn_selected = rsn_selected;
+	network->wifi.rsn_mode = rsn_mode;
 
 	return 0;
 }
@@ -2210,7 +2210,7 @@ const char *connman_network_get_string(struct connman_network *network,
 		return network->wifi.mode;
 	else if (g_str_equal(key, "WiFi.Security"))
 #if defined TIZEN_EXT
-		if (network->wifi.rsn_selected != true ||
+		if (network->wifi.rsn_mode != true ||
 		    g_str_equal(network->wifi.security, "ieee8021x"))
 			return network->wifi.security;
 		else

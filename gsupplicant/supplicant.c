@@ -1315,14 +1315,19 @@ const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network)
 	return NULL;
 }
 
-bool g_supplicant_network_get_rsn_selected(GSupplicantNetwork *network)
+bool g_supplicant_network_get_rsn_mode(GSupplicantNetwork *network)
 {
 	if (network == NULL || network->best_bss == NULL)
 		return 0;
 
-	if (network->best_bss->rsn_selected)
-		return true;
-	else
+	if (network->best_bss->rsn_selected) {
+		const char *mode = g_supplicant_network_get_enc_mode(network);
+		if (g_strcmp0(mode, "aes") == 0 ||
+				g_strcmp0(mode, "mixed") == 0)
+			return true;
+		else
+			return false;
+	} else
 		return false;
 }
 
