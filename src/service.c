@@ -5930,21 +5930,6 @@ void __connman_service_set_search_domains(struct connman_service *service,
 	searchdomain_add_all(service);
 }
 
-#if defined TIZEN_EXT
-void __connman_service_set_autoconnect(struct connman_service *service,
-						bool autoconnect)
-{
-	if (service == NULL)
-		return;
-
-	if (service->autoconnect != autoconnect) {
-		DBG("updated autoconnect flag (%d)", autoconnect);
-		service->autoconnect = autoconnect;
-		service_save(service);
-	}
-}
-#endif
-
 static void service_complete(struct connman_service *service)
 {
 	reply_pending(service, EIO);
@@ -6647,6 +6632,11 @@ int __connman_service_indicate_error(struct connman_service *service,
 				service->error == CONNMAN_SERVICE_ERROR_CONNECT_FAILED)
 			__connman_service_disconnect_default(service);
 
+		if (service->type == CONNMAN_SERVICE_TYPE_WIFI &&
+				service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY) {
+			g_free(service->passphrase);
+			service->passphrase = NULL;
+		}
 #endif
 
 	__connman_service_ipconfig_indicate_state(service,

@@ -699,8 +699,6 @@ bool __connman_service_wps_enabled(struct connman_service *service);
 #if defined TIZEN_EXT
 void __connman_service_set_storage_reload(struct connman_service *service,
 						bool storage_reload);
-void __connman_service_set_autoconnect(struct connman_service *service,
-						bool autoconnect);
 #endif
 int __connman_service_set_favorite(struct connman_service *service,
 						bool favorite);

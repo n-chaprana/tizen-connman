@@ -2509,11 +2509,6 @@ static bool handle_4way_handshake_failure(GSupplicantInterface *interface,
 	wifi->retries = 0;
 	connman_network_set_error(network, CONNMAN_NETWORK_ERROR_INVALID_KEY);
 
-#if defined TIZEN_EXT
-	/* not retry autoconnect in case of invalid-key error */
-	__connman_service_set_autoconnect(service, false);
-#endif
-
 	return false;
 }
 
