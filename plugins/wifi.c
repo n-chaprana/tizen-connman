@@ -1930,19 +1930,9 @@ static int wifi_scan(enum connman_service_type type,
 
 	reset_autoscan(device);
 
-#if defined TIZEN_EXT
-	if (wifi->hidden) {
-		ret = g_supplicant_interface_scan(wifi->interface, scan_params,
-						scan_callback, device);
-	}
-	else {
-		ret = g_supplicant_interface_scan(wifi->interface, NULL,
-							scan_callback_hidden, device);
-	}
-#else
 	ret = g_supplicant_interface_scan(wifi->interface, scan_params,
 						scan_callback, device);
-#endif
+
 	if (ret == 0) {
 		connman_device_set_scanning(device,
 				CONNMAN_SERVICE_TYPE_WIFI, true);
