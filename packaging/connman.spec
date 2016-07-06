@@ -174,6 +174,8 @@ cp vpn/vpn-dbus.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus
 %endif
 
 %post
+chsmack -a 'System' /%{_localstatedir}/lib/connman
+chsmack -a 'System' /%{_localstatedir}/lib/connman/settings
 
 %preun
 
