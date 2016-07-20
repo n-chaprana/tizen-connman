@@ -6,6 +6,7 @@ After=dbus.socket
 [Service]
 Type=dbus
 BusName=net.connman.vpn
+SmackProcessLabel=System
 ExecStart=@sbindir@/connman-vpnd -n
 StandardOutput=null
 CapabilityBoundingSet=~CAP_MAC_ADMIN
