@@ -154,6 +154,17 @@ mkdir -p %{buildroot}%{_unitdir}/multi-user.target.wants
 ln -s ../connman.service %{buildroot}%{_unitdir}/multi-user.target.wants/connman.service
 %endif
 
+#Systemd socket file for DNS proxy
+%if "%{?_lib}" == "lib64"
+cp src/connman.socket %{buildroot}%{_unitdir}/connman.socket
+mkdir -p %{buildroot}%{_unitdir}/sockets.target.wants
+ln -s ../connman.socket %{buildroot}%{_unitdir}/sockets.target.wants/connman.socket
+%else
+cp src/connman.socket %{buildroot}%{_libdir}/systemd/system/connman.socket
+mkdir -p %{buildroot}%{_libdir}/systemd/system/sockets.target.wants
+ln -s ../connman.socket %{buildroot}%{_libdir}/systemd/system/sockets.target.wants/connman.socket
+%endif
+
 mkdir -p %{buildroot}/%{_localstatedir}/lib/connman
 cp resources/var/lib/connman/settings %{buildroot}/%{_localstatedir}/lib/connman/settings
 mkdir -p %{buildroot}%{_datadir}/dbus-1/system-services
@@ -202,6 +213,11 @@ systemctl daemon-reload
 %attr(644,root,root) %{_unitdir}/connman.service
 %attr(644,root,root) %{_unitdir}/multi-user.target.wants/connman.service
 %attr(644,root,root) %{_unitdir}/connman-vpn.service
+%attr(644,root,root) %{_unitdir}/connman.socket
+%attr(644,root,root) %{_unitdir}/sockets.target.wants/connman.socket
+%else
+%attr(644,root,root) %{_libdir}/systemd/system/connman.socket
+%attr(644,root,root) %{_libdir}/systemd/system/sockets.target.wants/connman.socket
 %endif
 %{_datadir}/license/connman
 
