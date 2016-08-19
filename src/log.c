@@ -42,9 +42,9 @@ static const char *program_path;
 #include <sys/stat.h>
 #include <sys/time.h>
 
-#define LOG_FILE_PATH "/opt/usr/data/network/connman.log"
+#define LOG_FILE_PATH "/var/log/connman.log"
 #define MAX_LOG_SIZE	1 * 1024 * 1024
-#define MAX_LOG_COUNT	3
+#define MAX_LOG_COUNT	1
 
 #define openlog __connman_log_open
 #define closelog __connman_log_close
