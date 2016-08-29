@@ -4,7 +4,7 @@
 
 Name:           connman
 Version:        1.29
-Release:        16
+Release:        17
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -33,6 +33,8 @@ Requires(post):   systemd
 Requires(preun):  systemd
 Requires(postun): systemd
 Requires:         net-config
+
+%define upgrade_script_path /usr/share/upgrade/scripts
 
 %description
 Connection Manager provides a daemon for managing Internet connections
@@ -184,6 +186,10 @@ cp COPYING %{buildroot}%{_datadir}/license/connman
 cp vpn/vpn-dbus.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
 %endif
 
+#OS Upgrade
+mkdir -p %{buildroot}%{upgrade_script_path}
+cp -f scripts/connman_upgrade.sh %{buildroot}%{upgrade_script_path}
+
 %post
 chsmack -a 'System' /%{_localstatedir}/lib/connman
 chsmack -a 'System' /%{_localstatedir}/lib/connman/settings
@@ -220,6 +226,7 @@ systemctl daemon-reload
 %attr(644,root,root) %{_libdir}/systemd/system/sockets.target.wants/connman.socket
 %endif
 %{_datadir}/license/connman
+%{upgrade_script_path}/connman_upgrade.sh
 
 %files test
 %manifest connman.manifest
