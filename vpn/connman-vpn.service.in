@@ -8,9 +8,9 @@ Type=dbus
 BusName=net.connman.vpn
 SmackProcessLabel=System
 ExecStart=@sbindir@/connman-vpnd -n
+User=network_fw
+Group=network_fw
 StandardOutput=null
-CapabilityBoundingSet=~CAP_MAC_ADMIN
-CapabilityBoundingSet=~CAP_MAC_OVERRIDE
 
 [Install]
 WantedBy=multi-user.target
