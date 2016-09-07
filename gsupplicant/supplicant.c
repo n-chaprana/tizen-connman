@@ -4930,6 +4930,19 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 					DBUS_TYPE_INT32,
 					&ssid->ignore_broadcast_ssid);
 
+#if defined TIZEN_EXT
+	if (ssid->bssid) {
+		char *bssid = NULL;
+		bssid = g_try_malloc0(18);
+		snprintf(bssid, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
+					ssid->bssid[0], ssid->bssid[1], ssid->bssid[2],
+					ssid->bssid[3], ssid->bssid[4], ssid->bssid[5]);
+		supplicant_dbus_dict_append_basic(&dict, "bssid",
+					DBUS_TYPE_STRING, &bssid);
+		g_free(bssid);
+	}
+#endif
+
 	supplicant_dbus_dict_close(iter, &dict);
 }
 
