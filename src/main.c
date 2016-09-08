@@ -750,7 +750,9 @@ int main(int argc, char *argv[])
 	__connman_dhcpv6_init();
 	__connman_wpad_init();
 	__connman_wispr_init();
+#if !defined TIZEN_EXT
 	__connman_rfkill_init();
+#endif
 	__connman_machine_init();
 
 	g_free(option_config);
@@ -764,7 +766,9 @@ int main(int argc, char *argv[])
 	g_source_remove(signal);
 
 	__connman_machine_cleanup();
+#if !defined TIZEN_EXT
 	__connman_rfkill_cleanup();
+#endif
 	__connman_wispr_cleanup();
 	__connman_wpad_cleanup();
 	__connman_dhcpv6_cleanup();
