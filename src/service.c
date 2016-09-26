@@ -4085,8 +4085,10 @@ static void set_error(struct connman_service *service,
 	if (!service->path)
 		return;
 
+#if !defined TIZEN_EXT
 	if (!allow_property_changed(service))
 		return;
+#endif
 
 	str = error2string(service->error);
 
@@ -6002,34 +6004,6 @@ static int check_wpspin(struct connman_service *service, const char *wpspin)
 	return 0;
 }
 
-#if defined TIZEN_EXT
-static int __connman_service_connect_hidden(struct connman_service *service,
-			const char *name, int name_len,
-			const char *identity, const char *passphrase, void *user_data)
-{
-	GList *list;
-
-	for (list = service_list; list; list = list->next) {
-		struct connman_service *target = list->data;
-		const char *target_ssid = NULL;
-		unsigned int target_ssid_len = 0;
-
-		if (service->network != NULL &&
-					service->security == target->security) {
-			target_ssid = connman_network_get_blob(service->network,
-							"WiFi.SSID", &target_ssid_len);
-			if (target_ssid_len == name_len &&
-							memcmp(target_ssid, name, name_len) == 0) {
-				return connman_network_connect_hidden(service->network,
-							(char *)identity, (char *)passphrase, user_data);
-			}
-		}
-	}
-
-	return -ENOENT;
-}
-#endif
-
 static void request_input_cb(struct connman_service *service,
 			bool values_received,
 			const char *name, int name_len,
@@ -6062,14 +6036,6 @@ static void request_input_cb(struct connman_service *service,
 	}
 
 	if (service->hidden && name_len > 0 && name_len <= 32) {
-#if defined TIZEN_EXT
-		/* TIZEN already has Wi-Fi hidden scan before this hidden connection */
-		err = __connman_service_connect_hidden(service, name, name_len,
-						identity, passphrase, user_data);
-		if (err == 0 || err == -EALREADY || err == -EINPROGRESS)
-			return;
-#endif
-
 		device = connman_network_get_device(service->network);
 		security = connman_network_get_string(service->network,
 							"WiFi.Security");
