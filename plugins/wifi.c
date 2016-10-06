@@ -131,6 +131,7 @@ struct wifi_data {
 #if defined TIZEN_EXT
 	int assoc_retry_count;
 	struct connman_network *scan_pending_network;
+	bool allow_full_scan;
 #endif
 };
 
@@ -143,6 +144,7 @@ static gboolean wifi_first_scan = false;
 static gboolean found_with_first_scan = false;
 static gboolean is_wifi_notifier_registered = false;
 #endif
+
 
 static GList *iface_list = NULL;
 
@@ -1319,6 +1321,11 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 		connman_device_unref(device);
 
 #if defined TIZEN_EXT
+	if (wifi && wifi->allow_full_scan) {
+		DBG("Trigger Full Channel Scan");
+		throw_wifi_scan(device, scan_callback);
+		wifi->allow_full_scan = FALSE;
+	}
 	if (wifi && wifi->scan_pending_network && result != -EIO) {
 		network_connect(wifi->scan_pending_network);
 		wifi->scan_pending_network = NULL;
@@ -1928,6 +1935,13 @@ static int wifi_scan(enum connman_service_type type,
 
 	connman_device_ref(device);
 
+#if defined TIZEN_EXT
+	/*To allow the Full Scan after ssid based scan, set the flag here
+     It is required because Tizen does not use the ConnMan specific
+     backgroung Scan feature.Tizen has added the BG Scan feature in net-config
+     To sync with up ConnMan, we need to issue the Full Scan after SSID specific scan.*/
+	 wifi->allow_full_scan = TRUE;
+#endif
 	reset_autoscan(device);
 
 	ret = g_supplicant_interface_scan(wifi->interface, scan_params,
