@@ -172,7 +172,12 @@ cp resources/var/lib/connman/settings %{buildroot}/%{_localstatedir}/lib/connman
 mkdir -p %{buildroot}%{_datadir}/dbus-1/system-services
 cp resources/usr/share/dbus-1/system-services/net.connman.service %{buildroot}%{_datadir}/dbus-1/system-services/net.connman.service
 mkdir -p %{buildroot}/etc/connman
+
+%if "%{profile}" == "ivi"
+cp src/main_ivi.conf %{buildroot}/etc/connman/main.conf
+%else
 cp src/main.conf %{buildroot}/etc/connman/main.conf
+%endif
 
 rm %{buildroot}%{_sysconfdir}/dbus-1/system.d/*.conf
 mkdir -p %{buildroot}%{_sysconfdir}/dbus-1/system.d/
