@@ -2990,7 +2990,12 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 #endif
 
 	if (wifi->hidden && ssid) {
+#if defined TIZEN_EXT
+		if (network_security(wifi->hidden->security) ==
+			network_security(security) &&
+#else
 		if (!g_strcmp0(wifi->hidden->security, security) &&
+#endif
 				wifi->hidden->ssid_len == ssid_len &&
 				!memcmp(wifi->hidden->ssid, ssid, ssid_len)) {
 			connman_network_connect_hidden(network,
