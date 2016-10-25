@@ -4621,8 +4621,12 @@ static DBusMessage *connect_service(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
 	struct connman_service *service = user_data;
+#if defined TIZEN_EXT
+	int err = 0;
+#else
 	int index, err = 0;
 	GList *list;
+#endif
 
 	DBG("service %p", service);
 
@@ -4662,6 +4666,7 @@ static DBusMessage *connect_service(DBusConnection *conn,
 		}
 	}
 
+#if !defined TIZEN_EXT
 	index = __connman_service_get_index(service);
 
 	for (list = service_list; list; list = list->next) {
@@ -4687,6 +4692,7 @@ static DBusMessage *connect_service(DBusConnection *conn,
 	}
 	if (err == -EINPROGRESS)
 		return __connman_error_operation_timeout(msg);
+#endif
 
 	service->ignore = false;
 
@@ -7031,6 +7037,33 @@ static int service_connect(struct connman_service *service)
 
 	if (service->hidden)
 		return -EPERM;
+
+#if defined TIZEN_EXT
+	GList *list;
+	int index;
+
+	index = __connman_service_get_index(service);
+
+	for (list = service_list; list; list = list->next) {
+		struct connman_service *temp = list->data;
+
+		if (service->type == CONNMAN_SERVICE_TYPE_CELLULAR)
+			break;
+
+		if (!is_connecting(temp) && !is_connected(temp))
+			break;
+
+		if (service == temp)
+			continue;
+
+		if (service->type != temp->type)
+			continue;
+
+		if (__connman_service_get_index(temp) == index &&
+				__connman_service_disconnect(temp) == -EINPROGRESS)
+			return -EINPROGRESS;
+	}
+#endif
 
 	switch (service->type) {
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:
