@@ -208,14 +208,14 @@ systemctl daemon-reload
 
 %files
 %manifest connman.manifest
-%attr(755,root,root) %{_sbindir}/*
+%attr(500,root,root) %{_sbindir}/*
 %attr(500,root,root) %{_bindir}/connmanctl
-%attr(600,network_fw,network_fw) /%{_localstatedir}/lib/connman/settings
+%attr(600,root,root) /%{_localstatedir}/lib/connman/settings
 #%{_libdir}/connman/plugins/*.so
 %attr(644,root,root) %{_datadir}/dbus-1/system-services/*
 #%{_datadir}/dbus-1/services/*
 %{_sysconfdir}/dbus-1/system.d/*
-%attr(644,network_fw,network_fw) %{_sysconfdir}/connman/main.conf
+%attr(644,root,root) %{_sysconfdir}/connman/main.conf
 %{_sysconfdir}/dbus-1/system.d/*.conf
 %attr(644,root,root) %{_libdir}/systemd/system/connman.service
 %attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman.service
