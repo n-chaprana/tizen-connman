@@ -6563,6 +6563,7 @@ static int service_indicate_state(struct connman_service *service)
 #if defined TIZEN_EXT
 		if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
 			service->order = 5;
+		__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 #endif
 		if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER &&
 			connman_agent_report_error(service, service->path,
