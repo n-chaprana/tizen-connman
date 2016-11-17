@@ -1063,8 +1063,23 @@ void __connman_technology_scan_stopped(struct connman_device *device,
 			count += 1;
 	}
 
+#if defined TIZEN_EXT
+	if (count == 0) {
+		DBusMessage *signal;
+
+		signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
+										CONNMAN_MANAGER_INTERFACE, "ScanDone");
+		if (!signal)
+			return;
+
+		dbus_connection_send(connection, signal, NULL);
+		dbus_message_unref(signal);
+		reply_scan_pending(technology, 0);
+	}
+#else
 	if (count == 0)
 		reply_scan_pending(technology, 0);
+#endif
 }
 
 void __connman_technology_notify_regdom_by_device(struct connman_device *device,
