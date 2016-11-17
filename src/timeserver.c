@@ -91,7 +91,7 @@ static void resolv_result(GResolvResultStatus status, char **results,
 #if defined TIZEN_EXT
 	gchar *server = NULL;
 
-	server = (gchar *)user_data;
+	server = g_strdup((gchar *)user_data);
 	ts_list = g_slist_append(ts_list, server);
 
 	DBG("added server %s", server);
