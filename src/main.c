@@ -78,6 +78,7 @@ static struct {
 	bool enable_6to4;
 #if defined TIZEN_EXT
 	char **cellular_interfaces;
+	bool tizen_tv_extension;
 #endif
 } connman_settings  = {
 	.bg_scan = true,
@@ -95,6 +96,7 @@ static struct {
 	.enable_6to4 = false,
 #if defined TIZEN_EXT
 	.cellular_interfaces = NULL,
+	.tizen_tv_extension = false,
 #endif
 };
 
@@ -113,6 +115,7 @@ static struct {
 #define CONF_ENABLE_6TO4                "Enable6to4"
 #if defined TIZEN_EXT
 #define CONF_CELLULAR_INTERFACE         "NetworkCellularInterfaceList"
+#define CONF_TIZEN_TV_EXT		"TizenTVExtension"
 #endif
 
 static const char *supported_options[] = {
@@ -131,6 +134,7 @@ static const char *supported_options[] = {
 	CONF_ENABLE_6TO4,
 #if defined TIZEN_EXT
 	CONF_CELLULAR_INTERFACE,
+	CONF_TIZEN_TV_EXT,
 #endif
 	NULL
 };
@@ -251,6 +255,7 @@ static void check_Tizen_configuration(GKeyFile *config)
 {
 	GError *error = NULL;
 	char **cellular_interfaces;
+	bool boolean;
 	gsize len;
 
 	cellular_interfaces = g_key_file_get_string_list(config, "General",
@@ -258,6 +263,13 @@ static void check_Tizen_configuration(GKeyFile *config)
 
 	if (error == NULL)
 		connman_settings.cellular_interfaces = cellular_interfaces;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
+			CONF_TIZEN_TV_EXT, &error);
+	if (!error)
+		connman_settings.tizen_tv_extension = boolean;
 
 	g_clear_error(&error);
 }

@@ -1067,3 +1067,12 @@ void __connman_machine_cleanup(void);
 int __connman_util_get_random(uint64_t *val);
 int __connman_util_init(void);
 void __connman_util_cleanup(void);
+
+#ifdef TIZEN_EXT
+__attribute__ ((unused)) static int __tizentvextension = -1;
+#define TIZEN_TV_EXT (__builtin_expect(__tizentvextension != -1, 1) ? \
+	__tizentvextension : \
+	(__tizentvextension = connman_setting_get_bool("TizenTVExtension")))
+#else /* TIZEN_EXT */
+#define TIZEN_TV_EXT (0) /* Always False */
+#endif /* TIZEN_EXT */

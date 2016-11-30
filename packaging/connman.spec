@@ -97,9 +97,6 @@ Header files and development files for connman.
 %build
 CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
 CFLAGS+=" -DTIZEN_SYS_CA_BUNDLE=\"%TZ_SYS_RO_CA_BUNDLE\""
-%if "%{profile}" == "tv"
-CFLAGS+=" -DTIZEN_TV_EXT"
-%endif
 
 %if %{with connman_vpnd}
 VPN_CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"

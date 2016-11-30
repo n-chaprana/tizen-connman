@@ -77,7 +77,7 @@ struct connman_service_user {
 	uid_t current_user;
 };
 
-#if defined TIZEN_TV_EXT
+#ifdef TIZEN_EXT
 enum connman_dnsconfig_method {
 	CONNMAN_DNSCONFIG_METHOD_UNKNOWN = 0,
 	CONNMAN_DNSCONFIG_METHOD_MANUAL  = 1,
@@ -165,7 +165,7 @@ struct connman_service {
 	char *keymgmt_type;
 	int disconnect_reason;
 #endif
-#if defined TIZEN_TV_EXT
+#ifdef TIZEN_EXT
 	enum connman_dnsconfig_method dns_config_method;
 #endif
 };
@@ -445,7 +445,7 @@ static enum connman_service_proxy_method string2proxymethod(const char *method)
 		return CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 }
 
-#if defined TIZEN_TV_EXT
+#ifdef TIZEN_EXT
 static const char *__connman_dnsconfig_method2string(enum connman_dnsconfig_method method)
 {
 	switch (method) {
@@ -752,11 +752,13 @@ static int service_load(struct connman_service *service)
 		service->nameservers_config = NULL;
 	}
 
-#if defined TIZEN_TV_EXT
+#ifdef TIZEN_EXT
 	char *dns_method;
-	dns_method = g_key_file_get_string(keyfile, service->identifier,
-			"Nameservers.method", NULL);
-	service->dns_config_method = __connman_dnsconfig_string2method(dns_method);
+	if (TIZEN_TV_EXT) {
+		dns_method = g_key_file_get_string(keyfile, service->identifier,
+				"Nameservers.method", NULL);
+		service->dns_config_method = __connman_dnsconfig_string2method(dns_method);
+	}
 #endif
 
 	service->timeservers_config = g_key_file_get_string_list(keyfile,
@@ -995,16 +997,18 @@ static int service_save(struct connman_service *service)
 	g_key_file_remove_key(keyfile, service->identifier,
 							"Nameservers", NULL);
 
-#if defined TIZEN_TV_EXT
-	if(service->dns_config_method != 0) {
-		const char *method;
-		method = __connman_dnsconfig_method2string(
-				service->dns_config_method);
-		g_key_file_set_string(keyfile, service->identifier,
-				"Nameservers.method", method);
-	} else
-	g_key_file_remove_key(keyfile, service->identifier,
-						"Nameservers.method", NULL);
+#ifdef TIZEN_EXT
+	if (TIZEN_TV_EXT) {
+		if(service->dns_config_method != 0) {
+			const char *method;
+			method = __connman_dnsconfig_method2string(
+					service->dns_config_method);
+			g_key_file_set_string(keyfile, service->identifier,
+					"Nameservers.method", method);
+		} else
+		g_key_file_remove_key(keyfile, service->identifier,
+							"Nameservers.method", NULL);
+	}
 #endif
 
 	if (service->timeservers_config) {
@@ -1491,8 +1495,9 @@ int __connman_service_nameserver_append(struct connman_service *service,
 
 	nameservers[len + 1] = NULL;
 
-#if defined TIZEN_TV_EXT
-	if(service->dns_config_method == CONNMAN_DNSCONFIG_METHOD_UNKNOWN)
+#ifdef TIZEN_EXT
+	if(TIZEN_TV_EXT &&
+	   service->dns_config_method == CONNMAN_DNSCONFIG_METHOD_UNKNOWN)
 		service->dns_config_method = CONNMAN_DNSCONFIG_METHOD_DHCP;
 #endif
 
@@ -2112,13 +2117,15 @@ static void append_dns(DBusMessageIter *iter, void *user_data)
 	if (!is_connected(service))
 		return;
 
-#if defined TIZEN_TV_EXT
-	/* Append DNS Config Type */
+#ifdef TIZEN_EXT
 	const char *str;
-	str = __connman_dnsconfig_method2string(service->dns_config_method);
-	if(str != NULL)
-		dbus_message_iter_append_basic(iter,
-			DBUS_TYPE_STRING, &str);
+	if (TIZEN_TV_EXT) {
+		/* Append DNS Config Type */
+		str = __connman_dnsconfig_method2string(service->dns_config_method);
+		if(str != NULL)
+			dbus_message_iter_append_basic(iter,
+				DBUS_TYPE_STRING, &str);
+	}
 #endif
 
 	if (service->nameservers_config) {
@@ -2149,13 +2156,15 @@ static void append_dnsconfig(DBusMessageIter *iter, void *user_data)
 {
 	struct connman_service *service = user_data;
 
-#if defined TIZEN_TV_EXT
+#ifdef TIZEN_EXT
 	/* Append DNS Config Type */
 	const char *str;
-	str = __connman_dnsconfig_method2string(service->dns_config_method);
-	if(str != NULL)
-		dbus_message_iter_append_basic(iter,
-			DBUS_TYPE_STRING, &str);
+	if (TIZEN_TV_EXT) {
+		str = __connman_dnsconfig_method2string(service->dns_config_method);
+		if(str != NULL)
+			dbus_message_iter_append_basic(iter,
+				DBUS_TYPE_STRING, &str);
+	}
 #endif
 
 	if (!service->nameservers_config)
@@ -2794,11 +2803,13 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		connman_dbus_dict_append_basic(dict, "State",
 						DBUS_TYPE_STRING, &str);
 
-#if defined TIZEN_TV_EXT
-	str = state2string(service->state_ipv6);
-	if (str != NULL)
-		connman_dbus_dict_append_basic(dict, "StateIPv6",
-						DBUS_TYPE_STRING, &str);
+#ifdef TIZEN_EXT
+	if (TIZEN_TV_EXT) {
+		str = state2string(service->state_ipv6);
+		if (str != NULL)
+			connman_dbus_dict_append_basic(dict, "StateIPv6",
+							DBUS_TYPE_STRING, &str);
+	}
 #endif
 
 	str = error2string(service->error);
@@ -3854,16 +3865,18 @@ static DBusMessage *set_property(DBusConnection *conn,
 			const char *val;
 			dbus_message_iter_get_basic(&entry, &val);
 			dbus_message_iter_next(&entry);
-#if defined TIZEN_TV_EXT
-			/* First unpack the DNS Config Method */
-			if(g_strcmp0(val, "manual") == 0) {
-				service->dns_config_method =
-					CONNMAN_DNSCONFIG_METHOD_MANUAL;
-				continue;
-			} else if(g_strcmp0(val, "dhcp") == 0) {
-				service->dns_config_method =
-					CONNMAN_DNSCONFIG_METHOD_DHCP;
-				continue;
+#ifdef TIZEN_EXT
+			if (TIZEN_TV_EXT) {
+				/* First unpack the DNS Config Method */
+				if(g_strcmp0(val, "manual") == 0) {
+					service->dns_config_method =
+						CONNMAN_DNSCONFIG_METHOD_MANUAL;
+					continue;
+				} else if(g_strcmp0(val, "dhcp") == 0) {
+					service->dns_config_method =
+						CONNMAN_DNSCONFIG_METHOD_DHCP;
+					continue;
+				}
 			}
 #endif
 			if (connman_inet_check_ipaddress(val) > 0) {

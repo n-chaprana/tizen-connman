@@ -489,8 +489,8 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 		return;
 	}
 
-#if defined TIZEN_TV_EXT
-	if (g_strcmp0(ident, "eeeeeeeeeeee") == 0) {
+#ifdef TIZEN_EXT
+	if (TIZEN_TV_EXT && g_strcmp0(ident, "eeeeeeeeeeee") == 0) {
 		DBG("Newlink event with Dummy MAC. Ignored!");
 		return;
 	}
