@@ -33,6 +33,9 @@ Requires(post):   systemd
 Requires(preun):  systemd
 Requires(postun): systemd
 Requires:         net-config
+Provides:       %{name}-profile_common = %{version}-%{release}
+Provides:       %{name}-profile_mobile = %{version}-%{release}
+Provides:       %{name}-profile_wearable = %{version}-%{release}
 
 %define upgrade_script_filename 500.connman_upgrade.sh
 %define upgrade_script_path /usr/share/upgrade/scripts
@@ -90,6 +93,24 @@ Requires:       %{name} = %{version}
 %description devel
 Header files and development files for connman.
 
+%package extension-tv
+Summary:        Connman service script for TV profile
+Requires:       %{name} = %{version}-%{release}
+Provides:       %{name}-profile_tv = %{version}-%{release}
+Conflicts:      %{name}-extension-ivi
+%description extension-tv
+Supplies Tizen TV profile systemd service scripts instead of the default one.
+This overwrites service script of %{name}.
+
+%package extension-ivi
+Summary:        Connman configuration for IVI profile
+Requires:       %{name} = %{version}-%{release}
+Provides:       %{name}-profile_ivi = %{version}-%{release}
+Conflicts:      %{name}-extension-tv
+%description extension-ivi
+Supplies Tizen IVI profile configuration instead of the default one.
+This overwrites conf file of %{name}.
+
 %prep
 %setup -q
 
@@ -138,17 +159,12 @@ mkdir -p %{buildroot}%{_libdir}/systemd/system/
 mkdir -p %{buildroot}%{_unitdir}
 %endif
 
-%if "%{profile}" == "tv"
-cp src/connman_tv.service %{buildroot}%{_libdir}/systemd/system/connman.service
 %if "%{?_lib}" == "lib64"
-cp src/connman_tv.service %{buildroot}%{_unitdir}/connman.service
-cp vpn/connman-vpn.service %{buildroot}%{_unitdir}/connman-vpn.service
-%endif
-%else
-%if "%{?_lib}" == "lib64"
+cp src/connman_tv.service %{buildroot}%{_unitdir}/connman.service.tv
 cp src/connman.service %{buildroot}%{_unitdir}/connman.service
 cp vpn/connman-vpn.service %{buildroot}%{_unitdir}/connman-vpn.service
-%endif
+%else
+cp src/connman_tv.service %{buildroot}%{_libdir}/systemd/system/connman.service.tv
 %endif
 
 mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
@@ -175,11 +191,9 @@ mkdir -p %{buildroot}%{_datadir}/dbus-1/system-services
 cp resources/usr/share/dbus-1/system-services/net.connman.service %{buildroot}%{_datadir}/dbus-1/system-services/net.connman.service
 mkdir -p %{buildroot}/etc/connman
 
-%if "%{profile}" == "ivi"
-cp src/main_ivi.conf %{buildroot}/etc/connman/main.conf
-%else
+cp src/main_ivi.conf %{buildroot}/etc/connman/main.conf.ivi
+cp src/main_tv.conf %{buildroot}/etc/connman/main.conf.tv
 cp src/main.conf %{buildroot}/etc/connman/main.conf
-%endif
 
 rm %{buildroot}%{_sysconfdir}/dbus-1/system.d/*.conf
 mkdir -p %{buildroot}%{_sysconfdir}/dbus-1/system.d/
@@ -271,4 +285,17 @@ systemctl daemon-reload
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %endif
 
-
+%post extension-tv
+mv -f %{_libdir}/systemd/system/connman.service.tv %{_libdir}/systemd/system/connman.service
+mv -f %{_sysconfdir}/connman/main.conf.tv %{_sysconfdir}/connman/main.conf
+%files extension-tv
+%attr(644,root,root) %{_sysconfdir}/connman/main.conf.tv
+%if "%{?_lib}" == "lib64"
+%attr(644,root,root) %{_unitdir}/connman.service.tv
+%else
+%attr(644,root,root) %{_libdir}/systemd/system/connman.service.tv
+%endif
+%post extension-ivi
+mv -f %{_sysconfdir}/connman/main.conf.ivi %{_sysconfdir}/connman/main.conf
+%files extension-ivi
+%attr(644,root,root) %{_sysconfdir}/connman/main.conf.ivi
