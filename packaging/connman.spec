@@ -142,6 +142,10 @@ mkdir -p %{buildroot}%{_unitdir}
 
 %if "%{profile}" == "tv"
 cp src/connman_tv.service %{buildroot}%{_libdir}/systemd/system/connman.service
+%if "%{?_lib}" == "lib64"
+cp src/connman_tv.service %{buildroot}%{_unitdir}/connman.service
+cp vpn/connman-vpn.service %{buildroot}%{_unitdir}/connman-vpn.service
+%endif
 %else
 %if "%{?_lib}" == "lib64"
 cp src/connman.service %{buildroot}%{_unitdir}/connman.service
