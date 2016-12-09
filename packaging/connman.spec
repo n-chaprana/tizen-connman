@@ -34,6 +34,7 @@ Requires(preun):  systemd
 Requires(postun): systemd
 Requires:         net-config
 
+%define upgrade_script_filename 500.connman_upgrade.sh
 %define upgrade_script_path /usr/share/upgrade/scripts
 
 %description
@@ -197,7 +198,7 @@ cp vpn/vpn-dbus.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus
 
 #OS Upgrade
 mkdir -p %{buildroot}%{upgrade_script_path}
-cp -f scripts/connman_upgrade.sh %{buildroot}%{upgrade_script_path}
+cp -f scripts/%{upgrade_script_filename} %{buildroot}%{upgrade_script_path}
 
 %post
 chsmack -a 'System' /%{_localstatedir}/lib/connman
@@ -235,7 +236,7 @@ systemctl daemon-reload
 %attr(644,root,root) %{_libdir}/systemd/system/sockets.target.wants/connman.socket
 %endif
 %{_datadir}/license/connman
-%{upgrade_script_path}/connman_upgrade.sh
+%{upgrade_script_path}/%{upgrade_script_filename}
 
 %files test
 %manifest connman.manifest
