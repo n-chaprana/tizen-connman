@@ -1386,7 +1386,8 @@ static void set_invalid_key_error(struct connman_network *network)
 	service = connman_service_lookup_from_network(network);
 
 #if defined TIZEN_EXT
-	__connman_service_set_favorite(service, false);
+	if (service)
+		__connman_service_set_favorite(service, false);
 #endif
 	__connman_service_indicate_error(service,
 					CONNMAN_SERVICE_ERROR_INVALID_KEY);
