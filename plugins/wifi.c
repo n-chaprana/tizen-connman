@@ -1183,8 +1183,11 @@ static int throw_wifi_scan(struct connman_device *device,
 
 	if (wifi->tethering)
 		return -EBUSY;
-
+#if defined TIZEN_EXT
+	if (connman_device_get_scanning(device) && !wifi->allow_full_scan)
+#else
 	if (connman_device_get_scanning(device))
+#endif
 		return -EALREADY;
 
 	connman_device_ref(device);
@@ -1298,11 +1301,13 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 	}
 
 	scanning = connman_device_get_scanning(device);
-
-	if (scanning) {
+#if defined TIZEN_EXT
+	if (scanning && !wifi->allow_full_scan)
+#else
+	if (scanning)
+#endif
 		connman_device_set_scanning(device,
 				CONNMAN_SERVICE_TYPE_WIFI, false);
-	}
 
 	if (result != -ENOLINK)
 #if defined TIZEN_EXT
