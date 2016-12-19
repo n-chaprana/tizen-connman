@@ -2611,6 +2611,14 @@ static void interface_state(GSupplicantInterface *interface)
 		wifi->assoc_retry_count = 0;
 
 		wifi->scan_pending_network = NULL;
+
+		/* should be cleared scanning flag */
+		bool scanning = connman_device_get_scanning(device);
+		if (scanning){
+			connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_WIFI, false);
+			connman_device_unref(device);
+		}
 #else
 		/* though it should be already stopped: */
 		stop_autoscan(device);
