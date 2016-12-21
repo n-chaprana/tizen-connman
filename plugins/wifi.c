@@ -1302,7 +1302,7 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 
 	scanning = connman_device_get_scanning(device);
 #if defined TIZEN_EXT
-	if (scanning && !wifi->allow_full_scan)
+	if (scanning && wifi && !wifi->allow_full_scan)
 #else
 	if (scanning)
 #endif
