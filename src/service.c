@@ -4789,9 +4789,11 @@ bool __connman_service_remove(struct connman_service *service)
 			__connman_provider_is_immutable(service->provider))
 		return false;
 
+#if !defined TIZEN_EXT
 	if (!service->favorite && service->state !=
 						CONNMAN_SERVICE_STATE_FAILURE)
 		return false;
+#endif
 
 	__connman_service_disconnect(service);
 
