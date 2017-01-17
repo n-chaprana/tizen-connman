@@ -1,12 +1,15 @@
 [Unit]
 Description=Connection service
+After=net-config.service
+DefaultDependencies=no
 
 [Service]
 Type=dbus
 BusName=net.connman
-RemainAfterExit=yes
-ExecStartPre=/usr/bin/dbus-send --system --dest=net.netconfig / net.netconfig.auto.activate
-ExecStart=/usr/sbin/connmand --noplugin vpn
+Restart=on-failure
+SmackProcessLabel=System
+ExecStart=@sbindir@/connmand -n --noplugin vpn
+StandardOutput=null
 CapabilityBoundingSet=~CAP_MAC_ADMIN
 CapabilityBoundingSet=~CAP_MAC_OVERRIDE
 

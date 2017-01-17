@@ -4,7 +4,7 @@
 
 Name:           connman
 Version:        1.29
-Release:        19
+Release:        20
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
