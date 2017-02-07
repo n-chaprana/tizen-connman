@@ -1403,6 +1403,17 @@ static void set_connect_error(struct connman_network *network)
 					CONNMAN_SERVICE_ERROR_CONNECT_FAILED);
 }
 
+static void set_blocked_error(struct connman_network *network)
+{
+	struct connman_service *service;
+
+	service = connman_service_lookup_from_network(network);
+
+	__connman_service_indicate_error(service,
+					CONNMAN_SERVICE_ERROR_BLOCKED);
+}
+
+
 #if defined TIZEN_EXT
 static void set_dhcp_error(struct connman_network *network)
 {
@@ -1477,6 +1488,11 @@ void connman_network_set_error(struct connman_network *network,
 		set_dhcp_error(network);
 		break;
 #endif
+
+	case CONNMAN_NETWORK_ERROR_BLOCKED:
+		set_blocked_error(network);
+		break;
+
 	}
 
 	__connman_network_disconnect(network);

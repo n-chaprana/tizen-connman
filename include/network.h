@@ -58,6 +58,8 @@ enum connman_network_error {
 #if defined TIZEN_EXT
 	CONNMAN_NETWORK_ERROR_DHCP_FAIL       = 5,
 #endif
+	CONNMAN_NETWORK_ERROR_BLOCKED	      = 6,
+
 };
 
 #define CONNMAN_NETWORK_PRIORITY_LOW      -100
