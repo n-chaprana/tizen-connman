@@ -4385,7 +4385,11 @@ static void interface_select_network_result(const char *error,
 
 	err = 0;
 	if (error) {
+#if defined TIZEN_EXT
+		SUPPLICANT_DBG("SelectNetwork errorFreq %s", error);
+#else
 		SUPPLICANT_DBG("SelectNetwork error %s", error);
+#endif
 		err = parse_supplicant_error(iter);
 	}
 
@@ -4403,9 +4407,15 @@ static void interface_select_network_params(DBusMessageIter *iter,
 {
 	struct interface_connect_data *data = user_data;
 	GSupplicantInterface *interface = data->interface;
+#if defined TIZEN_EXT
+	GSupplicantSSID *ssid = data->ssid;
+#endif
 
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_OBJECT_PATH,
 					&interface->network_path);
+#if defined TIZEN_EXT
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_INT32, &ssid->freq);
+#endif
 }
 
 static void interface_add_network_result(const char *error,
@@ -4428,11 +4438,23 @@ static void interface_add_network_result(const char *error,
 	g_free(interface->network_path);
 	interface->network_path = g_strdup(path);
 
+#if defined TIZEN_EXT
+	SUPPLICANT_DBG(".Interface.SelectNetworkFreq");
+#endif
+
+#if defined TIZEN_EXT
+	supplicant_dbus_method_call(data->interface->path,
+			SUPPLICANT_INTERFACE ".Interface", "SelectNetworkFreq",
+			interface_select_network_params,
+			interface_select_network_result, data,
+			interface);
+#else
 	supplicant_dbus_method_call(data->interface->path,
 			SUPPLICANT_INTERFACE ".Interface", "SelectNetwork",
 			interface_select_network_params,
 			interface_select_network_result, data,
 			interface);
+#endif
 
 	return;
 

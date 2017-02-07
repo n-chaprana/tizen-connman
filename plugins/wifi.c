@@ -2168,6 +2168,9 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 #if defined TIZEN_EXT
 	ssid->bssid = connman_network_get_bssid(network);
 #endif
+#if defined TIZEN_EXT
+	ssid->freq = connman_network_get_frequency(network);
+#endif
 
 	if (connman_setting_get_bool("BackgroundScanning"))
 		ssid->bgscan = BGSCAN_DEFAULT;
