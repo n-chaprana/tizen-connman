@@ -3841,6 +3841,7 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 	int option;
 	int sd_num = 0;
 	int rv;
+	int is_socket_inet = 0;
 #endif
 
 	DBG("family %d protocol %d index %d", family, protocol, index);
@@ -3876,11 +3877,12 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 		rv = sd_is_socket_inet(sk, family, type, -1, 53);
 		if(rv > 0){
 			DBG("socket fd (%d) is passed by systemd", sk);
+			is_socket_inet = 1;
 			break;
 		}
 	}
 
-	if(sk >= SD_LISTEN_FDS_START+sd_num){
+	if (!is_socket_inet) {
 		DBG("socket fd is not matched what connman requests");
 		return NULL;
 	}
