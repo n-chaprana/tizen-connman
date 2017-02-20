@@ -3126,21 +3126,6 @@ static int parse_request(unsigned char *buf, int len,
 		remain -= label_len + 1;
 	}
 
-#if defined TIZEN_EXT
-	/* parse DNS query type either A or AAAA
-	 * enforce to drop AAAA temporarily (IPv6 not supported)
-	 */
-	if (last_label != NULL) {
-		uint16_t *type_p = (uint16_t *)last_label;
-		uint16_t type = ntohs(*type_p);
-
-		if (type == 0x1c) {
-			DBG("query %s is type AAAA(0x%x)", name, type);
-			return -ENOENT;
-		}
-	}
-#endif
-
 	if (last_label && arcount && remain >= 9 && last_label[4] == 0 &&
 				!memcmp(last_label + 5, opt_edns0_type, 2)) {
 		uint16_t edns0_bufsize;
@@ -3665,41 +3650,6 @@ static gboolean tcp6_listener_event(GIOChannel *channel, GIOCondition condition,
 				&ifdata->tcp6_listener_watch);
 }
 
-#if defined TIZEN_EXT
-/* Temporarily disable AAAA type to enhance performance (IPv6 not supported) */
-static void __send_response_not_implemented(int sk, unsigned char *buf, int len,
-				const struct sockaddr *to, socklen_t tolen,
-				int protocol)
-{
-	struct domain_hdr *hdr;
-	int err, offset = protocol_offset(protocol);
-
-	DBG("sk %d", sk);
-
-	if (offset < 0)
-		return;
-
-	if (len < 12)
-		return;
-
-	hdr = (void *) (buf + offset);
-
-	DBG("id 0x%04x qr %d opcode %d", hdr->id, hdr->qr, hdr->opcode);
-
-	hdr->qr = 1;
-	hdr->rcode = 4;
-
-	hdr->ancount = 0;
-	hdr->nscount = 0;
-	hdr->arcount = 0;
-
-	err = sendto(sk, buf, len, MSG_NOSIGNAL, to, tolen);
-	if (err < 0)
-		connman_error("Failed to send DNS response to %d: %s",
-				sk, strerror(errno));
-}
-#endif
-
 static bool udp_listener_event(GIOChannel *channel, GIOCondition condition,
 				struct listener_data *ifdata, int family,
 				guint *listener_watch)
@@ -3746,16 +3696,6 @@ static bool udp_listener_event(GIOChannel *channel, GIOCondition condition,
 
 	err = parse_request(buf, len, query, sizeof(query));
 	if (err < 0 || (g_slist_length(server_list) == 0)) {
-#if defined TIZEN_EXT
-		if (err == -ENOENT) {
-			/* Temporarily disable AAAA type to enhance performance
-			 * (IPv6 not supported)
-			 */
-			__send_response_not_implemented(sk, buf, len, client_addr,
-									*client_addr_len, IPPROTO_UDP);
-			return TRUE;
-		}
-#endif
 		send_response(sk, buf, len, client_addr,
 				*client_addr_len, IPPROTO_UDP);
 		return true;
