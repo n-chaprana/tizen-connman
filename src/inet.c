@@ -1340,6 +1340,37 @@ static int icmpv6_recv(int fd, gpointer user_data)
 		return -errno;
 	}
 
+#if defined TIZEN_EXT
+	/* Set Received Source Address from router as IPv6 Gateway Address */
+	char src_addr[INET6_ADDRSTRLEN];
+	if(inet_ntop(AF_INET6, &(saddr.sin6_addr), src_addr, INET6_ADDRSTRLEN)
+			== NULL) {
+		xs_cleanup(data);
+		return -errno;
+	}
+	DBG("Received Source Address %s from router", src_addr);
+
+	/* icmpv6_recv() function can be called in two scenarios :
+	 * 1. When __connman_inet_ipv6_send_rs() is called from check_dhcpv6()
+	 * 2. When __connman_inet_ipv6_send_rs() is called from
+	 * __connman_6to4_probe()
+	 * In the second case it is not  required to set DHCPv6 Gateway  Address
+	 * as DHCPv6 was not started and  network structure was not passed as
+	 * user_data. If it is tried  to add Source Address as  Gateway Address
+	 * then it will lead to  crash because of  user_data being ip_address
+	 * instead of network structure. So Adding Gateway Address in case 1st
+	 * case only.
+	 */
+	char *address = data->user_data;
+	int err = 0;
+	unsigned char buffer[sizeof(struct in6_addr)] = {0, };
+	/* Checking if user_data is an ip_address */
+	err = inet_pton(AF_INET, address, buffer);
+	/* Setting Received Source Address from
+	 * router as Gateway Address */
+	if(err <= 0)
+		__connman_network_set_auto_ipv6_gateway(src_addr, data->user_data);
+#endif
 	hdr = (struct nd_router_advert *)buf;
 	DBG("code %d len %zd hdr %zd", hdr->nd_ra_code, len,
 				sizeof(struct nd_router_advert));

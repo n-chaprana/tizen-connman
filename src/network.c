@@ -1729,6 +1729,35 @@ int __connman_network_clear_ipconfig(struct connman_network *network,
 	return 0;
 }
 
+#if defined TIZEN_EXT
+void __connman_network_set_auto_ipv6_gateway(char *gateway, void *user_data)
+{
+	DBG("");
+
+	struct connman_network *network = user_data;
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig = NULL;
+	int err;
+
+	service = connman_service_lookup_from_network(network);
+	if (service == NULL)
+		return;
+
+	ipconfig = __connman_service_get_ipconfig(service, AF_INET6);
+	if (ipconfig == NULL)
+		return;
+
+	__connman_ipconfig_set_gateway(ipconfig, gateway);
+	err = __connman_ipconfig_gateway_add(ipconfig, service);
+
+	if(err == 0)
+		__connman_connection_gateway_activate(service,
+				CONNMAN_IPCONFIG_TYPE_IPV6);
+
+	return;
+}
+#endif
+
 int __connman_network_enable_ipconfig(struct connman_network *network,
 				struct connman_ipconfig *ipconfig)
 {

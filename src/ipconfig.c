@@ -410,7 +410,20 @@ static void free_ipdevice(gpointer data)
 static void __connman_ipconfig_lower_up(struct connman_ipdevice *ipdevice)
 {
 	DBG("ipconfig ipv4 %p ipv6 %p", ipdevice->config_ipv4,
-					ipdevice->config_ipv6);
+			ipdevice->config_ipv6);
+#if defined TIZEN_EXT
+	if (ipdevice->config_ipv6 != NULL &&
+			ipdevice->config_ipv6->enabled == TRUE)
+		return;
+
+	char *ifname = connman_inet_ifname(ipdevice->index);
+
+	if (__connman_device_isfiltered(ifname) == FALSE) {
+		ipdevice->ipv6_enabled = get_ipv6_state(ifname);
+		set_ipv6_state(ifname, FALSE);
+	}
+	g_free(ifname);
+#endif
 }
 
 static void __connman_ipconfig_lower_down(struct connman_ipdevice *ipdevice)
@@ -1708,6 +1721,11 @@ int __connman_ipconfig_disable(struct connman_ipconfig *ipconfig)
 	if (ipdevice->config_ipv6 == ipconfig) {
 		ipconfig_list = g_list_remove(ipconfig_list, ipconfig);
 
+#if defined TIZEN_EXT
+		if (ipdevice->config_ipv6->method ==
+				CONNMAN_IPCONFIG_METHOD_AUTO)
+			disable_ipv6(ipdevice->config_ipv6);
+#endif
 		connman_ipaddress_clear(ipdevice->config_ipv6->system);
 		__connman_ipconfig_unref(ipdevice->config_ipv6);
 		ipdevice->config_ipv6 = NULL;
@@ -2123,7 +2141,10 @@ int __connman_ipconfig_set_config(struct connman_ipconfig *ipconfig,
 
 	case CONNMAN_IPCONFIG_METHOD_OFF:
 		ipconfig->method = method;
-
+#if defined TIZEN_EXT
+		if (ipconfig->type == CONNMAN_IPCONFIG_TYPE_IPV6)
+			disable_ipv6(ipconfig);
+#endif
 		break;
 
 	case CONNMAN_IPCONFIG_METHOD_AUTO:
@@ -2133,7 +2154,9 @@ int __connman_ipconfig_set_config(struct connman_ipconfig *ipconfig,
 		ipconfig->method = method;
 		if (privacy_string)
 			ipconfig->ipv6_privacy_config = privacy;
-
+#if defined TIZEN_EXT
+		enable_ipv6(ipconfig);
+#endif
 		break;
 
 	case CONNMAN_IPCONFIG_METHOD_MANUAL:

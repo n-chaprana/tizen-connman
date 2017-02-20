@@ -169,6 +169,9 @@ int __connman_inet_ipv6_send_rs(int index, int timeout,
 			__connman_inet_rs_cb_t callback, void *user_data);
 int __connman_inet_ipv6_send_ra(int index, struct in6_addr *src_addr,
 				GSList *prefixes, int router_lifetime);
+#if defined TIZEN_EXT
+void __connman_network_set_auto_ipv6_gateway(char *gateway, void *user_data);
+#endif
 
 typedef void (*__connman_inet_ns_cb_t) (struct nd_neighbor_advert *reply,
 					unsigned int length,
