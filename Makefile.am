@@ -407,6 +407,7 @@ DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles \
 				--enable-hh2serial-gps \
 				--enable-openconnect \
 				--enable-openvpn \
+				--enable-ipsec \
 				--enable-vpnc \
 				--enable-session-policy-local \
 				--enable-nmcompat \

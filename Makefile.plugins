@@ -108,6 +108,25 @@ vpn_plugins_openvpn_la_LDFLAGS = $(plugin_ldflags)
 endif
 endif
 
+if IPSEC
+if IPSEC_BUILTIN
+builtin_vpn_modules += ipsec
+builtin_vpn_sources += vpn/plugins/ipsec.h vpn/plugins/ipsec.c
+builtin_vpn_sources += vpn/plugins/vici-client.h vpn/plugins/vici-client.c
+builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
+builtin_vpn_cflags += -DIPSEC=\"@IPSEC@\"
+else
+vpn_plugin_LTLIBRARIES += vpn/plugins/ipsec.la
+vpn_plugin_objects += $(plugins_ipsec_la_OBJECTS)
+vpn_plugins_ipsec_la_SOURCES = vpn/plugins/vpn.h vpn/plugins/vpn.c \
+						vpn/plugins/ipsec.c
+vpn_plugins_ipsec_la_CFLAGS = $(plugin_cflags) -DIPSEC=\"@IPSEC@\" \
+					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
+					-DSCRIPTDIR=\""$(build_scriptdir)"\"
+vpn_plugins_ipsec_la_LDFLAGS = $(plugin_ldflags)
+endif
+endif
+
 if VPNC
 if VPNC_BUILTIN
 builtin_vpn_modules += vpnc
@@ -223,6 +242,12 @@ if OPENVPN
 script_PROGRAMS += scripts/openvpn-script
 
 scripts_openvpn_script_LDADD = @DBUS_LIBS@
+endif
+
+if IPSEC
+script_PROGRAMS += scripts/ipsec-script
+
+scripts_ipsec_script_LDADD = @DBUS_LIBS@
 endif
 
 if NMCOMPAT
