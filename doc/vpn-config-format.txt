@@ -195,6 +195,35 @@ PPTP VPN supports following options (see pptp(8) and pppd(8) for details)
  PPPD.RequirMPPEStateful mppe-stateful    Allow MPPE to use stateful mode (O)
  PPPD.NoVJ           no-vj-comp           No Van Jacobson compression (O)
 
+IPsec VPN supports following options (see swanctl.conf(5) for details):
+ Option name                   IPSec config value    Description
+ IPsec.Version                 Version               IKE major version to use for connection (M)
+ IPsec.LeftAddrs               local_addrs           Local address(es) to use for IKE communication (M)
+ IPsec.RightAddrs              remote_addrs          Remote address(es) to use for IKE communication (M)
+
+
+ IPsec.LocalAuth               local.auth            Authentication to perform locally (M)
+ IPsec.LocalCerts              local.certs           Certificate candidate to use for authentication (O)
+ IPsec.LocalID                 local.id              IKE identity to use for authentication round (O)
+ IPsec.LocalXauthID            local.xauth_id        Client XAuth username used in the XAuth exchange (O)
+ IPsec.LocalXauthAuth          local-xauth.auth      Xauth round authentication to perform locally (O)
+ IPsec.LocalXauthXauthID       local-xauth.xauth_id  Xauth round client XAuth username used in the XAuth exchange (O)
+
+ IPsec.RemoteAuth              remote.auth           Authentication to expect from remote (M)
+ IPsec.RemoteCerts             remote.certs          Certificate candidate to use for authentication (O)
+ IPsec.RemoteID                remote.id             IKE identity to use for authentication round (O)
+ IPsec.RemoteXauthAuth         remote-xauth.auth     Xauth round authentication to expect from remote (O)
+ IPsec.ChildrenLocalTs         children.local_ts     local selectors to include in CHILD_SA (O)
+ IPsec.ChildrenRemoteTs        children.remote_ts    Remote selectors to include in CHILD_SA (O)
+
+ IPsec.IkeData                 secret.data           IKE PSK raw shared key data
+ IPsec.IkeOwners               secret.Owners         list of shared key owner identities
+ IPsec.XauthData               secret.data           XAUTH raw shared key data
+ IPsec.XauthOwners             secret.Owners         list of shared key owner identities
+
+ IPsec.CertType                cert.type             certificate type, X509|X509_AC|X509_CRL
+ IPsec.CertFlag                cert.flag             X.509 certificate flag, NONE|CA|AA|OCSP
+ IPsec.CertData                cert.data             PEM or DER encoded certificate data
 
 Example
 =======

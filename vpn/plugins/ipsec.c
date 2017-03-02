@@ -50,26 +50,37 @@ static DBusConnection *connection;
 struct {
 	const char *cm_opt;
 	const char *vici_key;
-	const char *section;
+	const char *subsection;
+	vici_section_add_element add_elem;
 } ipsec_conn_options[] = {
-	{"IPsec.Version", "version", NULL},
-	{"IPsec.LocalAddrs", "local_addrs", NULL},
-	{"IPsec.RemoteAddrs", "remote_addrs", NULL},
-	{"IPsec.LocalAuth", "auth", "local"},
-	{"IPsec.RemoteAuth", "auth", "remote"},
+	{"IPsec.Version", "version", NULL, vici_section_add_kv},
+	{"IPsec.LeftAddrs", "local_addrs", NULL, vici_section_add_kvl},
+	{"IPsec.RightAddrs", "remote_addrs", NULL, vici_section_add_kvl},
+
+	{"IPsec.LocalAuth", "auth", "local", vici_section_add_kv},
+	{"IPsec.LocalCerts", "certs", "local", vici_section_add_kv},
+	{"IPsec.LocalID", "id", "local", vici_section_add_kv},
+	{"IPsec.LocalXauthID", "xauth_id", "local", vici_section_add_kv},
+	{"IPsec.LocalXauthAuth", "auth", "local-xauth", vici_section_add_kv},
+	{"IPsec.LocalXauthXauthID", "xauth_id", "local-xauth", vici_section_add_kv},
+	{"IPsec.RemoteAuth", "auth", "remote", vici_section_add_kv},
+	{"IPsec.RemoteCerts", "certs", "remote", vici_section_add_kv},
+	{"IPsec.RemoteID", "id", "remote", vici_section_add_kv},
+	{"IPsec.RemoteXauthID", "xauth_id", "remote", vici_section_add_kv},
+	{"IPsec.RemoteXauthAuth", "auth", "remote-xauth", vici_section_add_kv},
+	{"IPsec.RemoteXauthXauthID", "xauth_id", "remote-xauth", vici_section_add_kv},
+	{"IPsec.ChildrenLocalTs", "local_ts", "children", vici_section_add_kvl},
+	{"IPsec.ChildrenRemoteTs", "remote_ts", "children", vici_section_add_kvl},
 };
 
-/*
- * IPsec.LocalID
- * IPsec.RemoteTS
- */
 struct {
 	const char *cm_opt;
 	const char *vici_type;
 } ipsec_shared_options[] = {
-	{"IPsec.LocalXauthID", NULL},
-	{"IPsec.XauthSecret", "XAUTH"},
-	{"IPsec.IKESecret", "IKE"},
+	{"IPsec.IkeData", "data"},
+	{"IPsec.IkeOwners", "owners"},
+	{"IPsec.XauthData", "data"},
+	{"IPsec.XauthOwners", "owners"},
 };
 
 struct {
@@ -77,93 +88,14 @@ struct {
 	const char *vici_type;
 	const char *vici_flag;
 } ipsec_cert_options[] = {
-	{"IPsec.LocalCert", "X509", NULL},
-	{"IPsec.RemoteCert", "X509", NULL},
-	{"IPsec.CACert", "X509", "CA"},
+	{"IPsec.CertType", "type", NULL},
+	{"IPsec.CertFlag", "flag", NULL},
+	{"IPsec.CertData", "data", NULL},
 };
 
 
 static int ipsec_notify(DBusMessage *msg, struct vpn_provider *provider)
 {
-	return 0;
-}
-
-static void vici_destroy_section(struct section* sect)
-{
-	g_hash_table_destroy(sect->elm);
-	g_hash_table_destroy(sect->subsection);
-	g_free(sect);
-}
-
-static void free_section(gpointer data)
-{
-	struct section* sect = (struct section*)data;
-	vici_destroy_section(sect);
-}
-
-static struct section* vici_create_section(const char* name)
-{
-	struct section* sect;
-
-	sect = g_try_new0(struct section, 1);
-	if (!sect) {
-		connman_error("Failed to create section");
-		return NULL;
-	}
-
-	sect->name = g_strdup(name);
-	sect->elm = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-	sect->subsection = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, free_section);
-	return sect;
-}
-
-static int vici_section_add_kv(struct section* sect, const char* key, const char* value)
-{
-	if (sect == NULL || key == NULL || value == NULL) {
-		connman_error("invalid parameter");
-		return -1;
-	}
-
-	g_hash_table_insert(sect->elm, g_strdup(key), g_strdup(value));
-	return 0;
-}
-
-static int vici_section_add_subsection(struct section* sect, const char* name, struct section* child)
-{
-	if (sect == NULL || name == NULL || child == NULL) {
-		connman_error("invalid parameter");
-		return -1;
-	}
-
-	g_hash_table_insert(sect->subsection, g_strdup(name), child);
-	return 0;
-}
-
-
-static struct section* vici_section_get_subsection(struct section* sect, const char* name)
-{
-	struct section* sub = g_hash_table_lookup(sect->subsection, name);
-	if (sub == NULL) {
-		sub = vici_create_section(name);
-		vici_section_add_subsection(sect, name, sub);
-	}
-	return sub;
-}
-
-static int vici_section_add_element(struct section* sect, const char* key,
-		const char* value, const char* subsection)
-{
-	struct section* target = sect;
-
-	if (sect == NULL || key == NULL) {
-		connman_error("invalid parameter");
-		return -1;
-	}
-
-	if (subsection)
-		target = vici_section_get_subsection(sect, subsection);
-
-	vici_section_add_kv(target, key, value);
 	return 0;
 }
 
@@ -176,11 +108,11 @@ static int ipsec_is_same_auth(const char* req, const char* target)
 
 static int vici_load_cert(const char* type, const char* flag, const char* data)
 {
-	struct section *sect;
-	sect = vici_create_section("");
-	vici_section_add_element(sect, "type", type, NULL);
-	vici_section_add_element(sect, "flag", flag, NULL);
-	vici_section_add_element(sect, "data", data, NULL);
+	VICISection *sect;
+	sect = vici_create_section(NULL);
+	vici_section_add_kv(sect, "type", type, NULL);
+	vici_section_add_kv(sect, "flag", flag, NULL);
+	vici_section_add_kv(sect, "data", data, NULL);
 
 	vici_client_send_request(VICI_REQUEST_LOAD_CERT, sect);
 
@@ -194,7 +126,7 @@ static int ipsec_load_conn(struct vpn_provider *provider)
 	const char *key;
 	const char *value;
 	const char *subsection;
-	struct section *sect;
+	VICISection *sect;
 	int i;
 
 	value = vpn_provider_get_string(provider, "Name");
@@ -203,8 +135,8 @@ static int ipsec_load_conn(struct vpn_provider *provider)
 	for (i = 0; i < (int)ARRAY_SIZE(ipsec_conn_options); i++) {
 		key = ipsec_conn_options[i].vici_key;
 		value = vpn_provider_get_string(provider, ipsec_conn_options[i].cm_opt);
-		subsection = ipsec_conn_options[i].section;
-		vici_section_add_element(sect, key, value, subsection);
+		subsection = ipsec_conn_options[i].subsection;
+		ipsec_conn_options[i].add_elem(sect, key, value, subsection);
 	}
 
 	vici_client_send_request(VICI_REQUEST_LOAD_CONN, sect);
@@ -214,33 +146,49 @@ static int ipsec_load_conn(struct vpn_provider *provider)
 	return 0;
 }
 
-static int ipsec_load_shared(struct vpn_provider *provider)
+static int ipsec_load_shared_psk(struct vpn_provider *provider)
 {
-	const char *type;
 	const char *data;
 	const char *owner;
-	const char *auth_type;
-	struct section *sect;
+	VICISection *sect;
 
-	sect = vici_create_section("");
+	data = vpn_provider_get_string(provider, "IPsec.IkeData");
+	owner = vpn_provider_get_string(provider, "IPsec.IkeOwners");
 
-	auth_type = vpn_provider_get_string(provider, "IPsec.LocalAuth");
-	if (ipsec_is_same_auth(auth_type, IPSEC_AUTH_PSK)) {
-		type = VICI_SHARED_TYPE_PSK;
-		data = vpn_provider_get_string(provider, "IPsec.IKESecret");
-	} else if (ipsec_is_same_auth(auth_type, IPSEC_AUTH_XAUTH)) {
-		type = VICI_SHARED_TYPE_XAUTH;
-		data = vpn_provider_get_string(provider, "IPsec.XauthSecret");
-	} else {
-		connman_error("invalid auth type: %s", auth_type);
-		return -1;
-	}
+	if (!data)
+		return 0;
 
-	owner = vpn_provider_get_string(provider, "IPsec.LocalXauthID");
+	sect = vici_create_section(NULL);
 
-	vici_section_add_element(sect, "type", type, NULL);
-	vici_section_add_element(sect, "data", data, NULL);
-	vici_section_add_element(sect, "owner", owner, NULL);
+	vici_section_add_kv(sect, "type", VICI_SHARED_TYPE_PSK, NULL);
+	vici_section_add_kv(sect, "data", data, NULL);
+	vici_section_add_kvl(sect, "owners", owner, NULL);
+
+	vici_client_send_request(VICI_REQUEST_LOAD_SHARED, sect);
+
+	vici_destroy_section(sect);
+
+	return 0;
+}
+
+
+static int ipsec_load_shared_xauth(struct vpn_provider *provider)
+{
+	const char *data;
+	const char *owner;
+	VICISection *sect;
+
+	data = vpn_provider_get_string(provider, "IPsec.XauthData");
+	owner = vpn_provider_get_string(provider, "IPsec.XauthOwners");
+
+	if (!data)
+		return 0;
+
+	sect = vici_create_section(NULL);
+
+	vici_section_add_kv(sect, "type", VICI_SHARED_TYPE_XAUTH, NULL);
+	vici_section_add_kv(sect, "data", data, NULL);
+	vici_section_add_kvl(sect, "owners", owner, NULL);
 
 	vici_client_send_request(VICI_REQUEST_LOAD_SHARED, sect);
 
@@ -300,11 +248,16 @@ static int ipsec_connect(struct vpn_provider *provider,
 	IPSEC_ERROR_CHECK_GOTO(err, done, "load-conn failed");
 
 	/*
-	 * Send the load-shared command for PSK or XAUTH
+	 * Send the load-shared command for PSK
 	 */
-	err = ipsec_load_shared(provider);
+	err = ipsec_load_shared_psk(provider);
 	IPSEC_ERROR_CHECK_GOTO(err, done, "load-shared failed");
 
+	/*
+	 * Send the load-shared command for XAUTH
+	 */
+	err = ipsec_load_shared_xauth(provider);
+	IPSEC_ERROR_CHECK_GOTO(err, done, "load-shared failed");
 	/*
 	 * Send the load-cert command
 	 */

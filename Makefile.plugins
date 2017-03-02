@@ -119,7 +119,7 @@ else
 vpn_plugin_LTLIBRARIES += vpn/plugins/ipsec.la
 vpn_plugin_objects += $(plugins_ipsec_la_OBJECTS)
 vpn_plugins_ipsec_la_SOURCES = vpn/plugins/vpn.h vpn/plugins/vpn.c \
-						vpn/plugins/ipsec.c
+						vpn/plugins/ipsec.c vpn/plugins/vici-client.c
 vpn_plugins_ipsec_la_CFLAGS = $(plugin_cflags) -DIPSEC=\"@IPSEC@\" \
 					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 					-DSCRIPTDIR=\""$(build_scriptdir)"\"

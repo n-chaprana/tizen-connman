@@ -70,9 +70,9 @@ OpenVPN support for Connman.
 
 %if %{with connman_ipsec}
 %package plugin-ipsec
-Summary:        Openvpn Support for Connman
+Summary:        IPsec Support for Connman
 Requires:       %{name} = %{version}
-Requires:       ipsec
+Requires:       strongswan
 
 %description plugin-ipsec
 OpenVPN support for Connman.

@@ -115,7 +115,7 @@ AC_ARG_ENABLE(ipsec,
 			[enable_ipsec=${enableval}], [enable_ipsec="no"])
 if (test "${enable_ipsec}" != "no"); then
 	if (test -z "${path_ipsec}"); then
-		AC_PATH_PROG(IPSEC, [ipsec], [], $PATH:/sbin:/usr/sbin)
+		AC_PATH_PROG(IPSEC, [charon], [/usr/bin/charon], $PATH:/usr/bin)
 		if (test -z "${IPSEC}"); then
 			AC_MSG_ERROR(ipsec binary not found)
 		fi

@@ -30,10 +30,4 @@
 	} \
 } while (0)
 
-struct section {
-	const char *name;
-	GHashTable *elm;
-	GHashTable *subsection;
-};
-
 #endif /* __CONNMAN_VPND_PLUGIN_IPSEC_H */
