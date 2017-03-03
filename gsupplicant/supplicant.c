@@ -559,6 +559,20 @@ static void callback_peer_request(GSupplicantPeer *peer)
 	callbacks_pointer->peer_request(peer);
 }
 
+static void callback_disconnect_reason_code(GSupplicantInterface *interface,
+					int reason_code)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->disconnect_reasoncode)
+		return;
+
+	if (reason_code != 0)
+		callbacks_pointer->disconnect_reasoncode(interface,
+							reason_code);
+}
+
 static void remove_group(gpointer data)
 {
 	GSupplicantGroup *group = data;
@@ -2288,17 +2302,12 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 	} else if (g_strcmp0(key, "Networks") == 0) {
 		supplicant_dbus_array_foreach(iter, interface_network_added,
 								interface);
-#if defined TIZEN_EXT
 	} else if (g_strcmp0(key, "DisconnectReason") == 0) {
-		int disconnect_reason = 0;
-
-		dbus_message_iter_get_basic(iter, &disconnect_reason);
-		interface->disconnect_reason = disconnect_reason;
-
-		SUPPLICANT_DBG("disconnect reason (%d)",
-				interface->disconnect_reason);
-
-#endif
+		int reason_code;
+		if (dbus_message_iter_get_arg_type(iter) != DBUS_TYPE_INVALID) {
+			dbus_message_iter_get_basic(iter, &reason_code);
+			callback_disconnect_reason_code(interface, reason_code);
+		}
 	} else
 		SUPPLICANT_DBG("key %s type %c",
 				key, dbus_message_iter_get_arg_type(iter));
@@ -5704,23 +5713,6 @@ int g_supplicant_interface_remove_network(GSupplicantInterface *interface)
 	data->interface = interface;
 
 	return network_remove(data);
-}
-
-int g_supplicant_interface_get_disconnect_reason(GSupplicantInterface *interface)
-{
-	int reason_code = 0;
-
-	SUPPLICANT_DBG("");
-
-	if (interface == NULL)
-		return -EINVAL;
-
-	if (system_available == FALSE)
-		return -EFAULT;
-
-	reason_code = interface->disconnect_reason;
-
-	return reason_code;
 }
 #endif
 

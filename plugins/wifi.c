@@ -134,7 +134,6 @@ struct wifi_data {
 	bool allow_full_scan;
 #endif
 	int disconnect_code;
-
 };
 
 #if defined TIZEN_EXT
@@ -2638,6 +2637,7 @@ static void interface_state(GSupplicantInterface *interface)
 			break;
 
 		connman_network_set_connected(network, true);
+		wifi->disconnect_code = 0;
 		break;
 
 	case G_SUPPLICANT_STATE_DISCONNECTED:
@@ -2663,10 +2663,6 @@ static void interface_state(GSupplicantInterface *interface)
 						network, wifi))
 			break;
 
-#if defined TIZEN_EXT
-		wifi->disconnect_code = g_supplicant_interface_get_disconnect_reason(wifi->interface);
-		DBG("Disconnect Reason code %d", wifi->disconnect_code);
-#endif
 		/* See table 8-36 Reason codes in IEEE Std 802.11 */
 		switch (wifi->disconnect_code) {
 		case 1: /* Unspecified reason */
@@ -3402,6 +3398,17 @@ static void debug(const char *str)
 		connman_debug("%s", str);
 }
 
+static void disconnect_reasoncode(GSupplicantInterface *interface,
+				int reasoncode)
+{
+	struct wifi_data *wifi = g_supplicant_interface_get_data(interface);
+
+	if (wifi != NULL) {
+		wifi->disconnect_code = reasoncode;
+	}
+}
+
+
 static const GSupplicantCallbacks callbacks = {
 	.system_ready		= system_ready,
 	.system_killed		= system_killed,
@@ -3424,6 +3431,7 @@ static const GSupplicantCallbacks callbacks = {
 	.system_power_off	= system_power_off,
 	.network_merged	= network_merged,
 #endif
+	.disconnect_reasoncode  = disconnect_reasoncode,
 	.debug			= debug,
 };
 
