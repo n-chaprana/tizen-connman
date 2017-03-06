@@ -216,8 +216,8 @@ IPsec VPN supports following options (see swanctl.conf(5) for details):
  IPsec.ChildrenLocalTs         children.local_ts     local selectors to include in CHILD_SA (O)
  IPsec.ChildrenRemoteTs        children.remote_ts    Remote selectors to include in CHILD_SA (O)
 
- IPsec.IkeData                 secret.data           IKE PSK raw shared key data
- IPsec.IkeOwners               secret.Owners         list of shared key owner identities
+ IPsec.IKEData                 secret.data           IKE PSK raw shared key data
+ IPsec.IKEOwners               secret.Owners         list of shared key owner identities
  IPsec.XauthData               secret.data           XAUTH raw shared key data
  IPsec.XauthOwners             secret.Owners         list of shared key owner identities
 

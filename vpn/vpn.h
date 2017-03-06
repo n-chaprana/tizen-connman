@@ -71,8 +71,11 @@ int __vpn_ipconfig_init(void);
 void __vpn_ipconfig_cleanup(void);
 
 #include "vpn-provider.h"
-
+#if !defined TIZEN_EXT
 char *__vpn_provider_create_identifier(const char *host, const char *domain);
+#else
+char *__vpn_provider_create_identifier(const char *host, const char *domain, const char *name);
+#endif
 bool __vpn_provider_check_routes(struct vpn_provider *provider);
 int __vpn_provider_append_user_route(struct vpn_provider *provider,
 				int family, const char *network,

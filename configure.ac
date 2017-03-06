@@ -114,6 +114,14 @@ AC_ARG_ENABLE(ipsec,
 	AC_HELP_STRING([--enable-ipsec], [enable ipsec support]),
 			[enable_ipsec=${enableval}], [enable_ipsec="no"])
 if (test "${enable_ipsec}" != "no"); then
+	PKG_CHECK_MODULES(GIO, gio-2.0 >= 2.28, dummy=yes,
+					AC_MSG_ERROR(GIO >= 2.28 is required))
+	AC_SUBST(GIO_CFLAGS)
+	AC_SUBST(GIO_LIBS)
+	PKG_CHECK_MODULES(OPENSSL, openssl, dummy=yes,
+					AC_MSG_ERROR(openssl library is required))
+	AC_SUBST(OPENSSL_CFLAGS)
+	AC_SUBST(OPENSSL_LIBS)
 	if (test -z "${path_ipsec}"); then
 		AC_PATH_PROG(IPSEC, [charon], [/usr/bin/charon], $PATH:/usr/bin)
 		if (test -z "${IPSEC}"); then

@@ -216,6 +216,7 @@ void connman_error(const char *format, ...)
 	vsyslog(LOG_ERR, format, ap);
 
 	va_end(ap);
+	fflush(log_file);
 }
 
 /**
@@ -234,6 +235,7 @@ void connman_debug(const char *format, ...)
 	vsyslog(LOG_DEBUG, format, ap);
 
 	va_end(ap);
+	fflush(log_file);
 }
 
 static void print_backtrace(unsigned int offset)

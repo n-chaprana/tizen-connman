@@ -14,6 +14,7 @@ Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  systemd-devel
 BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(glib-2.0)
+BuildRequires:  pkgconfig(gio-2.0)
 BuildRequires:  pkgconfig(libiptc)
 BuildRequires:  pkgconfig(xtables)
 BuildRequires:  pkgconfig(libsmack)
@@ -27,6 +28,7 @@ BuildRequires:  openvpn
 %endif
 %if %{with connman_ipsec}
 BuildRequires:  strongswan
+BuildRequires:  pkgconfig(openssl)
 %endif
 BuildRequires:  ca-certificates-devel
 BuildRequires:  readline-devel
@@ -73,6 +75,7 @@ OpenVPN support for Connman.
 Summary:        IPsec Support for Connman
 Requires:       %{name} = %{version}
 Requires:       strongswan
+BuildRequires:  pkgconfig(openssl)
 
 %description plugin-ipsec
 OpenVPN support for Connman.

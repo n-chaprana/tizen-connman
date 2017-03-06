@@ -6,12 +6,11 @@
 #define IPSEC_AUTH_XAUTH	"XAUTH"
 
 #define VICI_SHARED_TYPE_PSK	"IKE"
-#define VICI_SHARED_TYPE_XAUTH	"XAUTH"
+#define VICI_SHARED_TYPE_XAUTH	"xauth"
 
 #define IPSEC_ERROR_CHECK_GOTO(err, target, fmt, arg...) do { \
 	if (err < 0) { \
 		connman_error(fmt, ## arg); \
-		err = -1; \
 		goto target; \
 	} \
 } while (0)
