@@ -1964,7 +1964,9 @@ void __connman_ipconfig_append_ipv6config(struct connman_ipconfig *ipconfig,
 {
 	const char *str, *privacy;
 
+#if !defined TIZEN_EXT
 	DBG("");
+#endif
 
 	str = __connman_ipconfig_method2string(ipconfig->method);
 	if (!str)
@@ -2008,7 +2010,9 @@ void __connman_ipconfig_append_ipv4config(struct connman_ipconfig *ipconfig,
 {
 	const char *str;
 
+#if !defined TIZEN_EXT
 	DBG("");
+#endif
 
 	str = __connman_ipconfig_method2string(ipconfig->method);
 	if (!str)

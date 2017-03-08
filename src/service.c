@@ -7557,6 +7557,9 @@ static void service_ip_bound(struct connman_ipconfig *ipconfig,
 	struct connman_service *service = __connman_ipconfig_get_data(ipconfig);
 	enum connman_ipconfig_method method = CONNMAN_IPCONFIG_METHOD_UNKNOWN;
 	enum connman_ipconfig_type type = CONNMAN_IPCONFIG_TYPE_UNKNOWN;
+#if defined TIZEN_EXT
+	int err;
+#endif
 
 	DBG("%s ip bound", ifname);
 
@@ -7568,9 +7571,19 @@ static void service_ip_bound(struct connman_ipconfig *ipconfig,
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 &&
 			method == CONNMAN_IPCONFIG_METHOD_AUTO)
+#if defined TIZEN_EXT
+	{
+		err = __connman_ipconfig_gateway_add(ipconfig, service);
+
+		if(err == 0)
+			__connman_connection_gateway_activate(service,
+					CONNMAN_IPCONFIG_TYPE_IPV6);
+	}
+#else
 		__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_READY,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
+#endif
 
 	settings_changed(service, ipconfig);
 }
