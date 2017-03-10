@@ -1034,6 +1034,17 @@ static void reply_scan_pending(struct connman_technology *technology, int err)
 void __connman_technology_scan_started(struct connman_device *device)
 {
 	DBG("device %p", device);
+#if defined TIZEN_EXT
+	DBusMessage *signal;
+
+	signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
+			CONNMAN_MANAGER_INTERFACE, "ScanStarted");
+	if (!signal)
+		return;
+
+	dbus_connection_send(connection, signal, NULL);
+	dbus_message_unref(signal);
+#endif
 }
 
 void __connman_technology_scan_stopped(struct connman_device *device,
