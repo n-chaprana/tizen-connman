@@ -1207,11 +1207,20 @@ static gboolean __set_network_context(
 						ipv4_netmask, ipv4_gw);
 
 	if (ipv4_dns1)
+#if defined TIZEN_EXT
+		__connman_service_nameserver_append(service, ipv4_dns1, FALSE,
+				CONNMAN_IPCONFIG_TYPE_IPV4);
+#else
 		__connman_service_nameserver_append(service, ipv4_dns1, FALSE);
+#endif
 	//if (ipv4_dns2)
 	if (ipv4_dns2 && !ipv4_dns1)
+#if defined TIZEN_EXT
+		__connman_service_nameserver_append(service, ipv4_dns2, FALSE,
+				CONNMAN_IPCONFIG_TYPE_IPV4);
+#else
 		__connman_service_nameserver_append(service, ipv4_dns2, FALSE);
-
+#endif
 	/* ipv6 set */
 	if (network->ipv6_address == NULL)
 		network->ipv6_address =
@@ -1237,10 +1246,20 @@ static gboolean __set_network_context(
 						64, ipv6_gw);
 
 	if (ipv6_dns1)
+#if defined TIZEN_EXT
+		__connman_service_nameserver_append(service, ipv6_dns1, FALSE,
+				CONNMAN_IPCONFIG_TYPE_IPV6);
+#else
 		__connman_service_nameserver_append(service, ipv6_dns1, FALSE);
+#endif
 	//if (ipv6_dns2)
 	if (ipv6_dns2 && !ipv6_dns1)
+#if defined TIZEN_EXT
+		__connman_service_nameserver_append(service, ipv6_dns2, FALSE,
+				CONNMAN_IPCONFIG_TYPE_IPV6);
+#else
 		__connman_service_nameserver_append(service, ipv6_dns2, FALSE);
+#endif
 
 	if (active == TRUE &&
 			connman_network_get_connected(network->network) == TRUE) {

@@ -301,8 +301,14 @@ static gboolean resolver_expire_cb(gpointer user_data)
 		struct connman_service *service;
 		service = __connman_service_lookup_from_index(entry->index);
 		if (service)
+#if defined TIZEN_EXT
+			__connman_service_nameserver_remove(service,
+					entry->server, true,
+					CONNMAN_IPCONFIG_TYPE_ALL);
+#else
 			__connman_service_nameserver_remove(service,
 							entry->server, true);
+#endif
 	}
 
 	remove_entries(list);
@@ -392,8 +398,14 @@ static int append_resolver(int index, const char *domain,
 			struct connman_service *service;
 			service = __connman_service_lookup_from_index(entry->index);
 			if (service)
+#if defined TIZEN_EXT
+				__connman_service_nameserver_append(service,
+						server, true,
+						CONNMAN_IPCONFIG_TYPE_ALL);
+#else
 				__connman_service_nameserver_append(service,
 								server, true);
+#endif
 		}
 	}
 

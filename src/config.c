@@ -1097,6 +1097,20 @@ static gboolean remove_virtual_config(gpointer user_data)
 	return FALSE;
 }
 
+#if defined TIZEN_EXT
+static bool __check_address_type(int address_family, const char *address)
+{
+	unsigned char buf[sizeof(struct in6_addr)] = {0, };
+	int err = 0;
+
+	err = inet_pton(address_family, address, buf);
+	if(err > 0)
+		return TRUE;
+
+	return FALSE;
+}
+#endif
+
 static int try_provision_service(struct connman_config_service *config,
 				struct connman_service *service)
 {
@@ -1279,8 +1293,19 @@ static int try_provision_service(struct connman_config_service *config,
 		__connman_service_nameserver_clear(service);
 
 		for (i = 0; config->nameservers[i]; i++) {
+#if defined TIZEN_EXT
+			if (__check_address_type(AF_INET, config->nameservers[i]))
+				__connman_service_nameserver_append(service,
+						config->nameservers[i], false,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+			else if (__check_address_type(AF_INET6, config->nameservers[i]))
+				__connman_service_nameserver_append(service,
+						config->nameservers[i], false,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
+#else
 			__connman_service_nameserver_append(service,
 						config->nameservers[i], false);
+#endif
 		}
 	}
 

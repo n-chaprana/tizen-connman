@@ -327,9 +327,19 @@ static void info_req_cb(GDHCPClient *dhcp_client, gpointer user_data)
 	if (!compare_string_arrays(nameservers, dhcp->nameservers)) {
 		if (dhcp->nameservers) {
 			for (i = 0; dhcp->nameservers[i]; i++)
+#if defined TIZEN_EXT
+			{
 				__connman_service_nameserver_remove(service,
-							dhcp->nameservers[i],
-							false);
+						dhcp->nameservers[i], false,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
+#else
+				__connman_service_nameserver_remove(service,
+						dhcp->nameservers[i],
+						false);
+#endif
+#if defined TIZEN_EXT
+			}
+#endif
 			g_strfreev(dhcp->nameservers);
 		}
 
@@ -337,9 +347,19 @@ static void info_req_cb(GDHCPClient *dhcp_client, gpointer user_data)
 
 		for (i = 0; dhcp->nameservers &&
 					dhcp->nameservers[i]; i++)
+#if defined TIZEN_EXT
+		{
+			__connman_service_nameserver_append(service,
+						dhcp->nameservers[i], false,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
+#else
 			__connman_service_nameserver_append(service,
 						dhcp->nameservers[i],
 						false);
+#endif
+#if defined TIZEN_EXT
+		}
+#endif
 	} else
 		g_strfreev(nameservers);
 
@@ -522,9 +542,19 @@ static int set_other_addresses(GDHCPClient *dhcp_client,
 	if (!compare_string_arrays(nameservers, dhcp->nameservers)) {
 		if (dhcp->nameservers) {
 			for (i = 0; dhcp->nameservers[i]; i++)
+#if defined TIZEN_EXT
+			{
+				__connman_service_nameserver_remove(service,
+						dhcp->nameservers[i],
+						false, CONNMAN_IPCONFIG_TYPE_IPV6);
+#else
 				__connman_service_nameserver_remove(service,
 							dhcp->nameservers[i],
 							false);
+#endif
+#if defined TIZEN_EXT
+			}
+#endif
 			g_strfreev(dhcp->nameservers);
 		}
 
@@ -532,9 +562,19 @@ static int set_other_addresses(GDHCPClient *dhcp_client,
 
 		for (i = 0; dhcp->nameservers &&
 					dhcp->nameservers[i]; i++)
+#if defined TIZEN_EXT
+		{
 			__connman_service_nameserver_append(service,
-							dhcp->nameservers[i],
-							false);
+					dhcp->nameservers[i],
+					false, CONNMAN_IPCONFIG_TYPE_IPV6);
+#else
+			__connman_service_nameserver_append(service,
+						dhcp->nameservers[i],
+						false);
+#endif
+#if defined TIZEN_EXT
+		}
+#endif
 	} else
 		g_strfreev(nameservers);
 

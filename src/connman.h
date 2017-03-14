@@ -758,10 +758,19 @@ const char *__connman_service_type2string(enum connman_service_type type);
 enum connman_service_type __connman_service_string2type(const char *str);
 enum connman_service_security __connman_service_string2security(const char *str);
 
+#if defined TIZEN_EXT
+int __connman_service_nameserver_append(struct connman_service *service,
+				const char *nameserver, bool is_auto,
+				enum connman_ipconfig_type type);
+int __connman_service_nameserver_remove(struct connman_service *service,
+				const char *nameserver, bool is_auto,
+				enum connman_ipconfig_type type);
+#else
 int __connman_service_nameserver_append(struct connman_service *service,
 				const char *nameserver, bool is_auto);
 int __connman_service_nameserver_remove(struct connman_service *service,
 				const char *nameserver, bool is_auto);
+#endif
 void __connman_service_nameserver_clear(struct connman_service *service);
 void __connman_service_nameserver_add_routes(struct connman_service *service,
 						const char *gw);
@@ -894,6 +903,11 @@ unsigned int __connman_rtnl_update_interval_add(unsigned int interval);
 unsigned int __connman_rtnl_update_interval_remove(unsigned int interval);
 int __connman_rtnl_request_update(void);
 int __connman_rtnl_send(const void *buf, size_t len);
+
+#if defined TIZEN_EXT
+void rtnl_nameserver_add_all(struct connman_service *service,
+		        enum connman_ipconfig_type type);
+#endif
 
 bool __connman_session_policy_autoconnect(enum connman_service_connect_reason reason);
 

@@ -1324,17 +1324,30 @@ static void rtnl_newnduseropt(struct nlmsghdr *hdr)
 
 		if (opt->nd_opt_type == 25) { /* ND_OPT_RDNSS */
 			char buf[40];
+#if defined TIZEN_EXT
+			struct connman_service *service;
 
+			service = __connman_service_lookup_from_index(index);
+			DBG("service: %p\n",service);
+#endif
 			servers = rtnl_nd_opt_rdnss(opt, &lifetime,
-								&nr_servers);
+					&nr_servers);
 			for (i = 0; i < nr_servers; i++) {
 				if (!inet_ntop(AF_INET6, servers + i, buf,
-								sizeof(buf)))
+							sizeof(buf)))
 					continue;
 
+#if defined TIZEN_EXT
+				__connman_service_nameserver_append(service,
+						buf, false,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
+#endif
 				connman_resolver_append_lifetime(index,
-							NULL, buf, lifetime);
+						NULL, buf, lifetime);
 			}
+#if defined TIZEN_EXT
+			rtnl_nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_IPV6);
+#endif
 
 		} else if (opt->nd_opt_type == 31) { /* ND_OPT_DNSSL */
 			g_free(domains);

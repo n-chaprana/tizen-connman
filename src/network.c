@@ -2041,8 +2041,14 @@ int connman_network_set_nameservers(struct connman_network *network,
 	nameservers_array = g_strsplit(nameservers, " ", 0);
 
 	for (i = 0; nameservers_array[i]; i++) {
+#if defined TIZEN_EXT
+		__connman_service_nameserver_append(service,
+						nameservers_array[i], false,
+						CONNMAN_IPCONFIG_TYPE_ALL);
+#else
 		__connman_service_nameserver_append(service,
 						nameservers_array[i], false);
+#endif
 	}
 
 	g_strfreev(nameservers_array);

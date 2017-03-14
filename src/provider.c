@@ -576,8 +576,14 @@ int connman_provider_set_nameservers(struct connman_provider *provider,
 		return 0;
 
 	for (i = 0; nameservers[i]; i++)
+#if defined TIZEN_EXT
+		__connman_service_nameserver_append(provider->vpn_service,
+						nameservers[i], false,
+						CONNMAN_IPCONFIG_TYPE_ALL);
+#else
 		__connman_service_nameserver_append(provider->vpn_service,
 						nameservers[i], false);
+#endif
 
 	return 0;
 }

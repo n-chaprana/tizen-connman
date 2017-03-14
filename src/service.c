@@ -166,7 +166,8 @@ struct connman_service {
 	int disconnect_reason;
 #endif
 #ifdef TIZEN_EXT
-	enum connman_dnsconfig_method dns_config_method;
+	enum connman_dnsconfig_method dns_config_method_ipv4;
+	enum connman_dnsconfig_method dns_config_method_ipv6;
 #endif
 };
 
@@ -756,11 +757,14 @@ static int service_load(struct connman_service *service)
 
 #ifdef TIZEN_EXT
 	char *dns_method;
-	if (TIZEN_TV_EXT) {
-		dns_method = g_key_file_get_string(keyfile, service->identifier,
-				"Nameservers.method", NULL);
-		service->dns_config_method = __connman_dnsconfig_string2method(dns_method);
-	}
+
+	dns_method = g_key_file_get_string(keyfile, service->identifier,
+			"Nameservers.IPv4method", NULL);
+	service->dns_config_method_ipv4 = __connman_dnsconfig_string2method(dns_method);
+
+	dns_method = g_key_file_get_string(keyfile, service->identifier,
+			"Nameservers.IPv6method", NULL);
+	service->dns_config_method_ipv6 = __connman_dnsconfig_string2method(dns_method);
 #endif
 
 	service->timeservers_config = g_key_file_get_string_list(keyfile,
@@ -999,18 +1003,26 @@ static int service_save(struct connman_service *service)
 	g_key_file_remove_key(keyfile, service->identifier,
 							"Nameservers", NULL);
 
-#ifdef TIZEN_EXT
-	if (TIZEN_TV_EXT) {
-		if(service->dns_config_method != 0) {
-			const char *method;
-			method = __connman_dnsconfig_method2string(
-					service->dns_config_method);
-			g_key_file_set_string(keyfile, service->identifier,
-					"Nameservers.method", method);
-		} else
-		g_key_file_remove_key(keyfile, service->identifier,
-							"Nameservers.method", NULL);
-	}
+#if defined TIZEN_EXT
+	if(service->dns_config_method_ipv4 != 0) {
+		const char *method;
+		method = __connman_dnsconfig_method2string(
+				service->dns_config_method_ipv4);
+		g_key_file_set_string(keyfile, service->identifier,
+				"Nameservers.IPv4method", method);
+	} else
+	g_key_file_remove_key(keyfile, service->identifier,
+						"Nameservers.IPv4method", NULL);
+
+	if(service->dns_config_method_ipv6 != 0) {
+		const char *method;
+		method = __connman_dnsconfig_method2string(
+				service->dns_config_method_ipv6);
+		g_key_file_set_string(keyfile, service->identifier,
+				"Nameservers.IPv6method", method);
+	} else
+	g_key_file_remove_key(keyfile, service->identifier,
+							"Nameservers.IPv6method", NULL);
 #endif
 
 	if (service->timeservers_config) {
@@ -1332,25 +1344,137 @@ static int nameserver_add(struct connman_service *service,
 	if (index < 0)
 		return -ENXIO;
 
+#if defined TIZEN_EXT
+	DBG("Resolver append nameserver: %s", nameserver);
+#endif
 	return connman_resolver_append(index, NULL, nameserver);
 }
 
+#if defined TIZEN_EXT
+static int nameserver_add_all(struct connman_service *service,
+		enum connman_ipconfig_type type)
+#else
 static int nameserver_add_all(struct connman_service *service)
+#endif
 {
 	int i = 0;
 
 	if (service->nameservers_config) {
 		while (service->nameservers_config[i]) {
+#if defined TIZEN_EXT
+			DBG("type %d add service->nameservers_config[%d]:%s",type,
+			    i, service->nameservers_config[i]);
+			if(strncmp(service->nameservers_config[i], "::", 2) == 0) {
+				i++;
+				continue;
+			}
+
+			switch(type) {
+			case CONNMAN_IPCONFIG_TYPE_IPV4:
+				if (connman_inet_check_ipaddress(
+					service->nameservers_config[i]) == AF_INET &&
+				    service->dns_config_method_ipv4 ==
+				    CONNMAN_DNSCONFIG_METHOD_MANUAL) {
+					nameserver_add(service,
+						       service->nameservers_config[i]);
+				}
+				break;
+			case CONNMAN_IPCONFIG_TYPE_IPV6:
+				if (connman_inet_check_ipaddress(
+					service->nameservers_config[i]) == AF_INET6 &&
+				    service->dns_config_method_ipv6 ==
+					CONNMAN_DNSCONFIG_METHOD_MANUAL) {
+					nameserver_add(service,
+						       service->nameservers_config[i]);
+				}
+				break;
+			case CONNMAN_IPCONFIG_TYPE_ALL:
+				if (connman_inet_check_ipaddress(
+					service->nameservers_config[i]) == AF_INET &&
+				    service->dns_config_method_ipv4 ==
+					CONNMAN_DNSCONFIG_METHOD_MANUAL) {
+					nameserver_add(service,
+						       service->nameservers_config[i]);
+				}
+				if (connman_inet_check_ipaddress(
+					service->nameservers_config[i]) == AF_INET6 &&
+				    service->dns_config_method_ipv6 ==
+					CONNMAN_DNSCONFIG_METHOD_MANUAL) {
+					nameserver_add(service,
+						       service->nameservers_config[i]);
+				}
+				break;
+			case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+				DBG("CONNMAN_IPCONFIG_TYPE_UNKNOWN do nothing");
+				break;
+			default:
+				DBG("default case do nothing");
+				break;
+			}
+#else
 			nameserver_add(service, service->nameservers_config[i]);
+#endif
 			i++;
 		}
-
+#if !defined TIZEN_EXT
 		return 0;
+#endif
 	}
 
+#if defined TIZEN_EXT
+	i = 0;
+#endif
 	if (service->nameservers) {
 		while (service->nameservers[i]) {
+#if defined TIZEN_EXT
+			DBG("type %d service->nameservers[%d]: %s",type,
+			    i, service->nameservers[i]);
+
+			switch(type) {
+			case CONNMAN_IPCONFIG_TYPE_IPV4:
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET &&
+					service->dns_config_method_ipv4 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP) {
+					nameserver_add(service,
+						       service->nameservers[i]);
+				}
+				break;
+			case CONNMAN_IPCONFIG_TYPE_IPV6:
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET6 &&
+					service->dns_config_method_ipv6 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP) {
+					nameserver_add(service,
+						       service->nameservers[i]);
+				}
+				break;
+			case CONNMAN_IPCONFIG_TYPE_ALL:
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET &&
+					service->dns_config_method_ipv4 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP) {
+					nameserver_add(service,
+						       service->nameservers[i]);
+				}
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET6 &&
+					service->dns_config_method_ipv6 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP) {
+					nameserver_add(service,
+						       service->nameservers[i]);
+				}
+				break;
+			case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+				DBG("CONNMAN_IPCONFIG_TYPE_UNKNOWN do nothing");
+				break;
+			default:
+				DBG("default case do nothing");
+				break;
+			}
+#else
 			nameserver_add(service, service->nameservers[i]);
+#endif
 			i++;
 		}
 	}
@@ -1373,7 +1497,12 @@ static int nameserver_remove(struct connman_service *service,
 	return connman_resolver_remove(index, NULL, nameserver);
 }
 
+#if defined TIZEN_EXT
+static int nameserver_remove_all(struct connman_service *service,
+		enum connman_ipconfig_type type)
+#else
 static int nameserver_remove_all(struct connman_service *service)
+#endif
 {
 #if defined TIZEN_EXT
 	/**
@@ -1391,19 +1520,137 @@ static int nameserver_remove_all(struct connman_service *service)
 		return -ENXIO;
 
 	while (service->nameservers_config && service->nameservers_config[i]) {
-
+#if defined TIZEN_EXT
+		DBG("type %d Remove service->nameservers_config[%d]: %s",
+		      type, i, service->nameservers_config[i]);
+		switch(type) {
+		case CONNMAN_IPCONFIG_TYPE_IPV4:
+			if (connman_inet_check_ipaddress(
+				service->nameservers_config[i]) == AF_INET &&
+				(service->dns_config_method_ipv4 ==
+					CONNMAN_DNSCONFIG_METHOD_DHCP ||
+				service->dns_config_method_ipv4 ==
+					CONNMAN_DNSCONFIG_METHOD_MANUAL)) {
+				nameserver_remove(service,
+						  service->nameservers_config[i]);
+			}
+			break;
+		case CONNMAN_IPCONFIG_TYPE_IPV6:
+			if (connman_inet_check_ipaddress(
+				service->nameservers_config[i]) == AF_INET6 &&
+				(service->dns_config_method_ipv6 ==
+					CONNMAN_DNSCONFIG_METHOD_DHCP ||
+				service->dns_config_method_ipv6 ==
+					CONNMAN_DNSCONFIG_METHOD_MANUAL)) {
+				nameserver_remove(service,
+						  service->nameservers_config[i]);
+			}
+			break;
+		case CONNMAN_IPCONFIG_TYPE_ALL:
+			if (connman_inet_check_ipaddress(
+				service->nameservers_config[i]) == AF_INET &&
+				(service->dns_config_method_ipv4 ==
+					CONNMAN_DNSCONFIG_METHOD_DHCP ||
+				service->dns_config_method_ipv4 ==
+					CONNMAN_DNSCONFIG_METHOD_MANUAL)) {
+				nameserver_remove(service,
+						  service->nameservers_config[i]);
+			}
+			if (connman_inet_check_ipaddress(
+				service->nameservers_config[i]) == AF_INET6 &&
+				(service->dns_config_method_ipv6 ==
+					CONNMAN_DNSCONFIG_METHOD_DHCP ||
+				service->dns_config_method_ipv6 ==
+					CONNMAN_DNSCONFIG_METHOD_MANUAL)) {
+				nameserver_remove(service,
+						  service->nameservers_config[i]);
+			}
+			break;
+		case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+			DBG("CONNMAN_IPCONFIG_TYPE_UNKNOWN do nothing");
+			break;
+		default:
+			DBG("default case do nothing");
+			break;
+		}
+#else
 		nameserver_remove(service, service->nameservers_config[i]);
+#endif
 		i++;
 	}
 
 	i = 0;
 	while (service->nameservers && service->nameservers[i]) {
+#if defined TIZEN_EXT
+		DBG("type %d Remove service->nameservers[%d]: %s",type, i,
+		      service->nameservers[i]);
+		switch(type) {
+			case CONNMAN_IPCONFIG_TYPE_IPV4:
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET &&
+					(service->dns_config_method_ipv4 ==
+						CONNMAN_DNSCONFIG_METHOD_MANUAL ||
+					service->dns_config_method_ipv4 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP)) {
+					nameserver_remove(service,
+							  service->nameservers[i]);
+				}
+				break;
+			case CONNMAN_IPCONFIG_TYPE_IPV6:
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET6 &&
+					(service->dns_config_method_ipv6 ==
+						CONNMAN_DNSCONFIG_METHOD_MANUAL ||
+					service->dns_config_method_ipv6 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP)) {
+					nameserver_remove(service,
+							  service->nameservers[i]);
+				}
+				break;
+			case CONNMAN_IPCONFIG_TYPE_ALL:
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET &&
+					(service->dns_config_method_ipv4 ==
+						CONNMAN_DNSCONFIG_METHOD_MANUAL ||
+					service->dns_config_method_ipv4 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP)) {
+					nameserver_remove(service,
+							  service->nameservers[i]);
+				}
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET6 &&
+					(service->dns_config_method_ipv6 ==
+						CONNMAN_DNSCONFIG_METHOD_MANUAL ||
+					service->dns_config_method_ipv6 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP)) {
+					nameserver_remove(service,
+							  service->nameservers[i]);
+				}
+				break;
+			case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+				DBG("CONNMAN_IPCONFIG_TYPE_UNKNOWN do nothing");
+				break;
+			default:
+				DBG("default case do nothing");
+				break;
+		}
+#else
 		nameserver_remove(service, service->nameservers[i]);
+#endif
 		i++;
 	}
 
 	return 0;
 }
+
+#if defined TIZEN_EXT
+void rtnl_nameserver_add_all(struct connman_service *service,
+		enum connman_ipconfig_type type)
+{
+	DBG("");
+	nameserver_add_all(service, type);
+}
+#endif
 
 static int searchdomain_add_all(struct connman_service *service)
 {
@@ -1460,13 +1707,19 @@ static int searchdomain_remove_all(struct connman_service *service)
  * inserted to resolver via netlink message (see rtnl.c:rtnl_newnduseropt()
  * for details) and not through service.c
  */
+#if defined TIZEN_EXT
+int __connman_service_nameserver_append(struct connman_service *service,
+				const char *nameserver, bool is_auto,
+				enum connman_ipconfig_type type)
+#else
 int __connman_service_nameserver_append(struct connman_service *service,
 				const char *nameserver, bool is_auto)
+#endif
 {
 	char **nameservers;
 	int len, i;
 
-	DBG("service %p nameserver %s auto %d",	service, nameserver, is_auto);
+	DBG("service %p nameserver %s auto %d", service, nameserver, is_auto);
 
 	if (!nameserver)
 		return -EINVAL;
@@ -1477,8 +1730,15 @@ int __connman_service_nameserver_append(struct connman_service *service,
 		nameservers = service->nameservers;
 
 	for (i = 0; nameservers && nameservers[i]; i++)
+#if defined TIZEN_EXT
+	{
+		DBG("nameservers[%d] %s, nameserver %s", i, nameservers[i], nameserver);
+#endif
 		if (g_strcmp0(nameservers[i], nameserver) == 0)
 			return -EEXIST;
+#if defined TIZEN_EXT
+	}
+#endif
 
 	if (nameservers) {
 		len = g_strv_length(nameservers);
@@ -1498,23 +1758,38 @@ int __connman_service_nameserver_append(struct connman_service *service,
 	nameservers[len + 1] = NULL;
 
 #ifdef TIZEN_EXT
-	if(TIZEN_TV_EXT &&
-	   service->dns_config_method == CONNMAN_DNSCONFIG_METHOD_UNKNOWN)
-		service->dns_config_method = CONNMAN_DNSCONFIG_METHOD_DHCP;
+	if(type == CONNMAN_IPCONFIG_TYPE_IPV4 &&
+			service->dns_config_method_ipv4 ==
+			CONNMAN_DNSCONFIG_METHOD_UNKNOWN)
+		service->dns_config_method_ipv4 = CONNMAN_DNSCONFIG_METHOD_DHCP;
+
+	if(type == CONNMAN_IPCONFIG_TYPE_IPV6 &&
+			service->dns_config_method_ipv6 ==
+			CONNMAN_DNSCONFIG_METHOD_UNKNOWN)
+		service->dns_config_method_ipv6 = CONNMAN_DNSCONFIG_METHOD_DHCP;
 #endif
 
 	if (is_auto) {
 		service->nameservers_auto = nameservers;
 	} else {
 		service->nameservers = nameservers;
+#if defined TIZEN_EXT
+		DBG("nameserver add: %s, type: %d", nameserver, type);
+#endif
 		nameserver_add(service, nameserver);
 	}
 
 	return 0;
 }
 
+#if defined TIZEN_EXT
+int __connman_service_nameserver_remove(struct connman_service *service,
+				const char *nameserver, bool is_auto,
+				enum connman_ipconfig_type type)
+#else
 int __connman_service_nameserver_remove(struct connman_service *service,
 				const char *nameserver, bool is_auto)
+#endif
 {
 	char **servers, **nameservers;
 	bool found = false;
@@ -1580,12 +1855,23 @@ set_servers:
 
 void __connman_service_nameserver_clear(struct connman_service *service)
 {
+#if defined TIZEN_EXT
+	DBG("nameserver remove all ip_type: CONNMAN_IPCONFIG_TYPE_ALL");
+	nameserver_remove_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
+#else
 	nameserver_remove_all(service);
+#endif
 
 	g_strfreev(service->nameservers);
 	service->nameservers = NULL;
 
+#if defined TIZEN_EXT
+	DBG("nameserver add all ip_type: CONNMAN_IPCONFIG_TYPE_ALL");
+	nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
+#else
 	nameserver_add_all(service);
+#endif
+
 }
 
 static void add_nameserver_route(int family, int index, char *nameserver,
@@ -2112,31 +2398,141 @@ static void append_nameservers(DBusMessageIter *iter,
 	}
 }
 
+#if defined TIZEN_EXT
+static void append_nameserver_manual(DBusMessageIter *iter,
+		struct connman_service *service, const char *server)
+{
+	bool available = true;
+
+	if (service)
+		available = nameserver_available(service, server);
+
+	if (available)
+		dbus_message_iter_append_basic(iter,
+				DBUS_TYPE_STRING, &server);
+}
+
+static void append_nameserver_dhcp(DBusMessageIter *iter,
+		struct connman_service *service, const char *server)
+{
+	bool available = true;
+
+	if (service)
+		available = nameserver_available(service, server);
+
+	if (available)
+		dbus_message_iter_append_basic(iter,
+				DBUS_TYPE_STRING, &server);
+}
+#endif
+
 static void append_dns(DBusMessageIter *iter, void *user_data)
 {
 	struct connman_service *service = user_data;
+#if defined TIZEN_EXT
+	int i;
+#endif
 
 	if (!is_connected(service))
 		return;
 
 #ifdef TIZEN_EXT
 	const char *str;
-	if (TIZEN_TV_EXT) {
-		/* Append DNS Config Type */
-		str = __connman_dnsconfig_method2string(service->dns_config_method);
-		if(str != NULL)
-			dbus_message_iter_append_basic(iter,
-				DBUS_TYPE_STRING, &str);
+
+	str = __connman_dnsconfig_method2string(service->dns_config_method_ipv4);
+	if(str != NULL) {
+		char *str1 = g_strdup_printf("ipv4.%s", str);
+		dbus_message_iter_append_basic(iter,
+			DBUS_TYPE_STRING, &str1);
+		g_free(str1);
+	}
+
+	str = __connman_dnsconfig_method2string(service->dns_config_method_ipv6);
+	if(str != NULL) {
+		char *str1 = g_strdup_printf("ipv6.%s", str);
+		dbus_message_iter_append_basic(iter,
+			DBUS_TYPE_STRING, &str1);
+		g_free(str1);
 	}
 #endif
 
 	if (service->nameservers_config) {
+#if defined TIZEN_EXT
+		i = 0;
+		while (service->nameservers_config[i]) {
+			if (connman_inet_check_ipaddress(
+				service->nameservers_config[i]) == AF_INET &&
+				service->dns_config_method_ipv4 ==
+					CONNMAN_DNSCONFIG_METHOD_MANUAL) {
+				append_nameserver_manual(iter, service,
+						service->nameservers_config[i]);
+			}
+
+			if (connman_inet_check_ipaddress(
+				service->nameservers_config[i]) == AF_INET6 &&
+				service->dns_config_method_ipv6 ==
+					CONNMAN_DNSCONFIG_METHOD_MANUAL) {
+				append_nameserver_manual(iter, service,
+						service->nameservers_config[i]);
+			}
+			i++;
+		}
+		/* In case of mixed DNS Config Type one of IPv4/IPv6 can be
+		 * dynamic while other is static so try to append the DNS
+		 * Address which is dynamic also */
+		if (service->nameservers != NULL) {
+			i = 0;
+			while (service->nameservers[i]) {
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET &&
+					service->dns_config_method_ipv4 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP) {
+					append_nameserver_dhcp(iter, service,
+							service->nameservers[i]);
+				}
+
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET6 &&
+					service->dns_config_method_ipv6 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP) {
+					append_nameserver_dhcp(iter, service,
+							service->nameservers[i]);
+				}
+				i++;
+			}
+		}
+#else
 		append_nameservers(iter, service, service->nameservers_config);
+#endif
 		return;
 	} else {
 		if (service->nameservers)
+#if defined TIZEN_EXT
+		{
+			i = 0;
+			while (service->nameservers[i]) {
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET &&
+					service->dns_config_method_ipv4 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP) {
+					append_nameserver_dhcp(iter, service,
+							service->nameservers[i]);
+				}
+
+				if (connman_inet_check_ipaddress(
+					service->nameservers[i]) == AF_INET6 &&
+					service->dns_config_method_ipv6 ==
+						CONNMAN_DNSCONFIG_METHOD_DHCP) {
+					append_nameserver_dhcp(iter, service,
+							service->nameservers[i]);
+				}
+				i++;
+			}
+		}
+#else
 			append_nameservers(iter, service,
 					service->nameservers);
+#endif
 
 		if (service->nameservers_auto)
 			append_nameservers(iter, service,
@@ -2161,18 +2557,43 @@ static void append_dnsconfig(DBusMessageIter *iter, void *user_data)
 #ifdef TIZEN_EXT
 	/* Append DNS Config Type */
 	const char *str;
-	if (TIZEN_TV_EXT) {
-		str = __connman_dnsconfig_method2string(service->dns_config_method);
-		if(str != NULL)
-			dbus_message_iter_append_basic(iter,
-				DBUS_TYPE_STRING, &str);
+	str = __connman_dnsconfig_method2string(service->dns_config_method_ipv4);
+	if(str != NULL) {
+		char *str1 = g_strdup_printf("ipv4.%s", str);
+		dbus_message_iter_append_basic(iter,
+			DBUS_TYPE_STRING, &str1);
+		g_free(str1);
+	}
+
+	str = __connman_dnsconfig_method2string(service->dns_config_method_ipv6);
+	if(str != NULL) {
+		char *str1 = g_strdup_printf("ipv6.%s", str);
+		dbus_message_iter_append_basic(iter,
+			DBUS_TYPE_STRING, &str1);
+		g_free(str1);
 	}
 #endif
 
 	if (!service->nameservers_config)
 		return;
 
+#if defined TIZEN_EXT
+	int i = 0;
+	while (service->nameservers_config[i]) {
+		if (connman_inet_check_ipaddress(service->nameservers_config[i]) == AF_INET &&
+				service->dns_config_method_ipv4 == CONNMAN_DNSCONFIG_METHOD_MANUAL) {
+			append_nameserver_manual(iter, NULL, service->nameservers_config[i]);
+		}
+
+		if (connman_inet_check_ipaddress(service->nameservers_config[i]) == AF_INET6 &&
+				service->dns_config_method_ipv6 == CONNMAN_DNSCONFIG_METHOD_MANUAL) {
+			append_nameserver_manual(iter, NULL, service->nameservers_config[i]);
+		}
+		i++;
+	}
+#else
 	append_nameservers(iter, NULL, service->nameservers_config);
+#endif
 }
 
 static void append_ts(DBusMessageIter *iter, void *user_data)
@@ -2806,12 +3227,10 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 						DBUS_TYPE_STRING, &str);
 
 #ifdef TIZEN_EXT
-	if (TIZEN_TV_EXT) {
-		str = state2string(service->state_ipv6);
-		if (str != NULL)
-			connman_dbus_dict_append_basic(dict, "StateIPv6",
-							DBUS_TYPE_STRING, &str);
-	}
+	str = state2string(service->state_ipv6);
+	if (str != NULL)
+		connman_dbus_dict_append_basic(dict, "StateIPv6",
+				DBUS_TYPE_STRING, &str);
 #endif
 
 	str = error2string(service->error);
@@ -3841,6 +4260,10 @@ static DBusMessage *set_property(DBusConnection *conn,
 		GString *str;
 		int index;
 		const char *gw;
+#if defined TIZEN_EXT
+		enum connman_ipconfig_type ip_type = CONNMAN_IPCONFIG_TYPE_ALL;
+		DBG("%s", name);
+#endif
 
 		if (__connman_provider_is_immutable(service->provider) ||
 				service->immutable)
@@ -3863,22 +4286,55 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		dbus_message_iter_recurse(&value, &entry);
 
+#if defined TIZEN_EXT
+		/* IPv4/IPv6 Last DNS config method */
+		int last_dns_ipv4 = service->dns_config_method_ipv4;
+		int last_dns_ipv6 = service->dns_config_method_ipv6;
+		DBG("Last DNS Config Method IPv4: %d IPv6: %d", last_dns_ipv4, last_dns_ipv6);
+#endif
+
 		while (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRING) {
 			const char *val;
 			dbus_message_iter_get_basic(&entry, &val);
 			dbus_message_iter_next(&entry);
 #ifdef TIZEN_EXT
-			if (TIZEN_TV_EXT) {
-				/* First unpack the DNS Config Method */
-				if(g_strcmp0(val, "manual") == 0) {
-					service->dns_config_method =
-						CONNMAN_DNSCONFIG_METHOD_MANUAL;
-					continue;
-				} else if(g_strcmp0(val, "dhcp") == 0) {
-					service->dns_config_method =
-						CONNMAN_DNSCONFIG_METHOD_DHCP;
-					continue;
+			/* First unpack the DNS Config Method */
+			DBG("DNS Config Method: %s", val);
+			if((g_strcmp0(val, "ipv4.manual") == 0)) {
+				service->dns_config_method_ipv4 =
+					CONNMAN_DNSCONFIG_METHOD_MANUAL;
+
+				if(last_dns_ipv4 != CONNMAN_DNSCONFIG_METHOD_MANUAL) {
+					if(ip_type == CONNMAN_IPCONFIG_TYPE_UNKNOWN)
+						ip_type = CONNMAN_IPCONFIG_TYPE_IPV4;
+					else
+						ip_type = CONNMAN_IPCONFIG_TYPE_ALL;
 				}
+				continue;
+			} else if(g_strcmp0(val, "ipv4.dhcp") == 0) {
+				service->dns_config_method_ipv4 =
+					CONNMAN_DNSCONFIG_METHOD_DHCP;
+				if(last_dns_ipv4 == CONNMAN_DNSCONFIG_METHOD_MANUAL)
+					ip_type = CONNMAN_IPCONFIG_TYPE_IPV4;
+
+				continue;
+			} else if(g_strcmp0(val, "ipv6.manual") == 0) {
+				service->dns_config_method_ipv6 =
+					CONNMAN_DNSCONFIG_METHOD_MANUAL;
+				if(last_dns_ipv6 != CONNMAN_DNSCONFIG_METHOD_MANUAL) {
+					if(ip_type == CONNMAN_IPCONFIG_TYPE_UNKNOWN)
+						ip_type = CONNMAN_IPCONFIG_TYPE_IPV6;
+					else
+						ip_type = CONNMAN_IPCONFIG_TYPE_ALL;
+				}
+				continue;
+			} else if(g_strcmp0(val, "ipv6.dhcp") == 0) {
+				service->dns_config_method_ipv6 =
+					CONNMAN_DNSCONFIG_METHOD_DHCP;
+				if(last_dns_ipv6 == CONNMAN_DNSCONFIG_METHOD_MANUAL)
+					ip_type = CONNMAN_IPCONFIG_TYPE_IPV6;
+
+				continue;
 			}
 #endif
 			if (connman_inet_check_ipaddress(val) > 0) {
@@ -3889,7 +4345,21 @@ static DBusMessage *set_property(DBusConnection *conn,
 			}
 		}
 
+#if defined TIZEN_EXT
+		if (service->dns_config_method_ipv4 == CONNMAN_DNSCONFIG_METHOD_DHCP &&
+			service->dns_config_method_ipv6 == CONNMAN_DNSCONFIG_METHOD_DHCP) {
+					DBG("Both IPv4 and IPv6 DNS Method DHCP");
+					ip_type = CONNMAN_IPCONFIG_TYPE_ALL;
+		}
+		if (gw && strlen(gw))
+			__connman_service_nameserver_del_routes(service,
+						ip_type);
+
+		DBG("%s ip_type: %d nameserver remove all", name, ip_type);
+		nameserver_remove_all(service, ip_type);
+#else
 		nameserver_remove_all(service);
+#endif
 		g_strfreev(service->nameservers_config);
 
 		if (str->len > 0) {
@@ -3904,7 +4374,12 @@ static DBusMessage *set_property(DBusConnection *conn,
 		if (gw && strlen(gw))
 			__connman_service_nameserver_add_routes(service, gw);
 
+#if defined TIZEN_EXT
+		DBG("%s ip_type: %d nameserver add all", name, ip_type);
+		nameserver_add_all(service, ip_type);
+#else
 		nameserver_add_all(service);
+#endif
 		dns_configuration_changed(service);
 
 		if (__connman_service_is_connected_state(service,
@@ -4865,6 +5340,15 @@ bool __connman_service_remove(struct connman_service *service)
 	__connman_service_set_favorite(service, false);
 
 	__connman_ipconfig_ipv6_reset_privacy(service->ipconfig_ipv6);
+
+#if defined TIZEN_EXT
+	/* Reset IP Method and DNS Method to DHCP */
+	__connman_ipconfig_set_method(service->ipconfig_ipv4,
+			CONNMAN_IPCONFIG_METHOD_DHCP);
+	service->dns_config_method_ipv4 = CONNMAN_DNSCONFIG_METHOD_DHCP;
+	g_strfreev(service->nameservers_config);
+	service->nameservers_config = NULL;
+#endif
 
 #if defined TIZEN_EXT
 	__connman_storage_remove_service(service->identifier);
@@ -6956,7 +7440,16 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 
 	if (is_connected_state(service, old_state) &&
 			!is_connected_state(service, new_state))
+#if defined TIZEN_EXT
+	{
+		DBG("nameserver remove all, type: %d", type);
+		nameserver_remove_all(service, type);
+#else
 		nameserver_remove_all(service);
+#endif
+#if defined TIZEN_EXT
+	}
+#endif
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->state_ipv4 = new_state;
@@ -6965,7 +7458,16 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 
 	if (!is_connected_state(service, old_state) &&
 			is_connected_state(service, new_state))
+#if defined TIZEN_EXT
+	{
+		DBG("nameserver add all, type: %d", type);
+		nameserver_add_all(service, type);
+#else
 		nameserver_add_all(service);
+#endif
+#if defined TIZEN_EXT
+	}
+#endif
 
 #if defined TIZEN_EXT
 	int ret = service_indicate_state(service);

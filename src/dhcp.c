@@ -111,8 +111,14 @@ static bool apply_dhcp_invalidate_on_network(struct connman_dhcp *dhcp)
 	}
 	if (dhcp->nameservers) {
 		for (i = 0; dhcp->nameservers[i]; i++) {
+#if defined TIZEN_EXT
+			__connman_service_nameserver_remove(service,
+						dhcp->nameservers[i], false,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+#else
 			__connman_service_nameserver_remove(service,
 						dhcp->nameservers[i], false);
+#endif
 		}
 	}
 
@@ -359,18 +365,32 @@ static bool apply_lease_available_on_network(GDHCPClient *dhcp_client,
 
 	if (!compare_string_arrays(nameservers, dhcp->nameservers)) {
 		if (dhcp->nameservers) {
+#if defined TIZEN_EXT
+			for (i = 0; dhcp->nameservers[i] != NULL; i++) {
+				__connman_service_nameserver_remove(service,
+						dhcp->nameservers[i], false,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+			}
+#else
 			for (i = 0; dhcp->nameservers[i]; i++) {
 				__connman_service_nameserver_remove(service,
 						dhcp->nameservers[i], false);
 			}
+#endif
 			g_strfreev(dhcp->nameservers);
 		}
 
 		dhcp->nameservers = nameservers;
 
 		for (i = 0; dhcp->nameservers && dhcp->nameservers[i]; i++) {
+#if defined TIZEN_EXT
+			__connman_service_nameserver_append(service,
+						dhcp->nameservers[i], false,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+#else
 			__connman_service_nameserver_append(service,
 						dhcp->nameservers[i], false);
+#endif
 		}
 	} else {
 		g_strfreev(nameservers);
