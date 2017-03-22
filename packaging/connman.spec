@@ -199,10 +199,6 @@ rm %{buildroot}%{_sysconfdir}/dbus-1/system.d/*.conf
 mkdir -p %{buildroot}%{_sysconfdir}/dbus-1/system.d/
 cp src/connman.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/
 
-#License
-mkdir -p %{buildroot}%{_datadir}/license
-cp COPYING %{buildroot}%{_datadir}/license/connman
-
 %if %{with connman_vpnd}
 cp vpn/vpn-dbus.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
 %endif
@@ -246,7 +242,7 @@ systemctl daemon-reload
 %attr(644,root,root) %{_libdir}/systemd/system/connman.socket
 %attr(644,root,root) %{_libdir}/systemd/system/sockets.target.wants/connman.socket
 %endif
-%{_datadir}/license/connman
+%license COPYING
 %{upgrade_script_path}/%{upgrade_script_filename}
 
 %files test
