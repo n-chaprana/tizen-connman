@@ -1307,8 +1307,35 @@ static gboolean __connman_network_clear_associating_delayed(gpointer user_data)
 
 	if (network->associating == FALSE &&
 			state_ipv4 == CONNMAN_SERVICE_STATE_ASSOCIATION &&
-			state_ipv6 == CONNMAN_SERVICE_STATE_ASSOCIATION)
-		connman_network_clear_associating(network);
+			state_ipv6 == CONNMAN_SERVICE_STATE_ASSOCIATION) {
+		__connman_service_ipconfig_indicate_state(service,
+				CONNMAN_SERVICE_STATE_IDLE,
+				CONNMAN_IPCONFIG_TYPE_IPV4);
+		__connman_service_ipconfig_indicate_state(service,
+				CONNMAN_SERVICE_STATE_IDLE,
+				CONNMAN_IPCONFIG_TYPE_IPV6);
+	} else {
+		if (network->associating == FALSE) {
+			struct connman_ipconfig *ipconfig_ipv4, *ipconfig_ipv6;
+			enum connman_ipconfig_method ipv4_method, ipv6_method;
+
+			ipconfig_ipv4 = __connman_service_get_ip4config(service);
+			ipv4_method = __connman_ipconfig_get_method(ipconfig_ipv4);
+			ipconfig_ipv6 = __connman_service_get_ip4config(service);
+			ipv6_method = __connman_ipconfig_get_method(ipconfig_ipv6);
+
+			if((ipv4_method == CONNMAN_IPCONFIG_METHOD_UNKNOWN || ipv4_method == CONNMAN_IPCONFIG_METHOD_OFF) &&
+					(state_ipv6 == CONNMAN_SERVICE_STATE_ASSOCIATION))
+				__connman_service_ipconfig_indicate_state(service,
+						CONNMAN_SERVICE_STATE_IDLE,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
+			if((ipv6_method == CONNMAN_IPCONFIG_METHOD_UNKNOWN || ipv6_method == CONNMAN_IPCONFIG_METHOD_OFF) &&
+					(state_ipv4 == CONNMAN_SERVICE_STATE_ASSOCIATION))
+				__connman_service_ipconfig_indicate_state(service,
+						CONNMAN_SERVICE_STATE_IDLE,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+		}
+	}
 
 	return FALSE;
 }
