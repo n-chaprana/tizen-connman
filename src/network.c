@@ -111,6 +111,8 @@ struct connman_network {
 
 };
 
+static void autoconf_ipv6_set(struct connman_network *network);
+
 static const char *type2string(enum connman_network_type type)
 {
 	switch (type) {
@@ -223,12 +225,27 @@ static void dhcp_callback(struct connman_ipconfig *ipconfig,
 			struct connman_network *network,
 			bool success, gpointer data)
 {
+#if defined TIZEN_EXT
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv6;
+#endif
+
 	network->connecting = false;
 
 	if (success)
 		dhcp_success(network);
 	else
 		dhcp_failure(network);
+
+#if defined TIZEN_EXT
+	service = connman_service_lookup_from_network(network);
+	ipconfig_ipv6 = __connman_service_get_ip6config(service);
+	if (__connman_ipconfig_get_method(ipconfig_ipv6) == CONNMAN_IPCONFIG_METHOD_AUTO) {
+		DBG("IPv6 autoconf start");
+		set_configuration(network, CONNMAN_IPCONFIG_TYPE_IPV6);
+		autoconf_ipv6_set(network);
+	}
+#endif
 }
 
 static int set_connected_manual(struct connman_network *network)
@@ -387,7 +404,6 @@ err:
 	return err;
 }
 
-static void autoconf_ipv6_set(struct connman_network *network);
 static void dhcpv6_callback(struct connman_network *network,
 			enum __connman_dhcpv6_status status, gpointer data);
 
@@ -1800,7 +1816,9 @@ int __connman_network_enable_ipconfig(struct connman_network *network,
 		return -ENOSYS;
 
 	case CONNMAN_IPCONFIG_TYPE_IPV6:
+#if !defined TIZEN_EXT
 		set_configuration(network, type);
+#endif
 
 		method = __connman_ipconfig_get_method(ipconfig);
 
@@ -1823,11 +1841,16 @@ int __connman_network_enable_ipconfig(struct connman_network *network,
 				CONNMAN_SERVICE_STATE_CONFIGURATION,
 					CONNMAN_IPCONFIG_TYPE_IPV6);
 #endif
+#if !defined TIZEN_EXT
 			autoconf_ipv6_set(network);
+#endif
 			break;
 
 		case CONNMAN_IPCONFIG_METHOD_FIXED:
 		case CONNMAN_IPCONFIG_METHOD_MANUAL:
+#if defined TIZEN_EXT
+			set_configuration(network, type);
+#endif
 			r = manual_ipv6_set(network, ipconfig);
 			break;
 
