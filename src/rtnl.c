@@ -1314,6 +1314,34 @@ static void rtnl_newnduseropt(struct nlmsghdr *hdr)
 	if (index < 0)
 		return;
 
+#if defined TIZEN_EXT
+	struct connman_service *service;
+	enum connman_dnsconfig_method ipv6_dns_method;
+	char *ifname;
+
+	service = __connman_service_lookup_from_index(index);
+	if (!service || !(__connman_service_index_is_default(index))) {
+		DBG("Invalid service, index: %d\n", index);
+		return;
+	}
+
+	DBG("service: %p index: %d\n", service, index);
+
+	ifname = connman_inet_ifname(index);
+	if (ifname == NULL) {
+		DBG("Interface is NULL, return");
+		return;
+	}
+
+	ipv6_dns_method = connman_service_get_ipv6_dns_method(service);
+	if (ipv6_dns_method != CONNMAN_DNSCONFIG_METHOD_DHCP) {
+		DBG("IPv6 DNS method is not Auto ignore RA!!! [DNS method: %d]", ipv6_dns_method);
+		g_free(ifname);
+		return;
+	}
+	g_free(ifname);
+#endif
+
 	for (opt = (void *)&msg[1];
 			msglen > 0;
 			msglen -= opt->nd_opt_len * 8,
@@ -1324,12 +1352,7 @@ static void rtnl_newnduseropt(struct nlmsghdr *hdr)
 
 		if (opt->nd_opt_type == 25) { /* ND_OPT_RDNSS */
 			char buf[40];
-#if defined TIZEN_EXT
-			struct connman_service *service;
 
-			service = __connman_service_lookup_from_index(index);
-			DBG("service: %p\n",service);
-#endif
 			servers = rtnl_nd_opt_rdnss(opt, &lifetime,
 					&nr_servers);
 			for (i = 0; i < nr_servers; i++) {
@@ -1338,6 +1361,9 @@ static void rtnl_newnduseropt(struct nlmsghdr *hdr)
 					continue;
 
 #if defined TIZEN_EXT
+				__connman_service_nameserver_remove(service,
+						buf, false,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
 				__connman_service_nameserver_append(service,
 						buf, false,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
@@ -1345,10 +1371,6 @@ static void rtnl_newnduseropt(struct nlmsghdr *hdr)
 				connman_resolver_append_lifetime(index,
 						NULL, buf, lifetime);
 			}
-#if defined TIZEN_EXT
-			rtnl_nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_IPV6);
-#endif
-
 		} else if (opt->nd_opt_type == 31) { /* ND_OPT_DNSSL */
 			g_free(domains);
 

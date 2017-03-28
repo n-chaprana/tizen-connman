@@ -675,6 +675,15 @@ int __connman_service_load_modifiable(struct connman_service *service);
 
 void __connman_service_list_struct(DBusMessageIter *iter);
 
+#if defined TIZEN_EXT
+int connman_service_get_ipv6_dns_method(struct connman_service *service);
+enum connman_dnsconfig_method {
+	CONNMAN_DNSCONFIG_METHOD_UNKNOWN = 0,
+	CONNMAN_DNSCONFIG_METHOD_MANUAL  = 1,
+	CONNMAN_DNSCONFIG_METHOD_DHCP    = 2,
+};
+#endif
+
 struct connman_service *__connman_service_lookup_from_index(int index);
 struct connman_service *__connman_service_lookup_from_ident(const char *identifier);
 struct connman_service *__connman_service_create_from_network(struct connman_network *network);
@@ -908,11 +917,6 @@ unsigned int __connman_rtnl_update_interval_add(unsigned int interval);
 unsigned int __connman_rtnl_update_interval_remove(unsigned int interval);
 int __connman_rtnl_request_update(void);
 int __connman_rtnl_send(const void *buf, size_t len);
-
-#if defined TIZEN_EXT
-void rtnl_nameserver_add_all(struct connman_service *service,
-		        enum connman_ipconfig_type type);
-#endif
 
 bool __connman_session_policy_autoconnect(enum connman_service_connect_reason reason);
 
