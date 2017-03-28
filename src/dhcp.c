@@ -634,7 +634,9 @@ int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
 			struct connman_network *network, dhcp_cb callback,
 			gpointer user_data)
 {
+#if !defined TIZEN_EXT
 	const char *last_addr = NULL;
+#endif
 	struct connman_dhcp *dhcp;
 	int err;
 
@@ -648,7 +650,9 @@ int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
 			return -EINVAL;
 	}
 
+#if !defined TIZEN_EXT
 	last_addr = __connman_ipconfig_get_dhcp_address(ipconfig);
+#endif
 
 	dhcp = g_hash_table_lookup(ipconfig_table, ipconfig);
 	if (!dhcp) {
@@ -680,7 +684,14 @@ int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
 	dhcp->callback = callback;
 	dhcp->user_data = user_data;
 
+#if defined TIZEN_EXT
+	DBG("Start DHCP with DHCPDISCOVER request");
+
+	return g_dhcp_client_start(dhcp->dhcp_client, NULL);
+#else
 	return g_dhcp_client_start(dhcp->dhcp_client, last_addr);
+#endif
+
 }
 
 void __connman_dhcp_stop(struct connman_ipconfig *ipconfig)
