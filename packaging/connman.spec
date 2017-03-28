@@ -260,6 +260,7 @@ systemctl daemon-reload
 %{_libdir}/connman/plugins-vpn/openconnect.so
 %{_libdir}/connman/scripts/openconnect-script
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
+%license COPYING
 %endif
 
 %if %{with connman_openvpn}
@@ -268,6 +269,7 @@ systemctl daemon-reload
 %{_libdir}/%{name}/plugins-vpn/openvpn.so
 %{_libdir}/%{name}/scripts/openvpn-script
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
+%license COPYING
 %endif
 
 %if %{with connman_vpnd}
@@ -279,6 +281,7 @@ systemctl daemon-reload
 %dir %{_libdir}/%{name}/plugins-vpn
 %config %{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
+%license COPYING
 %endif
 
 %post extension-tv
@@ -286,6 +289,7 @@ mv -f %{_libdir}/systemd/system/connman.service.tv %{_libdir}/systemd/system/con
 mv -f %{_sysconfdir}/connman/main.conf.tv %{_sysconfdir}/connman/main.conf
 %files extension-tv
 %attr(644,root,root) %{_sysconfdir}/connman/main.conf.tv
+%license COPYING
 %if "%{?_lib}" == "lib64"
 %attr(644,root,root) %{_unitdir}/connman.service.tv
 %else
@@ -295,3 +299,5 @@ mv -f %{_sysconfdir}/connman/main.conf.tv %{_sysconfdir}/connman/main.conf
 mv -f %{_sysconfdir}/connman/main.conf.ivi %{_sysconfdir}/connman/main.conf
 %files extension-ivi
 %attr(644,root,root) %{_sysconfdir}/connman/main.conf.ivi
+%license COPYING
+
