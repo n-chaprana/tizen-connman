@@ -455,6 +455,11 @@ enum __connman_dhcpv6_status {
 	CONNMAN_DHCPV6_STATUS_RESTART  = 2,
 };
 
+#if defined TIZEN_EXT
+void set_dhcp_discover_timeout(int timeout_value);
+void set_dhcp_discover_retry_count(int retry_count);
+#endif
+
 typedef void (* dhcpv6_cb) (struct connman_network *network,
 			enum __connman_dhcpv6_status status, gpointer data);
 

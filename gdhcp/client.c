@@ -50,8 +50,29 @@
 #define DISCOVER_TIMEOUT 5
 #define DISCOVER_RETRIES 6
 
+#if defined TIZEN_EXT
+#define REQUEST_TIMEOUT 1
+#else
 #define REQUEST_TIMEOUT 5
+#endif
 #define REQUEST_RETRIES 3
+
+#if defined TIZEN_EXT
+#define DISCOVER_TIMEOUT_WIFI 1
+#define DISCOVER_RETRIES_WIFI 10
+static int dhcp_discover_timeout = DISCOVER_TIMEOUT_WIFI;
+static int dhcp_discover_max_retry = DISCOVER_RETRIES_WIFI;
+
+void set_dhcp_discover_timeout(int timeout_value)
+{
+	dhcp_discover_timeout = timeout_value;
+}
+
+void set_dhcp_discover_retry_count(int retry_count)
+{
+	dhcp_discover_max_retry = retry_count;
+}
+#endif
 
 typedef enum _listen_mode {
 	L_NONE,
@@ -2688,6 +2709,11 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 	uint32_t addr;
 	uint64_t rand;
 
+#if defined TIZEN_EXT
+	int discover_retry = 0;
+	int timeout = 0;
+#endif
+
 	remove_timeouts(dhcp_client);
 
 	if (dhcp_client->type == G_DHCP_IPV6) {
@@ -2774,13 +2800,32 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 		return 0;
 	}
 
+#if defined TIZEN_EXT
+	if (g_ascii_strncasecmp(dhcp_client->interface, "wlan", 4)
+			== 0) {
+		discover_retry = DISCOVER_RETRIES_WIFI;
+		timeout = DISCOVER_TIMEOUT_WIFI;
+	} else {
+		discover_retry = DISCOVER_RETRIES;
+		timeout = DISCOVER_TIMEOUT;
+	}
+
+	debug(dhcp_client, "[DHCPC] Discover retry/total : [%d]/[%d] timeout [%d]",
+			dhcp_client->retry_times, discover_retry, timeout);
+#endif
+
+
 	if (dhcp_client->type == G_DHCP_IPV4LL) {
 		dhcp_client->state = INIT_SELECTING;
 		ipv4ll_start(dhcp_client);
 		return 0;
 	}
 
-	if (dhcp_client->retry_times == DISCOVER_RETRIES) {
+#if defined TIZEN_EXT
+		if (dhcp_client->retry_times == discover_retry) {
+#else
+		if (dhcp_client->retry_times == DISCOVER_RETRIES) {
+#endif
 		if (dhcp_client->no_lease_cb)
 			dhcp_client->no_lease_cb(dhcp_client,
 						dhcp_client->no_lease_data);
@@ -2823,7 +2868,11 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 
 		dhcp_client->timeout = g_timeout_add_seconds_full(
 								G_PRIORITY_HIGH,
+#if defined TIZEN_EXT
+								timeout,
+#else
 								REQUEST_TIMEOUT,
+#endif
 								reboot_timeout,
 								dhcp_client,
 								NULL);
@@ -2832,7 +2881,11 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 	send_discover(dhcp_client, addr);
 
 	dhcp_client->timeout = g_timeout_add_seconds_full(G_PRIORITY_HIGH,
+#if defined TIZEN_EXT
+							timeout,
+#else
 							DISCOVER_TIMEOUT,
+#endif
 							discover_timeout,
 							dhcp_client,
 							NULL);
