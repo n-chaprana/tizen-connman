@@ -77,14 +77,6 @@ struct connman_service_user {
 	uid_t current_user;
 };
 
-#ifdef TIZEN_EXT
-enum connman_dnsconfig_method {
-	CONNMAN_DNSCONFIG_METHOD_UNKNOWN = 0,
-	CONNMAN_DNSCONFIG_METHOD_MANUAL  = 1,
-	CONNMAN_DNSCONFIG_METHOD_DHCP    = 2,
-};
-#endif
-
 struct connman_service {
 	int refcount;
 	char *identifier;
@@ -1642,15 +1634,6 @@ static int nameserver_remove_all(struct connman_service *service)
 
 	return 0;
 }
-
-#if defined TIZEN_EXT
-void rtnl_nameserver_add_all(struct connman_service *service,
-		enum connman_ipconfig_type type)
-{
-	DBG("");
-	nameserver_add_all(service, type);
-}
-#endif
 
 static int searchdomain_add_all(struct connman_service *service)
 {
@@ -3656,6 +3639,18 @@ const char *connman_service_get_proxy_autoconfig(struct connman_service *service
 						service->ipconfig_ipv6);
 	return NULL;
 }
+
+#if defined TIZEN_EXT
+int connman_service_get_ipv6_dns_method(struct connman_service *service)
+{
+	if (!service) {
+		DBG("Service is NULL");
+		return -1;
+	}
+
+	return service->dns_config_method_ipv6;
+}
+#endif
 
 void __connman_service_set_timeservers(struct connman_service *service,
 				char **timeservers)
