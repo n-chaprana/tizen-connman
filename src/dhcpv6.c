@@ -417,7 +417,9 @@ static int dhcpv6_info_request(struct connman_dhcpv6 *dhcp)
 		return -EINVAL;
 	}
 
+#if !defined TIZEN_EXT
 	if (getenv("CONNMAN_DHCPV6_DEBUG"))
+#endif
 		g_dhcp_client_set_debug(dhcp_client, dhcpv6_debug, "DHCPv6");
 
 	service = connman_service_lookup_from_network(dhcp->network);
@@ -1769,7 +1771,9 @@ static int dhcpv6_solicitation(struct connman_dhcpv6 *dhcp)
 		return -EINVAL;
 	}
 
+#if !defined TIZEN_EXT
 	if (getenv("CONNMAN_DHCPV6_DEBUG"))
+#endif
 		g_dhcp_client_set_debug(dhcp_client, dhcpv6_debug, "DHCPv6");
 
 	service = connman_service_lookup_from_network(dhcp->network);
@@ -2086,7 +2090,9 @@ static GDHCPClient *create_pd_client(struct connman_dhcpv6 *dhcp, int *err)
 		return NULL;
 	}
 
+#if !defined TIZEN_EXT
 	if (getenv("CONNMAN_DHCPV6_DEBUG"))
+#endif
 		g_dhcp_client_set_debug(dhcp_client, dhcpv6_debug, "DHCPv6:PD");
 
 	service = connman_service_lookup_from_network(dhcp->network);

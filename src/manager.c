@@ -140,7 +140,9 @@ static DBusMessage *get_technologies(DBusConnection *conn,
 {
 	DBusMessage *reply;
 
+#if !defined TIZEN_EXT
 	DBG("");
+#endif
 
 	reply = dbus_message_new_method_return(msg);
 	if (!reply)

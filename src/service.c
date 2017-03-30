@@ -5623,17 +5623,23 @@ static void service_append_added_foreach(gpointer data, gpointer user_data)
 	DBusMessageIter *iter = user_data;
 
 	if (!service || !service->path) {
+#if !defined TIZEN_EXT
 		DBG("service %p or path is NULL", service);
+#endif
 		return;
 	}
 
 	if (g_hash_table_lookup(services_notify->add, service->path)) {
+#if !defined TIZEN_EXT
 		DBG("new %s", service->path);
+#endif
 
 		append_struct(service, iter);
 		g_hash_table_remove(services_notify->add, service->path);
 	} else {
+#if !defined TIZEN_EXT
 		DBG("changed %s", service->path);
+#endif
 
 		append_struct_service(iter, NULL, service);
 	}

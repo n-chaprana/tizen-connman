@@ -1839,8 +1839,6 @@ void __connman_ipconfig_append_ipv4(struct connman_ipconfig *ipconfig,
 	struct connman_ipaddress *append_addr = NULL;
 	const char *str;
 
-	DBG("");
-
 	if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV4)
 		return;
 
@@ -1900,8 +1898,6 @@ void __connman_ipconfig_append_ipv6(struct connman_ipconfig *ipconfig,
 {
 	struct connman_ipaddress *append_addr = NULL;
 	const char *str, *privacy;
-
-	DBG("");
 
 	if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV6)
 		return;
@@ -1964,8 +1960,6 @@ void __connman_ipconfig_append_ipv6config(struct connman_ipconfig *ipconfig,
 {
 	const char *str, *privacy;
 
-	DBG("");
-
 	str = __connman_ipconfig_method2string(ipconfig->method);
 	if (!str)
 		return;
@@ -2007,8 +2001,6 @@ void __connman_ipconfig_append_ipv4config(struct connman_ipconfig *ipconfig,
 							DBusMessageIter *iter)
 {
 	const char *str;
-
-	DBG("");
 
 	str = __connman_ipconfig_method2string(ipconfig->method);
 	if (!str)

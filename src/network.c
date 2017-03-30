@@ -518,11 +518,21 @@ static void check_dhcpv6(struct nd_router_advert *reply,
 	 * We do stateful/stateless DHCPv6 if router advertisement says so.
 	 */
 	if (reply->nd_ra_flags_reserved & ND_RA_FLAG_MANAGED) {
+#if defined TIZEN_EXT
+		DBG("IPv6 ND_RA_FLAG_MANAGED");
+#endif
 		__connman_dhcpv6_start(network, prefixes, dhcpv6_callback);
 	} else {
 		if (reply->nd_ra_flags_reserved & ND_RA_FLAG_OTHER)
+#if defined TIZEN_EXT
+		{
+			DBG("IPv6 ND_RA_FLAG_OTHER");
+#endif
 			__connman_dhcpv6_start_info(network,
 							dhcpv6_info_callback);
+#if defined TIZEN_EXT
+		}
+#endif
 
 		g_slist_free_full(prefixes, g_free);
 		network->connecting = false;
