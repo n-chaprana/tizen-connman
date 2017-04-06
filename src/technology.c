@@ -1148,6 +1148,42 @@ static DBusMessage *scan(DBusConnection *conn, DBusMessage *msg, void *data)
 	return NULL;
 }
 
+#if defined TIZEN_EXT
+static DBusMessage *get_scan_state(DBusConnection *conn, DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+	DBusMessageIter iter, dict;
+	GSList *list;
+	struct connman_technology *technology = data;
+	dbus_bool_t scanning;
+
+	DBG("technology %p", technology);
+
+	for (list = technology->device_list; list; list = list->next) {
+		struct connman_device *device = list->data;
+		scanning = connman_device_get_scanning(device);
+		if(scanning)
+			break;
+	}
+
+	DBG("scanning : %d", scanning);
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	dbus_message_iter_init_append(reply, &iter);
+
+	connman_dbus_dict_open(&iter, &dict);
+	connman_dbus_dict_append_basic(&dict, "Scanstate",
+					DBUS_TYPE_BOOLEAN,
+					&scanning);
+
+	connman_dbus_dict_close(&iter, &dict);
+
+	return reply;
+}
+#endif
+
 static const GDBusMethodTable technology_methods[] = {
 	{ GDBUS_DEPRECATED_METHOD("GetProperties",
 			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
@@ -1156,6 +1192,10 @@ static const GDBusMethodTable technology_methods[] = {
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" }),
 			NULL, set_property) },
 	{ GDBUS_ASYNC_METHOD("Scan", NULL, NULL, scan) },
+#if defined TIZEN_EXT
+	{ GDBUS_METHOD("GetScanState", NULL, GDBUS_ARGS({ "scan_state", "a{sv}" }),
+			get_scan_state) },
+#endif
 	{ },
 };
 
