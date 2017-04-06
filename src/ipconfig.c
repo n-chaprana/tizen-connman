@@ -1890,6 +1890,18 @@ void __connman_ipconfig_append_ipv4(struct connman_ipconfig *ipconfig,
 	if (append_addr->gateway)
 		connman_dbus_dict_append_basic(iter, "Gateway",
 				DBUS_TYPE_STRING, &append_addr->gateway);
+
+#if defined TIZEN_EXT
+	if (ipconfig->method == CONNMAN_IPCONFIG_METHOD_DHCP) {
+		char *server_ip;
+		server_ip = __connman_dhcp_get_server_address(ipconfig);
+		if (server_ip) {
+			connman_dbus_dict_append_basic(iter, "DHCPServerIP",
+					DBUS_TYPE_STRING, &server_ip);
+			g_free(server_ip);
+		}
+	}
+#endif
 }
 
 void __connman_ipconfig_append_ipv6(struct connman_ipconfig *ipconfig,
