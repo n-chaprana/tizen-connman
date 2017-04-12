@@ -1031,19 +1031,37 @@ static void reply_scan_pending(struct connman_technology *technology, int err)
 	}
 }
 
+#if defined TIZEN_EXT
+dbus_bool_t __connman_technology_notify_scan_changed(const char *key, void *val)
+{
+	DBG("key %s", key);
+	DBusMessage *signal;
+	DBusMessageIter iter;
+	dbus_bool_t result = FALSE;
+
+	signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
+			CONNMAN_MANAGER_INTERFACE, "ScanChanged");
+	if (!signal)
+		return result;
+
+	dbus_message_iter_init_append(signal, &iter);
+	connman_dbus_property_append_basic(&iter, key, DBUS_TYPE_BOOLEAN, val);
+
+	result = dbus_connection_send(connection, signal, NULL);
+	dbus_message_unref(signal);
+
+	DBG("Successfuly sent signal");
+
+	return result;
+}
+#endif
+
 void __connman_technology_scan_started(struct connman_device *device)
 {
 	DBG("device %p", device);
 #if defined TIZEN_EXT
-	DBusMessage *signal;
-
-	signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
-			CONNMAN_MANAGER_INTERFACE, "ScanStarted");
-	if (!signal)
-		return;
-
-	dbus_connection_send(connection, signal, NULL);
-	dbus_message_unref(signal);
+	dbus_bool_t status = 1;
+	__connman_technology_notify_scan_changed("scan_started", &status);
 #endif
 }
 
@@ -1077,6 +1095,8 @@ void __connman_technology_scan_stopped(struct connman_device *device,
 #if defined TIZEN_EXT
 	if (count == 0) {
 		DBusMessage *signal;
+		dbus_bool_t status = 0;
+		__connman_technology_notify_scan_changed("scan_done", &status);
 
 		signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
 										CONNMAN_MANAGER_INTERFACE, "ScanDone");
