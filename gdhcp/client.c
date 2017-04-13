@@ -3029,7 +3029,11 @@ char *g_dhcp_client_get_server_address(GDHCPClient *dhcp_client)
 	if (!dhcp_client)
 		return NULL;
 
+#if defined TIZEN_EXT
+	return get_ip(htonl(dhcp_client->server_ip));
+#else
 	return get_ip(dhcp_client->server_ip);
+#endif
 }
 
 char *g_dhcp_client_get_address(GDHCPClient *dhcp_client)
