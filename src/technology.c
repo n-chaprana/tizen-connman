@@ -1175,7 +1175,7 @@ static DBusMessage *get_scan_state(DBusConnection *conn, DBusMessage *msg, void 
 	DBusMessageIter iter, dict;
 	GSList *list;
 	struct connman_technology *technology = data;
-	dbus_bool_t scanning;
+	dbus_bool_t scanning = false;
 
 	DBG("technology %p", technology);
 
