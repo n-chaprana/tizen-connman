@@ -155,7 +155,7 @@ vpn_connman_vpnd_SOURCES = $(gdhcp_sources) $(builtin_vpn_sources) \
 
 vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
 				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
-				@TPKP_GNUTLS_LIBS@ @LIBSYSTEMD_LIBS@\
+				@TPKP_GNUTLS_LIBS@ @LIBSYSTEMD_LIBS@ \
 				-lresolv -ldl
 
 vpn_connman_vpnd_LDFLAGS = -Wl,--export-dynamic \
@@ -407,6 +407,7 @@ DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles \
 				--enable-hh2serial-gps \
 				--enable-openconnect \
 				--enable-openvpn \
+				--enable-ipsec \
 				--enable-vpnc \
 				--enable-session-policy-local \
 				--enable-nmcompat \

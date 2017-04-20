@@ -1757,6 +1757,7 @@ static void provider_create_all_from_type(const char *provider_type)
 	g_strfreev(providers);
 }
 
+#if !defined TIZEN_EXT
 char *__vpn_provider_create_identifier(const char *host, const char *domain)
 {
 	char *ident;
@@ -1769,6 +1770,20 @@ char *__vpn_provider_create_identifier(const char *host, const char *domain)
 
 	return ident;
 }
+#else
+char *__vpn_provider_create_identifier(const char *host, const char *domain, const char *name)
+{
+	char *ident;
+
+	ident = g_strdup_printf("%s_%s_%s", host, domain, name);
+	if (!ident)
+		return NULL;
+
+	provider_dbus_ident(ident);
+
+	return ident;
+}
+#endif
 
 int __vpn_provider_create(DBusMessage *msg)
 {
@@ -1822,7 +1837,11 @@ int __vpn_provider_create(DBusMessage *msg)
 	if (!type || !name)
 		return -EOPNOTSUPP;
 
+#if !defined TIZEN_EXT
 	ident = __vpn_provider_create_identifier(host, domain);
+#else
+	ident = __vpn_provider_create_identifier(host, domain, name);
+#endif
 	DBG("ident %s", ident);
 
 	provider = __vpn_provider_lookup(ident);
@@ -2011,7 +2030,11 @@ int __vpn_provider_create_from_config(GHashTable *settings,
 		goto fail;
 	}
 
+#if !defined TIZEN_EXT
 	ident = __vpn_provider_create_identifier(host, domain);
+#else
+	ident = __vpn_provider_create_identifier(host, domain, name);
+#endif
 	DBG("ident %s", ident);
 
 	provider = __vpn_provider_lookup(ident);

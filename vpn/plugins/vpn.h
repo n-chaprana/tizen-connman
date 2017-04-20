@@ -40,9 +40,12 @@ enum vpn_state {
 	VPN_STATE_AUTH_FAILURE  = 6,
 };
 
+typedef void (*vpn_event_callback)(struct vpn_provider *provider, int state);
+
 struct vpn_driver {
 	int flags;
 	int (*notify) (DBusMessage *msg, struct vpn_provider *provider);
+	void (*set_event_cb) (vpn_event_callback event_cb, struct vpn_provider *provider);
 	int (*connect) (struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
 			vpn_provider_connect_cb_t cb, const char *dbus_sender,

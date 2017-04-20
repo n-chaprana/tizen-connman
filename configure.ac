@@ -107,6 +107,34 @@ fi
 AM_CONDITIONAL(OPENVPN, test "${enable_openvpn}" != "no")
 AM_CONDITIONAL(OPENVPN_BUILTIN, test "${enable_openvpn}" = "builtin")
 
+AC_ARG_WITH(ipsec, AC_HELP_STRING([--with-ipsec=PROGRAM],
+        [specify location of ipsec binary]), [path_ipsec=${withval}])
+
+AC_ARG_ENABLE(ipsec,
+	AC_HELP_STRING([--enable-ipsec], [enable ipsec support]),
+			[enable_ipsec=${enableval}], [enable_ipsec="no"])
+if (test "${enable_ipsec}" != "no"); then
+	PKG_CHECK_MODULES(GIO, gio-2.0 >= 2.28, dummy=yes,
+					AC_MSG_ERROR(GIO >= 2.28 is required))
+	AC_SUBST(GIO_CFLAGS)
+	AC_SUBST(GIO_LIBS)
+	PKG_CHECK_MODULES(OPENSSL, openssl, dummy=yes,
+					AC_MSG_ERROR(openssl library is required))
+	AC_SUBST(OPENSSL_CFLAGS)
+	AC_SUBST(OPENSSL_LIBS)
+	if (test -z "${path_ipsec}"); then
+		AC_PATH_PROG(IPSEC, [charon], [/usr/bin/charon], $PATH:/usr/bin)
+		if (test -z "${IPSEC}"); then
+			AC_MSG_ERROR(ipsec binary not found)
+		fi
+	else
+		IPSEC="${path_ipsec}"
+		AC_SUBST(IPSEC)
+	fi
+fi
+AM_CONDITIONAL(IPSEC, test "${enable_ipsec}" != "no")
+AM_CONDITIONAL(IPSEC_BUILTIN, test "${enable_ipsec}" = "builtin")
+
 AC_ARG_WITH(vpnc, AC_HELP_STRING([--with-vpnc=PROGRAM],
 	[specify location of vpnc binary]), [path_vpnc=${withval}])
 
@@ -402,6 +430,7 @@ fi
 
 AM_CONDITIONAL(VPN, test "${enable_openconnect}" != "no" -o \
 			"${enable_openvpn}" != "no" -o \
+			"${enable_ipsec}" != "no" -o \
 			"${enable_vpnc}" != "no" -o \
 			"${enable_l2tp}" != "no" -o \
 			"${enable_pptp}" != "no")

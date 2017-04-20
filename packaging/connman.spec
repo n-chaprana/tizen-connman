@@ -1,5 +1,6 @@
 %bcond_with     connman_openconnect
 %bcond_without  connman_openvpn
+%bcond_without  connman_ipsec
 %bcond_without  connman_vpnd
 
 Name:           connman
@@ -13,6 +14,7 @@ Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  systemd-devel
 BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(glib-2.0)
+BuildRequires:  pkgconfig(gio-2.0)
 BuildRequires:  pkgconfig(libiptc)
 BuildRequires:  pkgconfig(xtables)
 BuildRequires:  pkgconfig(libsmack)
@@ -23,6 +25,10 @@ BuildRequires:  openconnect
 %endif
 %if %{with connman_openvpn}
 BuildRequires:  openvpn
+%endif
+%if %{with connman_ipsec}
+BuildRequires:  strongswan
+BuildRequires:  pkgconfig(openssl)
 %endif
 BuildRequires:  ca-certificates-devel
 BuildRequires:  readline-devel
@@ -61,6 +67,17 @@ Requires:       %{name} = %{version}
 Requires:       openvpn
 
 %description plugin-openvpn
+OpenVPN support for Connman.
+%endif
+
+%if %{with connman_ipsec}
+%package plugin-ipsec
+Summary:        IPsec Support for Connman
+Requires:       %{name} = %{version}
+Requires:       strongswan
+BuildRequires:  pkgconfig(openssl)
+
+%description plugin-ipsec
 OpenVPN support for Connman.
 %endif
 
@@ -135,6 +152,9 @@ chmod +x bootstrap
 %endif
 %if %{with connman_openvpn}
             --enable-openvpn \
+%endif
+%if %{with connman_ipsec}
+            --enable-ipsec \
 %endif
 %if 0%{?enable_connman_features}
             %connman_features \
@@ -270,6 +290,14 @@ systemctl daemon-reload
 %{_libdir}/%{name}/scripts/openvpn-script
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %license COPYING
+%endif
+
+%if %{with connman_ipsec}
+%files plugin-ipsec
+%manifest %{name}.manifest
+%{_libdir}/%{name}/plugins-vpn/ipsec.so
+%{_libdir}/%{name}/scripts/ipsec-script
+%{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %endif
 
 %if %{with connman_vpnd}

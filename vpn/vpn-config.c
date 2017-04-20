@@ -203,7 +203,11 @@ static int load_provider(GKeyFile *keyfile, const char *group,
 				struct vpn_config *config, enum what action)
 {
 	struct vpn_config_provider *config_provider;
+#if !defined TIZEN_EXT
 	const char *ident, *host, *domain;
+#else
+	const char *ident, *host, *domain, *name;
+#endif
 	int err;
 
 	/* Strip off "provider_" prefix */
@@ -229,8 +233,14 @@ static int load_provider(GKeyFile *keyfile, const char *group,
 
 	host = get_string(config_provider, "Host");
 	domain = get_string(config_provider, "Domain");
+#if !defined TIZEN_EXT
 	if (host && domain) {
 		char *id = __vpn_provider_create_identifier(host, domain);
+#else
+	name = get_string(config_provider, "Name");
+	if (host && domain && name) {
+		char *id = __vpn_provider_create_identifier(host, domain, name);
+#endif
 
 		struct vpn_provider *provider;
 		provider = __vpn_provider_lookup(id);
@@ -252,7 +262,11 @@ static int load_provider(GKeyFile *keyfile, const char *group,
 
 		DBG("provider identifier %s", id);
 	} else {
+#if !defined TIZEN_EXT
 		DBG("invalid values host %s domain %s", host, domain);
+#else
+		DBG("invalid values host %s domain %s name %s", host, domain, name);
+#endif
 		err = -EINVAL;
 		goto err;
 	}

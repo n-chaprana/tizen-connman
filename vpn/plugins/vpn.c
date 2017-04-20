@@ -307,6 +307,99 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 	return NULL;
 }
 
+static void vpn_event(struct vpn_provider *provider, int state)
+{
+	struct vpn_data *data;
+	struct vpn_driver_data *vpn_driver_data;
+	const char *name;
+	int index, err;
+
+	data = vpn_provider_get_data(provider);
+
+	name = vpn_provider_get_driver_name(provider);
+
+	if (!name) {
+		DBG("Cannot find VPN driver for provider %p", provider);
+		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_FAILURE);
+		return;
+	}
+
+	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
+	if (!vpn_driver_data) {
+		DBG("Cannot find VPN driver data for name %s", name);
+		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_FAILURE);
+		return;
+	}
+
+	DBG("provider %p driver %s state %d", provider, name, state);
+
+	switch (state) {
+	case VPN_STATE_CONNECT:
+	case VPN_STATE_READY:
+		if (data->state == VPN_STATE_READY) {
+			/*
+			 * This is the restart case, in which case we must
+			 * just set the IP address.
+			 *
+			 * We need to remove first the old address, just
+			 * replacing the old address will not work as expected
+			 * because the old address will linger in the interface
+			 * and not disapper so the clearing is needed here.
+			 *
+			 * Also the state must change, otherwise the routes
+			 * will not be set properly.
+			 */
+			vpn_provider_set_state(provider,
+						VPN_PROVIDER_STATE_CONNECT);
+
+			vpn_provider_clear_address(provider, AF_INET);
+			vpn_provider_clear_address(provider, AF_INET6);
+
+			vpn_provider_change_address(provider);
+			vpn_provider_set_state(provider,
+						VPN_PROVIDER_STATE_READY);
+			break;
+		}
+
+		index = vpn_provider_get_index(provider);
+		vpn_provider_ref(provider);
+		data->watch = vpn_rtnl_add_newlink_watch(index,
+						     vpn_newlink, provider);
+		err = connman_inet_ifup(index);
+		if (err < 0) {
+			if (err == -EALREADY)
+				/*
+				 * So the interface is up already, that is just
+				 * great. Unfortunately in this case the
+				 * newlink watch might not have been called at
+				 * all. We must manually call it here so that
+				 * the provider can go to ready state and the
+				 * routes are setup properly.
+				 */
+				vpn_newlink(IFF_UP, 0, provider);
+			else
+				DBG("Cannot take interface %d up err %d/%s",
+					index, -err, strerror(-err));
+		}
+		break;
+
+	case VPN_STATE_UNKNOWN:
+	case VPN_STATE_IDLE:
+	case VPN_STATE_DISCONNECT:
+	case VPN_STATE_FAILURE:
+		vpn_provider_set_state(provider,
+					VPN_PROVIDER_STATE_DISCONNECT);
+		break;
+
+	case VPN_STATE_AUTH_FAILURE:
+		vpn_provider_indicate_error(provider,
+					VPN_PROVIDER_ERROR_AUTH_FAILED);
+		break;
+	}
+
+	return;
+}
+
 static int vpn_create_tun(struct vpn_provider *provider)
 {
 	struct vpn_data *data = vpn_provider_get_data(provider);
@@ -453,6 +546,10 @@ static int vpn_connect(struct vpn_provider *provider,
 		data->task = NULL;
 		goto exist_err;
 	}
+
+
+	if(vpn_driver_data->vpn_driver->set_event_cb)
+		vpn_driver_data->vpn_driver->set_event_cb(vpn_event, provider);
 
 	ret = vpn_driver_data->vpn_driver->connect(provider, data->task,
 						data->if_name, cb, dbus_sender,
