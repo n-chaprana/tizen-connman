@@ -3269,7 +3269,7 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 						append_ethernet, service);
 
 		connman_dbus_dict_append_basic(dict, "DisconnectReason",
-				DBUS_TYPE_UINT32, &service->disconnect_reason);
+				DBUS_TYPE_INT32, &service->disconnect_reason);
 
 		break;
 #endif
