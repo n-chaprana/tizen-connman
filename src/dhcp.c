@@ -61,6 +61,9 @@ static bool ipv4ll_running;
 
 static void dhcp_free(struct connman_dhcp *dhcp)
 {
+#if defined TIZEN_EXT
+	DBG("dhcp_free [%p]", dhcp);
+#endif
 	g_strfreev(dhcp->nameservers);
 	g_strfreev(dhcp->timeservers);
 	g_free(dhcp->pac);
@@ -70,10 +73,16 @@ static void dhcp_free(struct connman_dhcp *dhcp)
 	dhcp->pac = NULL;
 
 	g_free(dhcp);
+#if defined TIZEN_EXT
+	dhcp = NULL;
+#endif
 }
 
 static void ipv4ll_stop_client(struct connman_dhcp *dhcp)
 {
+#if defined TIZEN_EXT
+	DBG("dhcp [%p] ipv4ll_client [%p]", dhcp, dhcp->ipv4ll_client);
+#endif
 	if (!dhcp->ipv4ll_client)
 		return;
 
@@ -189,6 +198,10 @@ static int ipv4ll_start_client(struct connman_dhcp *dhcp)
 	int index;
 	int err;
 
+#if defined TIZEN_EXT
+	DBG("dhcp %p", dhcp);
+#endif
+
 	if (dhcp->ipv4ll_client)
 		return -EALREADY;
 
@@ -242,7 +255,10 @@ static gboolean dhcp_retry_cb(gpointer user_data)
 	struct connman_dhcp *dhcp = user_data;
 
 	dhcp->timeout = 0;
-
+#if defined TIZEN_EXT
+	DBG("dhcp %p", dhcp);
+	DBG("dhcp->timeout %d", dhcp->timeout);
+#endif
 	g_dhcp_client_start(dhcp->dhcp_client,
 			__connman_ipconfig_get_dhcp_address(dhcp->ipconfig));
 
@@ -701,7 +717,6 @@ int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
 #else
 	return g_dhcp_client_start(dhcp->dhcp_client, last_addr);
 #endif
-
 }
 
 void __connman_dhcp_stop(struct connman_ipconfig *ipconfig)

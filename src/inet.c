@@ -1546,6 +1546,9 @@ static int ndisc_send_unspec(int type, int oif, const struct in6_addr *dest,
 	msgh.msg_controllen = cmsg->cmsg_len;
 
 	ret = sendmsg(fd, &msgh, 0);
+#if defined TIZEN_EXT
+	DBG("sendmsg errno: %d/%s", errno, strerror(errno));
+#endif
 
 	close(fd);
 	return ret;

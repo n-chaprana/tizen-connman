@@ -673,6 +673,10 @@ static void powered_changed(struct connman_technology *technology)
 
 	__sync_synchronize();
 	enabled = technology->enabled;
+#if defined TIZEN_EXT
+	DBG("ConnMan, Powered : %s, %s",
+			enabled ? "TRUE" : "FALSE",technology->path);
+#endif
 	connman_dbus_property_changed_basic(technology->path,
 			CONNMAN_TECHNOLOGY_INTERFACE, "Powered",
 			DBUS_TYPE_BOOLEAN, &enabled);

@@ -1357,6 +1357,7 @@ static int nameserver_add_all(struct connman_service *service)
 			DBG("type %d add service->nameservers_config[%d]:%s",type,
 			    i, service->nameservers_config[i]);
 			if(strncmp(service->nameservers_config[i], "::", 2) == 0) {
+				DBG("Invalid nameserver");
 				i++;
 				continue;
 			}
@@ -1486,6 +1487,9 @@ static int nameserver_remove(struct connman_service *service,
 	if (index < 0)
 		return -ENXIO;
 
+#if defined TIZEN_EXT
+	DBG("Resolver remove nameserver: %s", nameserver);
+#endif
 	return connman_resolver_remove(index, NULL, nameserver);
 }
 
@@ -1830,6 +1834,9 @@ set_servers:
 		service->nameservers_auto = nameservers;
 	} else {
 		service->nameservers = nameservers;
+#if defined TIZEN_EXT
+		DBG("nameserver remove ip_type: %d", type);
+#endif
 		nameserver_remove(service, nameserver);
 	}
 
@@ -2194,7 +2201,9 @@ static void state_changed(struct connman_service *service)
 	if (!allow_property_changed(service))
 		return;
 #endif
-
+#if defined TIZEN_EXT
+	DBG(" %s, %s", str, service->path);
+#endif
 	connman_dbus_property_changed_basic(service->path,
 				CONNMAN_SERVICE_INTERFACE, "State",
 						DBUS_TYPE_STRING, &str);
@@ -4835,9 +4844,21 @@ static bool auto_connect_service(GList *services,
 			if (preferred)
 			       continue;
 
+#if defined TIZEN_EXT
+			DBG("Service is not favorite, autoconnecting %d",
+					autoconnecting);
+#endif
 			return autoconnecting;
 		}
 
+#if defined TIZEN_EXT
+		DBG("service %p identifier %s roaming %d ignore %d "
+				"ipconfig_usable %d autoconnect %d state %d",
+				service,
+				service->identifier, service->roaming,
+				service->ignore, is_ipconfig_usable(service),
+				service->autoconnect, service->state);
+#endif
 		if (is_ignore(service) || service->state !=
 				CONNMAN_SERVICE_STATE_IDLE)
 			continue;

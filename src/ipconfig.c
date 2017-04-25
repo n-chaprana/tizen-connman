@@ -1838,6 +1838,9 @@ void __connman_ipconfig_append_ipv4(struct connman_ipconfig *ipconfig,
 {
 	struct connman_ipaddress *append_addr = NULL;
 	const char *str;
+#if defined TIZEN_EXT
+	DBG("");
+#endif
 
 	if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV4)
 		return;
@@ -1910,6 +1913,9 @@ void __connman_ipconfig_append_ipv6(struct connman_ipconfig *ipconfig,
 {
 	struct connman_ipaddress *append_addr = NULL;
 	const char *str, *privacy;
+#if defined TIZEN_EXT
+	DBG("");
+#endif
 
 	if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV6)
 		return;
@@ -1971,6 +1977,9 @@ void __connman_ipconfig_append_ipv6config(struct connman_ipconfig *ipconfig,
 							DBusMessageIter *iter)
 {
 	const char *str, *privacy;
+#if defined TIZEN_EXT
+	DBG("");
+#endif
 
 	str = __connman_ipconfig_method2string(ipconfig->method);
 	if (!str)
@@ -2013,6 +2022,9 @@ void __connman_ipconfig_append_ipv4config(struct connman_ipconfig *ipconfig,
 							DBusMessageIter *iter)
 {
 	const char *str;
+#if defined TIZEN_EXT
+	DBG("");
+#endif
 
 	str = __connman_ipconfig_method2string(ipconfig->method);
 	if (!str)

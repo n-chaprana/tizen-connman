@@ -478,6 +478,9 @@ static void check_dhcpv6(struct nd_router_advert *reply,
 						check_dhcpv6, network);
 			return;
 		}
+#if defined TIZEN_EXT
+		DBG("RA message is not received from server in reply of RS.");
+#endif
 		connman_network_unref(network);
 		return;
 	}
@@ -490,6 +493,9 @@ static void check_dhcpv6(struct nd_router_advert *reply,
 	 */
 	if (!network->connected) {
 		connman_network_unref(network);
+#if defined TIZEN_EXT
+		DBG("Network is not connected");
+#endif
 		return;
 	}
 
@@ -1689,7 +1695,9 @@ int __connman_network_connect(struct connman_network *network)
 	if (network->type != CONNMAN_NETWORK_TYPE_CELLULAR)
 #endif
 	__connman_device_disconnect(network->device);
-
+#if defined TIZEN_EXT
+	DBG("ConnMan, Connect Request [%s]", network->name);
+#endif
 	err = network->driver->connect(network);
 	if (err < 0) {
 		if (err == -EINPROGRESS) {
@@ -1728,7 +1736,9 @@ int __connman_network_disconnect(struct connman_network *network)
 		return -EUNATCH;
 
 	network->connecting = false;
-
+#if defined TIZEN_EXT
+	DBG("ConnMan, Disconnect request");
+#endif
 	if (network->driver->disconnect)
 		err = network->driver->disconnect(network);
 
@@ -2238,6 +2248,9 @@ int connman_network_set_string(struct connman_network *network,
 		g_free(network->wifi.security);
 		network->wifi.security = g_strdup(value);
 	} else if (g_str_equal(key, "WiFi.Passphrase")) {
+#if defined TIZEN_EXT
+		DBG("ConnMan, %p key %s", network, key);
+#endif
 		g_free(network->wifi.passphrase);
 		network->wifi.passphrase = g_strdup(value);
 	} else if (g_str_equal(key, "WiFi.EAP")) {

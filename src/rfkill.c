@@ -169,7 +169,7 @@ int __connman_rfkill_block(enum connman_service_type type, bool block)
 	DBG("type %d block %d", type, block);
 
 #if defined TIZEN_EXT
-	DBG("try to set rfkill block %d, but it's not pormitted", block);
+	DBG("try to set rfkill block %d, but it's not permitted", block);
 
 	return 0;
 #else

@@ -962,6 +962,12 @@ int __connman_connection_gateway_add(struct connman_service *service,
 	}
 
 	if (!active_gateway) {
+#if defined TIZEN_EXT
+		if(new_gateway->ipv4_gateway)
+			DBG("ConnMan, Set default gateway[%s], active[%d]",
+				new_gateway->ipv4_gateway->gateway,
+				new_gateway->ipv4_gateway->active);
+#endif
 		set_default_gateway(new_gateway, type);
 		goto done;
 	}
