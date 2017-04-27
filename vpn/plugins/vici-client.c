@@ -264,7 +264,7 @@ static char *load_cert_from_path(const char *path)
 	struct stat st;
 	FILE *fp = NULL;
 	int fd = 0;
-	unsigned long long file_size = 0;
+	size_t file_size = 0;
 	char *file_buff = NULL;
 
 	fp = fopen(path, "rb");
@@ -812,7 +812,6 @@ static int handle_vici_result(gboolean success, int cmd, char * err)
 	if (success)
 		return 0;
 
-	DBG(" %s failed with %s!\n", vici_cmd_str[cmd], err);
 	g_free(err);
 
 	switch (cmd) {
@@ -838,6 +837,7 @@ static int handle_vici_result(gboolean success, int cmd, char * err)
 		break;
 	}
 
+	DBG(" %s failed with %d!\n", vici_cmd_str[cmd], ret);
 	return ret;
 }
 
@@ -999,15 +999,13 @@ static gboolean process_reply(GIOChannel *source,
 	}
 
 	ret = process_vici_response(req);
-	if (ret != 0)
-		vici_client->reply(ret, vici_client->ipsec_user_data);
-
 	vici_client->request_list = g_slist_remove(vici_client->request_list, req);
 	destroy_vici_request(req);
 
 	/* TODO :remove this after debug */
 	DBG("left request reply : %d", g_slist_length(vici_client->request_list));
-	if(g_slist_length(vici_client->request_list) == 0)
+
+	if (ret!= 0 || g_slist_length(vici_client->request_list) == 0)
 		vici_client->reply(ret, vici_client->ipsec_user_data);
 
 	return TRUE;

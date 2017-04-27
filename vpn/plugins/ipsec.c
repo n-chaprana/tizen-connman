@@ -719,10 +719,10 @@ static char *load_file_from_path(const char *path)
 	struct stat st;
 	FILE *fp = NULL;
 	int fd = 0;
-	unsigned long long file_size = 0;
+	size_t  file_size = 0;
 	char *file_buff = NULL;
 
-	if (file_buff) {
+	if (path) {
 		connman_error("File path is NULL\n");
 		return NULL;
 	}
@@ -839,6 +839,10 @@ static int ipsec_load_cert(struct vpn_provider *provider)
 	flag = vpn_provider_get_string(provider, "IPsec.CertFlag");
 	data = load_file_from_path(vpn_provider_get_string(provider, "IPsec.CertData"));
 	DBG("CertType: %s, CertFalg: %s,CertData: %s", type, flag, data);
+	if (!type || ! flag || !data) {
+		connman_error("invalid certification information");
+		return -EINVAL;
+	}
 
 	ret = vici_load_cert(type, flag, data);
 	if (ret < 0)
@@ -1024,6 +1028,10 @@ static int ipsec_connect(struct vpn_provider *provider,
 	int err = 0;
 
 	data = create_ipsec_private_data(provider, cb, user_data);
+	if (!data) {
+		connman_error("create ipsec private data failed");
+		return -ENOMEM;
+	}
 	/*
 	 * Start charon daemon using ipsec script of strongSwan.
 	 */
