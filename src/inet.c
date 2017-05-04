@@ -1468,6 +1468,9 @@ static int ndisc_send_unspec(int type, int oif, const struct in6_addr *dest,
 	char cbuf[CMSG_SPACE(sizeof(*pinfo))];
 	struct iovec iov[2];
 	int fd, datalen, ret, iovlen = 1;
+#if defined TIZEN_EXT
+	char ebuf[256];
+#endif
 
 	DBG("");
 
@@ -1547,7 +1550,7 @@ static int ndisc_send_unspec(int type, int oif, const struct in6_addr *dest,
 
 	ret = sendmsg(fd, &msgh, 0);
 #if defined TIZEN_EXT
-	DBG("sendmsg errno: %d/%s", errno, strerror(errno));
+	DBG("sendmsg errno: %d/%s", errno, strerror_r(errno, ebuf, sizeof(ebuf)));
 #endif
 
 	close(fd);

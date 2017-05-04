@@ -722,7 +722,7 @@ static char *load_file_from_path(const char *path)
 	size_t  file_size = 0;
 	char *file_buff = NULL;
 
-	if (path) {
+	if (!path) {
 		connman_error("File path is NULL\n");
 		return NULL;
 	}
@@ -841,6 +841,7 @@ static int ipsec_load_cert(struct vpn_provider *provider)
 	DBG("CertType: %s, CertFalg: %s,CertData: %s", type, flag, data);
 	if (!type || ! flag || !data) {
 		connman_error("invalid certification information");
+		g_free(data);
 		return -EINVAL;
 	}
 
@@ -970,6 +971,9 @@ done:
 	/* refer to connect_cb on vpn-provider.c for cb */
 	if(err != 0 && cb)
 		cb(provider, data->user_data, -err);
+
+	if (data)
+		g_free(data);
 
 	return;
 }
