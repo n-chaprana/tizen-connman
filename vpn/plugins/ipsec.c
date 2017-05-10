@@ -271,6 +271,10 @@ static void read_pkcs12_file(const char *path, const char *pass, EVP_PKEY **pkey
 
 	DBG("pkcs12 path %s\n", path);
 	fp = fopen(path, "r");
+	if (!fp) {
+		print_openssl_error();
+		return;
+	}
 
 	p12 = d2i_PKCS12_fp(fp, NULL);
 	if (!p12) {
@@ -524,6 +528,7 @@ static void ipsec_add_default_child_sa_data(struct vpn_provider *provider, VICIS
 		for (list = NULL; ikev1_esp_proposals[i] != NULL; i++)
 			list = g_slist_append(list, g_strdup(ikev1_esp_proposals[i]));
 		vici_add_list(child, "esp_proposals", list, "net");
+		g_slist_free_full(list, g_free);
 		list = NULL;
 	} else {
 		vici_add_kvl(child, "esp_proposals", ikev2_esp_proposals, "net");
@@ -541,11 +546,11 @@ static void ipsec_add_default_conn_data(struct vpn_provider *provider, VICISecti
 		for (list = NULL; ikev1_proposals[i] != NULL; i++)
 			list = g_slist_append(list, g_strdup(ikev1_proposals[i]));
 		vici_add_list(conn, "proposals", list, NULL);
+		g_slist_free_full(list, g_free);
 		list = NULL;
 
 		if (g_strcmp0(vpn_provider_get_string(provider, "IPsec.LocalAuth"), "psk") == 0)
 			vici_add_kv(conn, "aggressive", "yes", NULL);
-
 	} else {
 		vici_add_kvl(conn, "proposals", ikev2_proposals, NULL);
 	}
