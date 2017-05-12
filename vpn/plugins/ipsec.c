@@ -1049,6 +1049,8 @@ static int ipsec_connect(struct vpn_provider *provider,
 		connman_error("charon start failed");
 		if (cb)
 			cb(provider, user_data, err);
+
+		g_free(data);
 		return err;
 	}
 
