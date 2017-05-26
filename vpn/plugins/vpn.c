@@ -307,6 +307,7 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 	return NULL;
 }
 
+#if defined TIZEN_EXT
 static void vpn_event(struct vpn_provider *provider, int state)
 {
 	struct vpn_data *data;
@@ -399,6 +400,7 @@ static void vpn_event(struct vpn_provider *provider, int state)
 
 	return;
 }
+#endif
 
 static int vpn_create_tun(struct vpn_provider *provider)
 {
@@ -548,8 +550,10 @@ static int vpn_connect(struct vpn_provider *provider,
 	}
 
 
+#if defined TIZEN_EXT
 	if(vpn_driver_data->vpn_driver->set_event_cb)
 		vpn_driver_data->vpn_driver->set_event_cb(vpn_event, provider);
+#endif
 
 	ret = vpn_driver_data->vpn_driver->connect(provider, data->task,
 						data->if_name, cb, dbus_sender,

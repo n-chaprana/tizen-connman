@@ -40,12 +40,16 @@ enum vpn_state {
 	VPN_STATE_AUTH_FAILURE  = 6,
 };
 
+#if defined TIZEN_EXT
 typedef void (*vpn_event_callback)(struct vpn_provider *provider, int state);
+#endif
 
 struct vpn_driver {
 	int flags;
 	int (*notify) (DBusMessage *msg, struct vpn_provider *provider);
+#if defined TIZEN_EXT
 	void (*set_event_cb) (vpn_event_callback event_cb, struct vpn_provider *provider);
+#endif
 	int (*connect) (struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
 			vpn_provider_connect_cb_t cb, const char *dbus_sender,
