@@ -268,6 +268,11 @@ static char *load_cert_from_path(const char *path)
 	char *file_buff = NULL;
 
 	fp = fopen(path, "rb");
+	if (fp == NULL) {
+		connman_error("fopen failed");
+		return NULL;
+	}
+
 	fd = fileno(fp);
 	fstat(fd, &st);
 	file_size = st.st_size;
