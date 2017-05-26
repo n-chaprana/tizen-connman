@@ -158,7 +158,7 @@ static const char *ikev1_proposals [] ={
 		NULL,
 };
 
-static const char *ikev2_esp_proposals = "aes256-aes128-sha512-sha384-sha256-sha1-modp2048-modp1536-modp1024";
+static const char *ikev2_esp_proposals = "aes256-aes128-sha256-sha1";
 
 static const char *ikev2_proposals = "aes256-aes128-sha512-sha384-sha256-sha1-modp2048-modp1536-modp1024";
 
@@ -976,9 +976,6 @@ done:
 	/* refer to connect_cb on vpn-provider.c for cb */
 	if(err != 0 && cb)
 		cb(provider, data->user_data, -err);
-
-	if (data)
-		g_free(data);
 
 	return;
 }
