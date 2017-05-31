@@ -235,7 +235,7 @@ static void add_list_to_section(char *key, GSList *list, VICISection *section)
 	if (section == NULL || key == NULL || list == NULL)
 		return;
 
-	g_hash_table_insert(section->kvls, g_strdup(key), g_slist_copy(list));
+	g_hash_table_insert(section->kvls, g_strdup(key), g_slist_copy_deep(list, (GCopyFunc)g_strdup, NULL));
 	return;
 }
 
