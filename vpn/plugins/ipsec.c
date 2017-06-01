@@ -248,6 +248,11 @@ static void read_der_file(const char *path, X509 **cert)
 
 	DBG("der path %s\n", path);
 	fp = fopen(path, "r");
+	if (!fp) {
+		connman_error("fopen %s is failed\n", path);
+		return;
+	}
+
 	*cert = d2i_X509_fp(fp, NULL);
 	fclose(fp);
 	return;
@@ -259,6 +264,11 @@ static void read_pem_file(const char *path, X509 **cert)
 
 	DBG("pem path %s\n", path);
 	fp = fopen(path, "r");
+	if (!fp) {
+		connman_error("fopen %s is failed\n", path);
+		return;
+	}
+
 	*cert = PEM_read_X509(fp, cert, NULL, NULL);
 	fclose(fp);
 	return;
