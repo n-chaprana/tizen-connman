@@ -68,6 +68,8 @@ static const char *vici_cmd_str[] = {
 	"unload-authority",
 	"load-key",
 	"initiate",
+	"terminate",
+	"child-updown",
 	NULL,
 };
 
@@ -89,9 +91,13 @@ struct _VICIClient {
 	/* io data */
 	int client_sock_fd;
 	int client_watch;
+	unsigned int rcv_pkt_size;
+	char *rcvbuf;
 	GSList *request_list;
-	vici_connect_reply_cb reply;
-	void *ipsec_user_data;
+	vici_request_reply_cb reply_cb;
+	vici_event_cb event_cb;
+	void *reply_user_data;
+	void *event_user_data;
 };
 
 struct _VICISection {
@@ -429,7 +435,6 @@ static void destroy_vici_request(gpointer data)
 		return;
 
 	g_free(req->sndbuf);
-	g_free(req->rcvbuf);
 	g_free(req);
 }
 
@@ -627,27 +632,31 @@ static int write_socket(int sock, char *data, int data_len)
 int send_vici_command(struct request *req, VICIClient *vici_client)
 {
 	unsigned int size = 0;
+	int sock_fd = 0;
 	int res = 0;
 
-	if (req == NULL) {
+	if (req == NULL ||  vici_client == NULL) {
 		connman_error("request is NULL\n");
 		return -EINVAL;
 	}
+	sock_fd = vici_client->client_sock_fd;
 
 	size = htonl(req->used);
-	res = write_socket(vici_client->client_sock_fd, (char *)&size, sizeof(size));
+	res = write_socket(sock_fd, (char *)&size, sizeof(size));
 	if (res != 0) {
 		connman_error("failed to send size with network byte order\n");
 		return -EIO;
 	}
 
-	res = write_socket(vici_client->client_sock_fd, req->sndbuf, req->used);
+	res = write_socket(sock_fd, req->sndbuf, req->used);
 	if (res != 0) {
 		connman_error("failed to send pkt\n");
 		return -EIO;
 	}
 
-	vici_client->request_list = g_slist_append(vici_client->request_list, req);
+	if(req->cmd != VICI_CMD_REGISTER_CHILD_UPDOWN)
+		vici_client->request_list = g_slist_append(vici_client->request_list, req);
+
 	return res;
 }
 
@@ -838,6 +847,9 @@ static int handle_vici_result(gboolean success, int cmd, char * err)
 	case 	VICI_CMD_INITIATE:
 		ret = ECONNABORTED;
 		break;
+	case 	VICI_CMD_TERMINATE:
+		ret = EINVAL;
+		break;
 	default:
 		break;
 	}
@@ -892,6 +904,32 @@ int vici_send_request(VICIClient *vici_client, VICIClientCmd cmd, VICISection *r
 	return ret;
 }
 
+
+int vici_set_event_cb(VICIClient *vici_client, vici_event_cb cb, gpointer user_data)
+{
+	struct request *req = NULL;
+	int ret;
+
+	DBG("%s",vici_cmd_str[VICI_EVENT_CHILD_UP]);
+	ret = create_vici_request(VICI_EVENT_REGISTER, VICI_CMD_REGISTER_CHILD_UPDOWN, &req);
+	if (ret < 0) {
+		connman_error("error on create_request\n");
+		return ret;
+	}
+
+	ret = send_vici_command(req, vici_client);
+	if (ret < 0) {
+		connman_error("error on send_command\n");
+	}
+
+	destroy_vici_request(req);
+	vici_client->event_cb = cb;
+	vici_client->event_user_data = user_data;
+
+	return ret;
+
+}
+
 static int get_socket_from_source(GIOChannel *source, GIOCondition condition)
 {
 	int sock = -1;
@@ -930,31 +968,32 @@ static int read_socket(int sock, char *data, unsigned int data_len)
 	return total_rbytes;
 }
 
-static int recv_vici_pkt(int sock, struct request *req)
+static int recv_vici_pkt(int sock, struct _VICIClient *vici_client)
 {
-	if(!req)
+	if(!vici_client)
 		return -1;
 
-	if (req->rcv_pkt_size == 0) {
+	if (vici_client->rcv_pkt_size == 0) {
 		unsigned int pkt_size = 0;
 		if (read_socket(sock, (char *)&pkt_size, sizeof(pkt_size)) < 0)
 			return -1;
 
-		req->rcv_pkt_size = ntohl(pkt_size);
+		vici_client->rcv_pkt_size = ntohl(pkt_size);
 		/* TODO :REMOVE THIS AFTER DEBUG */
-		DBG("rcv_pkt_size [%d] will be recved\n", req->rcv_pkt_size);
+		DBG("rcv_pkt_size [%d] will be recved\n", vici_client->rcv_pkt_size);
 	} else {
 
+		DBG("rcv_pkt_size [%d] is recved\n", vici_client->rcv_pkt_size);
 		char *buf = NULL;
-		buf = g_try_malloc0(req->rcv_pkt_size);
+		buf = g_try_malloc0(vici_client->rcv_pkt_size);
 		if (buf == NULL)
 			return -1;
 
-		if (read_socket(sock, buf, req->rcv_pkt_size) < 0) {
+		if (read_socket(sock, buf, vici_client->rcv_pkt_size) < 0) {
 			g_free(buf);
 			return -1;
 		}
-		req->rcvbuf = buf;
+		vici_client->rcvbuf = buf;
 	}
 
 	return 0;
@@ -974,14 +1013,138 @@ static struct request *pop_vici_request(VICIClient *vici_client)
 	return list->data;
 }
 
-static gboolean process_reply(GIOChannel *source,
+static void process_vici_reply(VICIClient *vici_client)
+{
+	struct request *req;
+	int ret = 0;
+
+	if (!vici_client)
+		return;
+
+	/* get first request */
+	req = pop_vici_request(vici_client);
+	if (!req)
+		return;
+
+	req->rcvbuf = vici_client->rcvbuf;
+	req->rcv_pkt_size = vici_client->rcv_pkt_size;
+
+	ret = process_vici_response(req);
+	vici_client->request_list = g_slist_remove(vici_client->request_list, req);
+	destroy_vici_request(req);
+
+	/* TODO :remove this after debug */
+	DBG("left request reply : %d", g_slist_length(vici_client->request_list));
+
+	if (ret != 0 || g_slist_length(vici_client->request_list) == 0)
+		vici_client->reply_cb(ret, vici_client->reply_user_data);
+
+}
+
+static int extract_event_name(char *buf, unsigned int size, char *temp)
+{
+	int pos = 1;
+	int name_len = 0;
+	name_len = buf[pos];
+	pos++;
+	DBG("event len: %d", name_len);
+	while(pos <  size && pos - 2 < name_len) {
+		temp[pos - 2] = buf[pos];
+		pos++;
+	}
+	temp[pos] = '\0';
+	DBG("event name: %s", temp);
+	return pos;
+}
+
+static char *vici_get_value(char *buf, unsigned int pos, unsigned int size, char *search_key)
+{
+	int type = -1;
+
+	pos = 1;
+	while (pos < size) {
+
+		type = buf[pos];//3
+		pos++;
+		if (type == VICI_KEY_VALUE) {
+			char *key = NULL;
+			char *value = NULL;
+			pos = extract_key_value(buf, pos, &key, &value);
+			if (g_strcmp0(search_key, key) == 0) {
+				g_free(key);
+				return value;
+			}
+
+			g_free(key);
+			g_free(value);
+		}
+	}
+	return NULL;
+}
+
+static void process_child_updown(VICIClient *vici_client,char *buf, unsigned int size)
+{
+	char *state = NULL;
+
+	state = vici_get_value(buf, 0, size, "state");
+	if (g_strcmp0(state, "ESTABLISHED") == 0) {
+		DBG("ESTABLISHED");
+		vici_client->event_cb(VICI_EVENT_CHILD_UP, vici_client->event_user_data);
+	} else if (g_strcmp0(state, "DELETING") == 0) {
+		DBG("DELETING");
+		vici_client->event_cb(VICI_EVENT_CHILD_DOWN, vici_client->event_user_data);
+	} else {
+		DBG("Unknown event");
+	}
+	g_free(state);
+	return;
+}
+
+static void process_vici_event(VICIClient *vici_client)
+{
+	char *buf = NULL;
+	unsigned int size = 0;
+	unsigned int pos = 0;
+	char temp[256] = {0,};
+	if (!vici_client || !(vici_client->rcvbuf) || vici_client->rcv_pkt_size == 0)
+		return;
+
+	buf = vici_client->rcvbuf;
+	size = vici_client->rcv_pkt_size;
+
+	pos = extract_event_name(buf, size, temp);
+	/* TODO: remove below after debug */
+	/* add parser */
+	if (g_strcmp0(temp, "child-updown") == 0)
+		process_child_updown(vici_client, buf + pos -1, size - pos);
+}
+
+static void process_vici_packet(VICIClient *vici_client, char *buf)
+{
+
+	if (!vici_client || !buf)
+		return;
+
+	if (buf[0] == VICI_CMD_RESPONSE) {
+		DBG("VICI_CMD_RESPONSE\n");
+		process_vici_reply(vici_client);
+	} else if (buf[0] == VICI_EVENT_CONFIRM) {
+		DBG("VICI_EVENT_CONFIRM\n");
+	} else if (buf[0] == VICI_EVENT) {
+		DBG("VICI_EVENT");
+		process_vici_event(vici_client);
+	} else {
+		DBG("Not handled [%u]", buf[0]);
+	}
+	return;
+}
+
+static gboolean process_vici_msg(GIOChannel *source,
 					   GIOCondition condition,
 					   gpointer user_data)
 {
 	VICIClient *vici_client = NULL;
-	struct request * req = NULL;
 	int sock = 0;
-	int ret = 0;
 
 	vici_client = (VICIClient *)user_data;
 	if (!vici_client)
@@ -991,27 +1154,18 @@ static gboolean process_reply(GIOChannel *source,
 	if (sock < 0)
 		return FALSE;
 
-	/* get first request */
-	req = pop_vici_request((VICIClient *)user_data);
-	if (!req)
+
+	if(recv_vici_pkt(sock, vici_client) < 0)
 		return FALSE;
 
-	if(recv_vici_pkt(sock, req) < 0)
-		return FALSE;
-
-	if (!req->rcvbuf) {
+	if (!vici_client->rcvbuf) {
 		return TRUE;
 	}
 
-	ret = process_vici_response(req);
-	vici_client->request_list = g_slist_remove(vici_client->request_list, req);
-	destroy_vici_request(req);
-
-	/* TODO :remove this after debug */
-	DBG("left request reply : %d", g_slist_length(vici_client->request_list));
-
-	if (ret!= 0 || g_slist_length(vici_client->request_list) == 0)
-		vici_client->reply(ret, vici_client->ipsec_user_data);
+	process_vici_packet(vici_client, vici_client->rcvbuf);
+	g_free(vici_client->rcvbuf);
+	vici_client->rcvbuf = NULL;
+	vici_client->rcv_pkt_size = 0;
 
 	return TRUE;
 }
@@ -1054,9 +1208,39 @@ static int connect_socket(const char *uri)
 	return fd;
 }
 
-int vici_initialize(VICIClient **vici_client)
+static int initialize_vici_source(VICIClient *vici_client)
 {
 	GIOChannel *vici_channel;
+	if (!vici_client) {
+		return -ENOMEM;
+	}
+
+	vici_client->client_sock_fd = connect_socket(VICI_DEFAULT_URI);
+	if (vici_client->client_sock_fd < 0) {
+		connman_error("connect_socket failed");
+		return -EIO;
+	}
+
+	vici_channel = g_io_channel_unix_new(vici_client->client_sock_fd);
+	if (!vici_channel) {
+		connman_error("g_io_channel_unix_new failed");
+		close(vici_client->client_sock_fd);
+		return -ENOMEM;
+	}
+
+	vici_client->client_watch = g_io_add_watch_full(vici_channel,
+						 G_PRIORITY_LOW,
+						 G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+						 (GIOFunc)process_vici_msg,
+						 (gpointer)vici_client,
+						 NULL);
+	g_io_channel_unref(vici_channel);
+	return 0;
+}
+
+int vici_initialize(VICIClient **vici_client)
+{
+	int ret = 0;
 
 	*vici_client = g_try_new0(VICIClient, 1);
 	if (!*vici_client) {
@@ -1064,37 +1248,20 @@ int vici_initialize(VICIClient **vici_client)
 		return -ENOMEM;
 	}
 
-	(*vici_client)->client_sock_fd = connect_socket(VICI_DEFAULT_URI);
-	if ((*vici_client)->client_sock_fd < 0) {
-		connman_error("connect_socket failed");
+	ret = initialize_vici_source(*vici_client);
+	if (ret != 0) {
 		g_free(*vici_client);
-		return -EIO;
+		return ret;
 	}
-
-	vici_channel = g_io_channel_unix_new((*vici_client)->client_sock_fd);
-	if (!vici_channel) {
-		connman_error("g_io_channel_unix_new failed");
-		close((*vici_client)->client_sock_fd);
-		g_free(*vici_client);
-		return -ENOMEM;
-	}
-
-	(*vici_client)->client_watch = g_io_add_watch_full(vici_channel,
-						 G_PRIORITY_LOW,
-						 G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
-						 (GIOFunc)process_reply,
-						 (gpointer)*vici_client,
-						 NULL);
-	g_io_channel_unref(vici_channel);
 
 	DBG("connected");
 	return 0;
 }
 
-void vici_set_connect_reply_cb(VICIClient *vici_client, vici_connect_reply_cb reply_cb, gpointer user_data)
+void vici_set_request_reply_cb(VICIClient *vici_client, vici_request_reply_cb reply_cb, gpointer user_data)
 {
-	vici_client->reply = reply_cb;
-	vici_client->ipsec_user_data = user_data;
+	vici_client->reply_cb = reply_cb;
+	vici_client->reply_user_data = user_data;
 }
 
 int vici_deinitialize(VICIClient *vici_client)
@@ -1106,6 +1273,7 @@ int vici_deinitialize(VICIClient *vici_client)
 
 	close(vici_client->client_sock_fd);
 	g_slist_free_full(vici_client->request_list, destroy_vici_request);
+	g_free(vici_client->rcvbuf);
 	g_free(vici_client);
 
 	return 0;

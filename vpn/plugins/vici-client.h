@@ -39,15 +39,23 @@ typedef enum {
 	VICI_CMD_UNLOAD_AUTH,
 	VICI_CMD_LOAD_KEY,
 	VICI_CMD_INITIATE,
+	VICI_CMD_TERMINATE,
+	VICI_CMD_REGISTER_CHILD_UPDOWN,
 	VICI_CMD_MAX,
 } VICIClientCmd;
 
+typedef enum {
+	VICI_EVENT_CHILD_UP,
+	VICI_EVENT_CHILD_DOWN,
+	VICI_EVENT_MAX,
+} VICIClientEvent;
 #define VICI_DEFAULT_URI "/var/run/charon.vici"
 
 typedef int (*vici_add_element)(VICISection *sect, const char *key,
 		const char *value, const char *subsection);
 
-typedef void (*vici_connect_reply_cb)(int err, void *user_data);
+typedef void (*vici_request_reply_cb)(int err, void *user_data);
+typedef void (*vici_event_cb)(VICIClientEvent event, void *user_data);
 
 VICISection* vici_create_section(const char *name);
 int add_subsection(const char* name, VICISection* child, VICISection* section);
@@ -65,8 +73,9 @@ int vici_add_cert_kvl(VICISection *section, const char *key,
 
 int vici_initialize(VICIClient **vici_client);
 int vici_deinitialize(VICIClient *vici_client);
-void vici_set_connect_reply_cb(VICIClient *vici_client, vici_connect_reply_cb reply_cb, gpointer user_data);
+void vici_set_request_reply_cb(VICIClient *vici_client, vici_request_reply_cb reply_cb, gpointer user_data);
 int vici_send_request(VICIClient *vici_client, VICIClientCmd cmd, VICISection *root);
+int vici_set_event_cb(VICIClient *vici_client, vici_event_cb cb, gpointer user_data);
 
 #ifdef __cplusplus
 }
