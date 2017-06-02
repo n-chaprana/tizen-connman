@@ -248,65 +248,97 @@ static int get_cert_type(const char *path)
 	return cert_type;
 }
 
-static void read_der_file(const char *path, X509 **cert)
+static int read_der_file(const char *path, X509 **cert)
 {
 	FILE *fp = NULL;
+	int err = 0;
+
+	if(!path || !cert) {
+		/* TODO :remove this after debug */
+		DBG("there's no cert data");
+		return 0;
+	}
 
 	DBG("der path %s\n", path);
 	fp = fopen(path, "r");
 	if (!fp) {
-		connman_error("fopen %s is failed\n", path);
-		return;
+		connman_error("Failed to open file");
+		return -EINVAL;
 	}
 
 	*cert = d2i_X509_fp(fp, NULL);
+	if (!fp) {
+		connman_error("Failed to read der file");
+		err = -EINVAL;
+	}
+
 	fclose(fp);
-	return;
+	return err;
 }
 
-static void read_pem_file(const char *path, X509 **cert)
+static int read_pem_file(const char *path, X509 **cert)
 {
 	FILE *fp = NULL;
+	int err = 0;
+
+	if(!path || !cert) {
+		/* TODO :remove this after debug */
+		DBG("there's no cert data");
+		return 0;
+	}
 
 	DBG("pem path %s\n", path);
 	fp = fopen(path, "r");
 	if (!fp) {
-		connman_error("fopen %s is failed\n", path);
-		return;
+		connman_error("Failed to open file");
+		return -EINVAL;
 	}
 
 	*cert = PEM_read_X509(fp, cert, NULL, NULL);
+	if (!fp) {
+		connman_error("Failed to read pem file");
+		err = -EINVAL;
+	}
+
 	fclose(fp);
-	return;
+	return err;
 }
 
-static void read_pkcs12_file(const char *path, const char *pass, EVP_PKEY **pkey, X509 **cert, STACK_OF(X509) **ca)
+static int read_pkcs12_file(const char *path, const char *pass, EVP_PKEY **pkey, X509 **cert, STACK_OF(X509) **ca)
 {
 	FILE *fp = NULL;
 	PKCS12 *p12;
+	int err = 0;
+
+	if(!path || !pass || !pkey || !cert || !ca) {
+		/* TODO :remove this after debug */
+		DBG("there's no cert data");
+		return 0;
+	}
 
 	DBG("pkcs12 path %s\n", path);
 	fp = fopen(path, "r");
 	if (!fp) {
-		print_openssl_error();
-		return;
+		connman_error("Failed to open file");
+		return -EINVAL;
 	}
 
 	p12 = d2i_PKCS12_fp(fp, NULL);
 	if (!p12) {
-		print_openssl_error();
+		connman_error("Failed to open pkcs12");
 		fclose(fp);
-		return;
+		return -EINVAL;
 	}
 
 	if (!PKCS12_parse(p12, pass, pkey, cert, ca)) {
-		print_openssl_error();
-		fclose(fp);
-		return;
+		connman_error("Failed to parse pkcs12");
+		err = -EINVAL;
 	}
 
 	PKCS12_free(p12);
-	return;
+	fclose(fp);
+
+	return err;
 }
 
 static char *get_private_key_str(struct openssl_private_data *data)
@@ -430,29 +462,30 @@ static char * get_nth_ca_cert_str(struct openssl_private_data *data, int num)
 	return get_cert_str(cert);
 }
 
-static void extract_cert_info(const char *path, const char *pass, struct openssl_private_data *data)
+static int extract_cert_info(const char *path, const char *pass, struct openssl_private_data *data)
 {
+	int err = 0;
 	if(!path || !data) {
 		/* TODO :remove this after debug */
 		DBG("there's no cert data");
-		return;
+		return 0;
 	}
 
 	switch (get_cert_type(path)) {
 	case CERT_TYPE_DER:
-		read_der_file(path, &(data->local_cert));
+		err = read_der_file(path, &(data->local_cert));
 		break;
 	case CERT_TYPE_PEM:
-		read_pem_file(path, &(data->local_cert));
+		err = read_pem_file(path, &(data->local_cert));
 		break;
 	case CERT_TYPE_PKCS12:
-		read_pkcs12_file(path, pass, &(data->private_key), &(data->local_cert), &(data->ca_certs));
+		err = read_pkcs12_file(path, pass, &(data->private_key), &(data->local_cert), &(data->ca_certs));
 		break;
 	default:
 		break;
 	}
 
-	return;
+	return err;
 }
 
 static void free_openssl_private_data(struct openssl_private_data *data)
@@ -1142,7 +1175,15 @@ static int ipsec_connect(struct vpn_provider *provider,
 
 	path = vpn_provider_get_string(provider, "IPsec.LocalCerts");
 	pass = vpn_provider_get_string(provider, "IPsec.LocalCertPass");
-	extract_cert_info(path, pass, &(data->openssl_data));
+	err = extract_cert_info(path, pass, &(data->openssl_data));
+	if (err < 0) {
+		connman_error("extract cert info failed");
+		if (cb)
+			cb(provider, user_data, err);
+
+		g_free(data);
+		return err;
+	}
 
 	check_vici_socket(data);
 //	g_usleep(G_USEC_PER_SEC);
