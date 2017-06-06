@@ -612,6 +612,8 @@ static int service_load_passphrase(struct connman_service *service)
 	if (str)
 		service->passphrase = str;
 
+	g_key_file_free(keyfile);
+
 	return 0;
 }
 
@@ -1739,9 +1741,6 @@ int __connman_service_nameserver_append(struct connman_service *service,
 		return -ENOMEM;
 
 	nameservers[len] = g_strdup(nameserver);
-	if (!nameservers[len])
-		return -ENOMEM;
-
 	nameservers[len + 1] = NULL;
 
 #ifdef TIZEN_EXT
