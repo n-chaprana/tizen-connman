@@ -1112,6 +1112,13 @@ static void check_vici_socket(struct ipsec_private_data *data)
 	}
 }
 
+static void ipsec_died(struct connman_task *task, int exit_code, void *user_data)
+{
+       DBG("task %p exit_code %d", task, exit_code);
+       unlink(VICI_DEFAULT_URI);
+       vpn_died(task, exit_code, user_data);
+}
+
 static int ipsec_connect(struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
 			vpn_provider_connect_cb_t cb, const char *dbus_sender,
@@ -1130,7 +1137,7 @@ static int ipsec_connect(struct vpn_provider *provider,
 	/*
 	 * Start charon daemon using ipsec script of strongSwan.
 	 */
-	err = connman_task_run(task, vpn_died, provider, NULL, NULL, NULL);
+	err = connman_task_run(task, ipsec_died, provider, NULL, NULL, NULL);
 	if (err < 0) {
 		connman_error("charon start failed");
 		if (cb)
