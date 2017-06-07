@@ -76,9 +76,13 @@ struct openssl_private_data {
 struct ipsec_private_data {
 	struct vpn_provider *provider;
 	struct openssl_private_data openssl_data;
-	vpn_provider_connect_cb_t cb;
+	vpn_provider_connect_cb_t connect_cb;
+	void *connect_user_data;
+};
 
-	void *user_data;
+struct ipsec_event_data {
+	vpn_event_callback event_cb;
+	void *event_user_data;
 };
 
 struct {
@@ -161,6 +165,8 @@ static const char *ikev1_proposals [] ={
 static const char *ikev2_esp_proposals = "aes256-aes128-sha256-sha1";
 
 static const char *ikev2_proposals = "aes256-aes128-sha512-sha384-sha256-sha1-modp2048-modp1536-modp1024";
+
+static struct ipsec_event_data event_data;
 
 static void init_openssl(void)
 {
@@ -480,6 +486,14 @@ static void free_private_data(struct ipsec_private_data *data)
 static int ipsec_notify(DBusMessage *msg, struct vpn_provider *provider)
 {
 	return 0;
+}
+
+static void ipsec_set_event_cb(vpn_event_callback event_cb, struct vpn_provider *provider)
+{
+	DBG("set event cb!");
+	event_data.event_cb = event_cb;
+	event_data.event_user_data = provider;
+	return;
 }
 
 static int ipsec_is_same_auth(const char* req, const char* target)
@@ -869,14 +883,69 @@ static int ipsec_load_cert(struct vpn_provider *provider)
 	return ret;
 }
 
-void connect_reply_cb(int err, void *user_data)
+static int ipsec_terminate(struct vpn_provider *provider)
+{
+	VICISection *sect;
+	int ret = 0;
+
+	sect = vici_create_section(NULL);
+	if (!sect)
+		return -ENOMEM;
+
+	vici_add_kv(sect, "child", "net", NULL);
+	vici_add_kv(sect, "ike", vpn_provider_get_string(provider, "Name"), NULL);
+	vici_add_kv(sect, "timeout", "-1", NULL);
+	ret = vici_send_request(vici_client, VICI_CMD_TERMINATE, sect);
+	if (ret < 0)
+		connman_error("vici_send_request failed");
+
+	vici_destroy_section(sect);
+
+	return ret;
+}
+
+static void request_reply_cb(int err, void *user_data)
 {
 	struct ipsec_private_data *data;
 
 	data = (struct ipsec_private_data *)user_data;
-	data->cb(data->provider, data->user_data, err);
+	DBG("request reply cb");
+
+	if(err != 0) {
+		if (event_data.event_cb)
+			event_data.event_cb(event_data.event_user_data, VPN_STATE_FAILURE);
+		/* TODO: Does close socket needed? */
+	} else {
+		DBG("Series of requests are succeeded");
+		/* TODO: Not sure about below */
+		if (event_data.event_cb)
+			event_data.event_cb(event_data.event_user_data, VPN_STATE_CONNECT);
+	}
 
 	free_private_data(data);
+}
+
+static void ipsec_vici_event_cb(VICIClientEvent event, void *user_data)
+{
+	struct vpn_provider *provider;
+
+	provider = (struct vpn_provider *)user_data;
+	if (!provider) {
+		DBG("Invalid user data");
+		return;
+	}
+
+	if(event == VICI_EVENT_CHILD_UP) {
+		if (event_data.event_cb)
+			event_data.event_cb(event_data.event_user_data, VPN_STATE_READY);
+	} else if (event == VICI_EVENT_CHILD_DOWN) {
+		if (event_data.event_cb)
+			event_data.event_cb(event_data.event_user_data, VPN_STATE_DISCONNECT);
+	} else {
+		DBG("Unknown event");
+	}
+
+	return;
 }
 
 static struct ipsec_private_data* create_ipsec_private_data(struct vpn_provider *provider,
@@ -892,8 +961,8 @@ static struct ipsec_private_data* create_ipsec_private_data(struct vpn_provider 
 	init_openssl();
 
 	data->provider = provider;
-	data->cb = cb;
-	data->user_data = user_data;
+	data->connect_cb = cb;
+	data->connect_user_data = user_data;
 	return data;
 }
 
@@ -907,7 +976,7 @@ static void vici_connect(struct ipsec_private_data *data)
 		IPSEC_ERROR_CHECK_GOTO(-1, done, "Invalid data parameter");
 
 	provider = data->provider;
-	cb = data->cb;
+	cb = data->connect_cb;
 	if (!provider || !cb)
 		IPSEC_ERROR_CHECK_GOTO(-1, done, "Invalid provider or callback");
 
@@ -922,8 +991,15 @@ static void vici_connect(struct ipsec_private_data *data)
 	/* TODO :remove this after debug */
 	DBG("success to initialize vici socket");
 
-	vici_set_connect_reply_cb(vici_client, (vici_connect_reply_cb)connect_reply_cb, data);
+	vici_set_request_reply_cb(vici_client, (vici_request_reply_cb)request_reply_cb, data);
+	/*
+	 * Sets child-updown event
+	 */
+	err = vici_set_event_cb(vici_client, (vici_event_cb)ipsec_vici_event_cb, provider);
+	IPSEC_ERROR_CHECK_GOTO(err, done, "register event failed");
 
+	/* TODO :remove this after debug */
+	DBG("success to vici_set_event_cb");
 	/*
 	 * Send the load-conn command
 	 */
@@ -984,8 +1060,9 @@ static void vici_connect(struct ipsec_private_data *data)
 
 done:
 	/* refer to connect_cb on vpn-provider.c for cb */
-	if(err != 0 && cb)
-		cb(provider, data->user_data, -err);
+	if(cb)
+		cb(provider, data->connect_user_data, -err);
+	/* TODO: Does close socket needed? when err is not zero */
 
 	return;
 }
@@ -1014,6 +1091,8 @@ static void monitor_vici_socket(struct ipsec_private_data *data)
 	if (error) {
 		connman_error("g_file_monitor_directory failed: %s / %d", error->message, error->code);
 		g_error_free(error);
+		if(event_data.event_cb)
+			event_data.event_cb(event_data.event_user_data, VPN_STATE_FAILURE);
 		return;
 	}
 	/* TODO :remove this after debug */
@@ -1161,14 +1240,22 @@ static int ipsec_save(struct vpn_provider *provider, GKeyFile *keyfile)
 static void ipsec_disconnect(struct vpn_provider *provider)
 {
 	int err = 0;
+	/*
+	 * Send the terminate command
+	 */
+	err = ipsec_terminate(provider);
+	IPSEC_ERROR_CHECK_RETURN(err, "terminate failed");
 
 	err = vici_deinitialize(vici_client);
 	IPSEC_ERROR_CHECK_RETURN(err, "failed to deinitialize vici_client");
+
+	return;
 }
 
 static struct vpn_driver vpn_driver = {
 	.flags = VPN_FLAG_NO_TUN,
 	.notify = ipsec_notify,
+	.set_event_cb = ipsec_set_event_cb,
 	.connect = ipsec_connect,
 	.error_code = ipsec_error_code,
 	.save = ipsec_save,
@@ -1178,6 +1265,9 @@ static struct vpn_driver vpn_driver = {
 static int ipsec_init(void)
 {
 	connection = connman_dbus_get_connection();
+
+	event_data.event_cb = NULL;
+	event_data.event_user_data = NULL;
 
 	return vpn_register("ipsec", &vpn_driver, IPSEC);
 }
