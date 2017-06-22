@@ -133,7 +133,7 @@ This overwrites conf file of %{name}.
 
 
 %build
-CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
+#CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
 CFLAGS+=" -DTIZEN_SYS_CA_BUNDLE=\"%TZ_SYS_RO_CA_BUNDLE\""
 
 %if %{with connman_vpnd}
@@ -145,6 +145,7 @@ chmod +x bootstrap
 %configure \
             --sysconfdir=/etc \
             --enable-client \
+			--enable-tizen-ext \
             --enable-pacrunner \
             --enable-wifi=builtin \
 %if %{with connman_openconnect}
@@ -228,8 +229,8 @@ mkdir -p %{buildroot}%{upgrade_script_path}
 cp -f scripts/%{upgrade_script_filename} %{buildroot}%{upgrade_script_path}
 
 %post
-chsmack -a 'System' /%{_localstatedir}/lib/connman
-chsmack -a 'System' /%{_localstatedir}/lib/connman/settings
+#chsmack -a 'System' /%{_localstatedir}/lib/connman
+#chsmack -a 'System' /%{_localstatedir}/lib/connman/settings
 
 %preun
 
@@ -240,27 +241,27 @@ systemctl daemon-reload
 
 %files
 %manifest connman.manifest
-%attr(500,root,root) %{_sbindir}/*
-%attr(500,root,root) %{_bindir}/connmanctl
-%attr(600,root,root) /%{_localstatedir}/lib/connman/settings
+%attr(500,network_fw,network_fw) %{_bindir}/*
+%attr(500,network_fw,network_fw) %{_bindir}/connmanctl
+%attr(755,network_fw,network_fw) /%{_localstatedir}/lib/connman
+%attr(600,network_fw,network_fw) /%{_localstatedir}/lib/connman/settings
 #%{_libdir}/connman/plugins/*.so
-%attr(644,root,root) %{_datadir}/dbus-1/system-services/*
-#%{_datadir}/dbus-1/services/*
+%attr(644,network_fw,network_fw) %{_datadir}/dbus-1/system-services/*
 %{_sysconfdir}/dbus-1/system.d/*
-%attr(644,root,root) %{_sysconfdir}/connman/main.conf
+%attr(644,network_fw,network_fw) %{_sysconfdir}/connman/main.conf
 %{_sysconfdir}/dbus-1/system.d/*.conf
-%attr(644,root,root) %{_libdir}/systemd/system/connman.service
-%attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman.service
-%attr(644,root,root) %{_libdir}/systemd/system/connman-vpn.service
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman.service
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/multi-user.target.wants/connman.service
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
 %if "%{?_lib}" == "lib64"
-%attr(644,root,root) %{_unitdir}/connman.service
-%attr(644,root,root) %{_unitdir}/multi-user.target.wants/connman.service
-%attr(644,root,root) %{_unitdir}/connman-vpn.service
-%attr(644,root,root) %{_unitdir}/connman.socket
-%attr(644,root,root) %{_unitdir}/sockets.target.wants/connman.socket
+%attr(644,network_fw,network_fw) %{_unitdir}/connman.service
+%attr(644,network_fw,network_fw) %{_unitdir}/multi-user.target.wants/connman.service
+%attr(644,network_fw,network_fw) %{_unitdir}/connman-vpn.service
+%attr(644,network_fw,network_fw) %{_unitdir}/connman.socket
+%attr(644,network_fw,network_fw) %{_unitdir}/sockets.target.wants/connman.socket
 %else
-%attr(644,root,root) %{_libdir}/systemd/system/connman.socket
-%attr(644,root,root) %{_libdir}/systemd/system/sockets.target.wants/connman.socket
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman.socket
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/sockets.target.wants/connman.socket
 %endif
 %license COPYING
 %{upgrade_script_path}/%{upgrade_script_filename}
@@ -281,6 +282,11 @@ systemctl daemon-reload
 %{_libdir}/connman/scripts/openconnect-script
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %license COPYING
+%if "%{?_lib}" == "lib64"
+%attr(644,network_fw,network_fw) %{_unitdir}/connman-vpn.service
+%else
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
+%endif
 %endif
 
 %if %{with connman_openvpn}
@@ -290,6 +296,11 @@ systemctl daemon-reload
 %{_libdir}/%{name}/scripts/openvpn-script
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %license COPYING
+%if "%{?_lib}" == "lib64"
+%attr(644,network_fw,network_fw) %{_unitdir}/connman-vpn.service
+%else
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
+%endif
 %endif
 
 %if %{with connman_ipsec}
@@ -298,34 +309,45 @@ systemctl daemon-reload
 %{_libdir}/%{name}/plugins-vpn/ipsec.so
 %{_libdir}/%{name}/scripts/ipsec-script
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
+%license COPYING
+%if "%{?_lib}" == "lib64"
+%attr(644,network_fw,network_fw) %{_unitdir}/connman-vpn.service
+%else
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
+%endif
 %endif
 
 %if %{with connman_vpnd}
 %files connman-vpnd
 %manifest %{name}.manifest
-#%{_sbindir}/connman-vpnd
+#%{_bindir}/connman-vpnd
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/scripts
 %dir %{_libdir}/%{name}/plugins-vpn
 %config %{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %license COPYING
+%if "%{?_lib}" == "lib64"
+%attr(644,network_fw,network_fw) %{_unitdir}/connman-vpn.service
+%else
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
+%endif
 %endif
 
 %post extension-tv
 mv -f %{_libdir}/systemd/system/connman.service.tv %{_libdir}/systemd/system/connman.service
 mv -f %{_sysconfdir}/connman/main.conf.tv %{_sysconfdir}/connman/main.conf
 %files extension-tv
-%attr(644,root,root) %{_sysconfdir}/connman/main.conf.tv
+%attr(644,network_fw,network_fw) %{_sysconfdir}/connman/main.conf.tv
 %license COPYING
 %if "%{?_lib}" == "lib64"
-%attr(644,root,root) %{_unitdir}/connman.service.tv
+%attr(644,network_fw,network_fw) %{_unitdir}/connman.service.tv
 %else
-%attr(644,root,root) %{_libdir}/systemd/system/connman.service.tv
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman.service.tv
 %endif
 %post extension-ivi
 mv -f %{_sysconfdir}/connman/main.conf.ivi %{_sysconfdir}/connman/main.conf
 %files extension-ivi
-%attr(644,root,root) %{_sysconfdir}/connman/main.conf.ivi
+%attr(644,network_fw,network_fw) %{_sysconfdir}/connman/main.conf.ivi
 %license COPYING
 

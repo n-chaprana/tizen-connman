@@ -67,6 +67,14 @@ AC_ARG_ENABLE(telephony,
 AM_CONDITIONAL(TELEPHONY, test "${enable_telephony}" != "no")
 AM_CONDITIONAL(TELEPHONY_BUILTIN, test "${enable_telephony}" = "builtin")
 
+AC_ARG_ENABLE(tizen-ext,
+	AC_HELP_STRING([--enable-tizen-ext], [enable TIZEN extensions]),
+			[if (test "${enableval}" = "yes"); then
+				CFLAGS="$CFLAGS -DTIZEN_EXT"
+				LIBS="$LIBS -lsmack"
+			fi])
+AM_CONDITIONAL(TIZEN_EXT, test "${enable-tizen-ext}" != "no")
+
 AC_ARG_WITH(openconnect, AC_HELP_STRING([--with-openconnect=PROGRAM],
         [specify location of openconnect binary]), [path_openconnect=${withval}])
 
@@ -75,7 +83,7 @@ AC_ARG_ENABLE(openconnect,
 			[enable_openconnect=${enableval}], [enable_openconnect="no"])
 if (test "${enable_openconnect}" != "no"); then
 	if (test -z "${path_openconnect}"); then
-		AC_PATH_PROG(OPENCONNECT, [openconnect], [], $PATH:/sbin:/usr/sbin)
+		AC_PATH_PROG(OPENCONNECT, [openconnect], [], $PATH:/bin:/usr/bin)
 		if (test -z "${OPENCONNECT}"); then
 			AC_MSG_ERROR(openconnect binary not found)
 		fi
@@ -95,7 +103,7 @@ AC_ARG_ENABLE(openvpn,
 			[enable_openvpn=${enableval}], [enable_openvpn="no"])
 if (test "${enable_openvpn}" != "no"); then
 	if (test -z "${path_openvpn}"); then
-		AC_PATH_PROG(OPENVPN, [openvpn], [], $PATH:/sbin:/usr/sbin)
+		AC_PATH_PROG(OPENVPN, [openvpn], [], $PATH:/bin:/usr/bin)
 		if (test -z "${OPENVPN}"); then
 			AC_MSG_ERROR(openvpn binary not found)
 		fi
@@ -143,7 +151,7 @@ AC_ARG_ENABLE(vpnc,
 		[enable_vpnc=${enableval}], [enable_vpnc="no"])
 if (test "${enable_vpnc}" != "no"); then
 	if (test -z "${path_vpnc}"); then
-		AC_PATH_PROG(VPNC, [vpnc], [], $PATH:/sbin:/usr/sbin)
+		AC_PATH_PROG(VPNC, [vpnc], [], $PATH:/bin:/usr/bin)
 		if (test -z "${VPNC}"); then
 			AC_MSG_ERROR(vpnc binary not found)
 		fi
@@ -163,7 +171,7 @@ AC_ARG_ENABLE(l2tp,
 			[enable_l2tp=${enableval}], [enable_l2tp="no"])
 if (test "${enable_l2tp}" != "no"); then
 	if (test -z "${path_pppd}"); then
-		AC_PATH_PROG(PPPD, [pppd], [/usr/sbin/pppd], $PATH:/sbin:/usr/sbin)
+		AC_PATH_PROG(PPPD, [pppd], [/usr/bin/pppd], $PATH:/bin:/usr/bin)
 	else
 		PPPD="${path_pppd}"
 		AC_SUBST(PPPD)
@@ -171,7 +179,7 @@ if (test "${enable_l2tp}" != "no"); then
 	AC_CHECK_HEADERS(pppd/pppd.h, dummy=yes,
 			AC_MSG_ERROR(ppp header files are required))
 	if (test -z "${path_l2tp}"); then
-		AC_PATH_PROG(L2TP, [xl2tpd], [/usr/sbin/xl2tpd], $PATH:/sbin:/usr/sbin)
+		AC_PATH_PROG(L2TP, [xl2tpd], [/usr/bin/xl2tpd], $PATH:/bin:/usr/bin)
 	else
 		L2TP="${path_l2tp}"
 		AC_SUBST(L2TP)
@@ -188,7 +196,7 @@ AC_ARG_ENABLE(pptp,
 			[enable_pptp=${enableval}], [enable_pptp="no"])
 if (test "${enable_pptp}" != "no"); then
 	if (test -z "${path_pppd}"); then
-		AC_PATH_PROG(PPPD, [pppd], [/usr/sbin/pppd], $PATH:/sbin:/usr/sbin)
+		AC_PATH_PROG(PPPD, [pppd], [/usr/bin/pppd], $PATH:/bin:/usr/bin)
 	else
 		PPPD="${path_pppd}"
 		AC_SUBST(PPPD)
@@ -196,7 +204,7 @@ if (test "${enable_pptp}" != "no"); then
 	AC_CHECK_HEADERS(pppd/pppd.h, dummy=yes,
 			AC_MSG_ERROR(ppp header files are required))
 	if (test -z "${path_pptp}"); then
-		AC_PATH_PROG(PPTP, [pptp], [/usr/sbin/pptp], $PATH:/sbin:/usr/sbin)
+		AC_PATH_PROG(PPTP, [pptp], [/usr/bin/pptp], $PATH:/bin:/usr/bin)
 	else
 		PPTP="${path_pptp}"
 		AC_SUBST(PPTP)
@@ -383,7 +391,7 @@ AM_CONDITIONAL(TOOLS, test "${enable_tools}" != "no")
 
 if (test "${enable_tools}" != "no"); then
 	AC_PATH_PROGS(IPTABLES_SAVE, [iptables-save], [],
-						$PATH:/sbin:/usr/sbin)
+						$PATH:/bin:/usr/bin)
 	IPTABLES_SAVE=$ac_cv_path_IPTABLES_SAVE
 else
 	IPTABLES_SAVE=""
@@ -415,7 +423,7 @@ fi
 
 if (test "${enable_wifi}" != "no"); then
 	AC_PATH_PROG(WPASUPPLICANT, [wpa_supplicant], [],
-						$PATH:/sbin:/usr/sbin)
+						$PATH:/bin:/usr/bin)
 fi
 
 AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],

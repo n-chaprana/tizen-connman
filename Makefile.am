@@ -59,19 +59,30 @@ if VPN
 dbusconf_DATA += vpn/connman-vpn-dbus.conf
 dbusservicedir = @DBUS_DATADIR@
 dbusservice_DATA = vpn/net.connman.vpn.service
-endif
 
 if SYSTEMD
 systemdunitdir = @SYSTEMD_UNITDIR@
 systemdunit_DATA = src/connman.service vpn/connman-vpn.service
 
 endif
-endif
 
 service_files_sources = src/connman.service.in src/net.connman.service.in \
 				vpn/net.connman.vpn.service.in vpn/connman-vpn.service.in
 service_files = src/connman.service src/net.connman.service \
 				vpn/net.connman.vpn.service vpn/connman-vpn.service
+
+else
+
+if SYSTEMD
+systemdunitdir = @SYSTEMD_UNITDIR@
+systemdunit_DATA = src/connman.service
+
+endif
+
+service_files_sources = src/connman.service.in src/net.connman.service.in
+service_files = src/connman.service src/net.connman.service
+endif
+endif
 
 plugin_LTLIBRARIES =
 
@@ -83,13 +94,21 @@ builtin_libadd =
 builtin_cflags =
 
 noinst_PROGRAMS =
+if TIZEN_EXT
+bin_PROGRAMS = src/connmand
+else
 bin_PROGRAMS =
+endif
 
 unit_objects =
 
 MANUAL_PAGES =
 
+if TIZEN_EXT
+sbin_PROGRAMS =
+else
 sbin_PROGRAMS = src/connmand
+endif
 
 src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			$(builtin_sources) $(shared_sources) src/connman.ver \
@@ -128,7 +147,11 @@ builtin_vpn_sources =
 builtin_vpn_libadd =
 builtin_vpn_cflags =
 
+if TIZEN_EXT
+bin_PROGRAMS += vpn/connman-vpnd
+else
 sbin_PROGRAMS += vpn/connman-vpnd
+endif
 
 vpn_connman_vpnd_SOURCES = $(gdhcp_sources) $(builtin_vpn_sources) \
 			$(gweb_sources) vpn/vpn.ver vpn/main.c vpn/vpn.h \
@@ -258,7 +281,7 @@ include Makefile.plugins
 if CLIENT
 bin_PROGRAMS += client/connmanctl
 
-MANUAL_PAGES = doc/connmanctl.1
+#MANUAL_PAGES = doc/connmanctl.1
 
 client_connmanctl_SOURCES = client/dbus_helpers.h client/dbus_helpers.c \
 			client/services.h client/services.c \
@@ -395,7 +418,7 @@ EXTRA_DIST += doc/overview-api.txt doc/behavior-api.txt \
 EXTRA_DIST += src/main.conf \
 		src/eduroam.config
 
-MANUAL_PAGES += doc/connman.8 doc/connman.conf.5
+#MANUAL_PAGES += doc/connman.8 doc/connman.conf.5
 
 dist_man_MANS = $(MANUAL_PAGES)
 

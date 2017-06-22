@@ -5,13 +5,15 @@ DefaultDependencies=no
 
 [Service]
 Type=dbus
+User=network_fw
+Group=network_fw
 BusName=net.connman
 Restart=on-failure
 SmackProcessLabel=System
-ExecStart=@sbindir@/connmand -n --noplugin vpn
+ExecStart=@bindir@/connmand -n --noplugin vpn
 StandardOutput=null
-CapabilityBoundingSet=~CAP_MAC_ADMIN
-CapabilityBoundingSet=~CAP_MAC_OVERRIDE
+Capabilities=cap_net_admin,cap_net_bind_service,cap_net_broadcast,cap_net_raw=i
+SecureBits=keep-caps
 
 [Install]
 WantedBy=multi-user.target

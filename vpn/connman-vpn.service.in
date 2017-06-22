@@ -5,12 +5,14 @@ After=dbus.socket
 
 [Service]
 Type=dbus
+User=network_fw
+Group=network_fw
 BusName=net.connman.vpn
 SmackProcessLabel=System
-ExecStart=@sbindir@/connman-vpnd -n
+ExecStart=@bindir@/connman-vpnd -n
 StandardOutput=null
-CapabilityBoundingSet=~CAP_MAC_ADMIN
-CapabilityBoundingSet=~CAP_MAC_OVERRIDE
+Capabilities=cap_net_admin,cap_net_bind_service,cap_net_broadcast,cap_net_raw=i
+SecureBits=keep-caps
 
 [Install]
 WantedBy=multi-user.target
