@@ -3155,6 +3155,8 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 {
 	char bssid_buff[WIFI_BSSID_STR_LEN] = {0,};
 	char *bssid_str = bssid_buff;
+	const void *ssid;
+	unsigned int ssid_len;
 	unsigned char *bssid;
 	unsigned int maxrate;
 	unsigned int keymgmt;
@@ -3162,6 +3164,7 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 	const char *enc_mode;
 	gboolean passpoint;
 
+	ssid = connman_network_get_blob(network, "WiFi.SSID", &ssid_len);
 	bssid = connman_network_get_bssid(network);
 	maxrate = connman_network_get_maxrate(network);
 	frequency = connman_network_get_frequency(network);
@@ -3173,6 +3176,8 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 				bssid[0], bssid[1], bssid[2],
 				bssid[3], bssid[4], bssid[5]);
 
+	connman_dbus_dict_append_fixed_array(dict, "SSID",
+					DBUS_TYPE_BYTE, &ssid, ssid_len);
 	connman_dbus_dict_append_basic(dict, "BSSID",
 					DBUS_TYPE_STRING, &bssid_str);
 	connman_dbus_dict_append_basic(dict, "MaxRate",
