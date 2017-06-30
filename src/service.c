@@ -7658,6 +7658,7 @@ static int service_connect(struct connman_service *service)
 			 * or EAP-AKA (EAP-TLS, EAP-SIM and EAP-AKA networks
 			 * need to be fully provisioned)
 			 */
+			DBG("service eap: %s", service->eap);
 			if (g_str_equal(service->eap, "tls") ||
 				g_str_equal(service->eap, "sim") ||
 				g_str_equal(service->eap, "aka"))
