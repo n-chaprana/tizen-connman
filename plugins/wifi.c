@@ -2907,9 +2907,11 @@ static unsigned char calculate_strength(GSupplicantNetwork *supplicant_network)
 	unsigned char strength;
 
 	strength = 120 + g_supplicant_network_get_signal(supplicant_network);
+
+#if !defined TIZEN_EXT
 	if (strength > 100)
 		strength = 100;
-
+#endif
 	return strength;
 }
 
