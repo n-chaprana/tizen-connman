@@ -4720,6 +4720,19 @@ static void add_network_security_peap(DBusMessageIter *dict,
 	g_free(phase2_auth);
 }
 
+#if defined TIZEN_EXT
+static void add_network_security_aka_sim(DBusMessageIter *dict,
+					GSupplicantSSID *ssid)
+{
+	if (!ssid->passphrase)
+		return;
+
+	supplicant_dbus_dict_append_basic(dict, "password",
+			DBUS_TYPE_STRING,
+			&ssid->passphrase);
+}
+#endif
+
 static void add_network_security_eap(DBusMessageIter *dict,
 					GSupplicantSSID *ssid)
 {
@@ -4745,6 +4758,7 @@ static void add_network_security_eap(DBusMessageIter *dict,
 #if defined TIZEN_EXT
 	} else if (g_strcmp0(ssid->eap, "sim") == 0 ||
 			g_strcmp0(ssid->eap, "aka") == 0) {
+		add_network_security_aka_sim(dict, ssid);
 #endif
 	} else
 		return;
