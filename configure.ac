@@ -103,7 +103,7 @@ AC_ARG_ENABLE(openvpn,
 			[enable_openvpn=${enableval}], [enable_openvpn="no"])
 if (test "${enable_openvpn}" != "no"); then
 	if (test -z "${path_openvpn}"); then
-		AC_PATH_PROG(OPENVPN, [openvpn], [], $PATH:/bin:/usr/bin)
+		AC_PATH_PROG(OPENVPN, [openvpn], [/usr/bin/openvpn], $PATH:/bin:/usr/bin)
 		if (test -z "${OPENVPN}"); then
 			AC_MSG_ERROR(openvpn binary not found)
 		fi
@@ -443,4 +443,4 @@ AM_CONDITIONAL(VPN, test "${enable_openconnect}" != "no" -o \
 			"${enable_l2tp}" != "no" -o \
 			"${enable_pptp}" != "no")
 
-AC_OUTPUT(Makefile include/version.h connman.pc src/connman.service src/connman_tv.service)
+AC_OUTPUT(Makefile include/version.h connman.pc src/connman.service src/connman_tv.service vpn/connman-vpn.service)
