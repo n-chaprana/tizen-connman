@@ -241,22 +241,19 @@ systemctl daemon-reload
 
 %files
 %manifest connman.manifest
-%attr(500,network_fw,network_fw) %{_bindir}/*
+%attr(500,network_fw,network_fw) %{_bindir}/connmand
 %attr(500,network_fw,network_fw) %{_bindir}/connmanctl
 %attr(755,network_fw,network_fw) /%{_localstatedir}/lib/connman
 %attr(600,network_fw,network_fw) /%{_localstatedir}/lib/connman/settings
-#%{_libdir}/connman/plugins/*.so
-%attr(644,network_fw,network_fw) %{_datadir}/dbus-1/system-services/*
+%attr(644,network_fw,network_fw) %{_datadir}/dbus-1/system-services/net.connman.service
 %{_sysconfdir}/dbus-1/system.d/*
 %attr(644,network_fw,network_fw) %{_sysconfdir}/connman/main.conf
 %{_sysconfdir}/dbus-1/system.d/*.conf
 %attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman.service
 %attr(644,network_fw,network_fw) %{_libdir}/systemd/system/multi-user.target.wants/connman.service
-%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
 %if "%{?_lib}" == "lib64"
 %attr(644,network_fw,network_fw) %{_unitdir}/connman.service
 %attr(644,network_fw,network_fw) %{_unitdir}/multi-user.target.wants/connman.service
-%attr(644,network_fw,network_fw) %{_unitdir}/connman-vpn.service
 %attr(644,network_fw,network_fw) %{_unitdir}/connman.socket
 %attr(644,network_fw,network_fw) %{_unitdir}/sockets.target.wants/connman.socket
 %else
@@ -280,13 +277,7 @@ systemctl daemon-reload
 %manifest %{name}.manifest
 %{_libdir}/connman/plugins-vpn/openconnect.so
 %{_libdir}/connman/scripts/openconnect-script
-%{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %license COPYING
-%if "%{?_lib}" == "lib64"
-%attr(644,network_fw,network_fw) %{_unitdir}/connman-vpn.service
-%else
-%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
-%endif
 %endif
 
 %if %{with connman_openvpn}
@@ -294,13 +285,7 @@ systemctl daemon-reload
 %manifest %{name}.manifest
 %{_libdir}/%{name}/plugins-vpn/openvpn.so
 %{_libdir}/%{name}/scripts/openvpn-script
-%{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %license COPYING
-%if "%{?_lib}" == "lib64"
-%attr(644,network_fw,network_fw) %{_unitdir}/connman-vpn.service
-%else
-%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
-%endif
 %endif
 
 %if %{with connman_ipsec}
@@ -308,19 +293,13 @@ systemctl daemon-reload
 %manifest %{name}.manifest
 %{_libdir}/%{name}/plugins-vpn/ipsec.so
 %{_libdir}/%{name}/scripts/ipsec-script
-%{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %license COPYING
-%if "%{?_lib}" == "lib64"
-%attr(644,network_fw,network_fw) %{_unitdir}/connman-vpn.service
-%else
-%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
-%endif
 %endif
 
 %if %{with connman_vpnd}
 %files connman-vpnd
 %manifest %{name}.manifest
-#%{_bindir}/connman-vpnd
+%{_bindir}/connman-vpnd
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/scripts
 %dir %{_libdir}/%{name}/plugins-vpn
