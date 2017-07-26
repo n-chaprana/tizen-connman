@@ -306,10 +306,9 @@ systemctl daemon-reload
 %config %{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %license COPYING
+%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
 %if "%{?_lib}" == "lib64"
 %attr(644,network_fw,network_fw) %{_unitdir}/connman-vpn.service
-%else
-%attr(644,network_fw,network_fw) %{_libdir}/systemd/system/connman-vpn.service
 %endif
 %endif
 
