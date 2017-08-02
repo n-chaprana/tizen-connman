@@ -4979,6 +4979,10 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 	if (ssid->bssid) {
 		char *bssid = NULL;
 		bssid = g_try_malloc0(18);
+		if (bssid == NULL) {
+			SUPPLICANT_DBG("memory allocation error");
+			return;
+		}
 		snprintf(bssid, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
 					ssid->bssid[0], ssid->bssid[1], ssid->bssid[2],
 					ssid->bssid[3], ssid->bssid[4], ssid->bssid[5]);
