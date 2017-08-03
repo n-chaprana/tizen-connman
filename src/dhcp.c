@@ -473,6 +473,10 @@ static void lease_available_cb(GDHCPClient *dhcp_client, gpointer user_data)
 	__connman_ipconfig_set_dhcp_address(dhcp->ipconfig, address);
 	DBG("last address %s", address);
 
+#if defined TIZEN_EXT
+	int dhcp_lease_duration = g_dhcp_client_get_dhcp_lease_duration(dhcp_client);
+#endif
+
 	option = g_dhcp_client_get_option(dhcp_client, G_DHCP_SUBNET);
 	if (option)
 		netmask = g_strdup(option->data);
@@ -505,6 +509,11 @@ static void lease_available_cb(GDHCPClient *dhcp_client, gpointer user_data)
 
 	__connman_ipconfig_set_method(dhcp->ipconfig,
 						CONNMAN_IPCONFIG_METHOD_DHCP);
+
+#if defined TIZEN_EXT
+	__connman_ipconfig_set_dhcp_lease_duration(dhcp->ipconfig, dhcp_lease_duration);
+#endif
+
 	if (ip_change) {
 		__connman_ipconfig_set_local(dhcp->ipconfig, address);
 		__connman_ipconfig_set_prefixlen(dhcp->ipconfig, prefixlen);

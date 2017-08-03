@@ -53,6 +53,10 @@ struct connman_ipconfig {
 	struct connman_ipaddress *address;
 	struct connman_ipaddress *system;
 
+#if defined TIZEN_EXT
+	int dhcp_lease_duration;
+#endif
+
 	int ipv6_privacy_config;
 	char *last_dhcp_address;
 	char **last_dhcpv6_prefixes;
@@ -1098,6 +1102,14 @@ void __connman_ipconfig_set_gateway(struct connman_ipconfig *ipconfig,
 }
 
 #if defined TIZEN_EXT
+void __connman_ipconfig_set_dhcp_lease_duration(struct connman_ipconfig *ipconfig,
+		int dhcp_lease_duration)
+{
+	ipconfig->dhcp_lease_duration = dhcp_lease_duration;
+}
+#endif
+
+#if defined TIZEN_EXT
 int __connman_ipconfig_gateway_add(struct connman_ipconfig *ipconfig, struct connman_service *service)
 #else
 int __connman_ipconfig_gateway_add(struct connman_ipconfig *ipconfig)
@@ -1903,6 +1915,8 @@ void __connman_ipconfig_append_ipv4(struct connman_ipconfig *ipconfig,
 					DBUS_TYPE_STRING, &server_ip);
 			g_free(server_ip);
 		}
+		connman_dbus_dict_append_basic(iter, "DHCPLeaseDuration",
+				DBUS_TYPE_INT32, &ipconfig->dhcp_lease_duration);
 	}
 #endif
 }

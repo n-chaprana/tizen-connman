@@ -178,6 +178,7 @@ struct _GDHCPClient {
 	struct timeval start_time;
 	bool request_bcast;
 #if defined TIZEN_EXT
+	uint32_t dhcp_lease_seconds;
 	gboolean init_reboot;
 #endif
 };
@@ -2383,6 +2384,10 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 
 			dhcp_client->lease_seconds = get_lease(&packet);
 
+#if defined TIZEN_EXT
+			dhcp_client->dhcp_lease_seconds = dhcp_client->lease_seconds;
+#endif
+
 			get_request(dhcp_client, &packet);
 
 			switch_listening_mode(dhcp_client, L_NONE);
@@ -3035,6 +3040,13 @@ char *g_dhcp_client_get_server_address(GDHCPClient *dhcp_client)
 	return get_ip(dhcp_client->server_ip);
 #endif
 }
+
+#if defined TIZEN_EXT
+int g_dhcp_client_get_dhcp_lease_duration(GDHCPClient *dhcp_client)
+{
+	return dhcp_client->dhcp_lease_seconds;
+}
+#endif
 
 char *g_dhcp_client_get_address(GDHCPClient *dhcp_client)
 {

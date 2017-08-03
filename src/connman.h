@@ -367,6 +367,11 @@ const char *__connman_ipconfig_get_broadcast(struct connman_ipconfig *ipconfig);
 void __connman_ipconfig_set_broadcast(struct connman_ipconfig *ipconfig, const char *broadcast);
 const char *__connman_ipconfig_get_gateway(struct connman_ipconfig *ipconfig);
 void __connman_ipconfig_set_gateway(struct connman_ipconfig *ipconfig, const char *gateway);
+
+#if defined TIZEN_EXT
+void __connman_ipconfig_set_dhcp_lease_duration(struct connman_ipconfig *ipconfig, int dhcp_lease_duration);
+#endif
+
 unsigned char __connman_ipconfig_get_prefixlen(struct connman_ipconfig *ipconfig);
 void __connman_ipconfig_set_prefixlen(struct connman_ipconfig *ipconfig, unsigned char prefixlen);
 

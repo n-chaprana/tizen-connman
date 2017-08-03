@@ -151,6 +151,11 @@ GDHCPClientError g_dhcp_client_set_send(GDHCPClient *client,
 						const char *option_value);
 
 char *g_dhcp_client_get_server_address(GDHCPClient *client);
+
+#if defined TIZEN_EXT
+int g_dhcp_client_get_dhcp_lease_duration(GDHCPClient *client);
+#endif
+
 char *g_dhcp_client_get_address(GDHCPClient *client);
 char *g_dhcp_client_get_netmask(GDHCPClient *client);
 GList *g_dhcp_client_get_option(GDHCPClient *client,
