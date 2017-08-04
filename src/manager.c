@@ -34,6 +34,30 @@
 static bool connman_state_idle;
 static dbus_bool_t sessionmode;
 
+#if defined TIZEN_EXT
+static void append_wifi_vsies_structs(DBusMessageIter *iter, void *user_data)
+{
+	__connman_wifi_vsie_list_struct(iter);
+}
+
+static DBusMessage *get_wifi_vsies(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+
+	DBG("ConnMan, get_wifi_vsies API called");
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	__connman_dbus_append_objpath_dict_array(reply,
+			append_wifi_vsies_structs, NULL);
+
+	return reply;
+}
+#endif
+
 static DBusMessage *get_properties(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -575,6 +599,11 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("UnregisterPeerService",
 			GDBUS_ARGS({ "specification", "a{sv}" }), NULL,
 			unregister_peer_service) },
+#if defined TIZEN_EXT
+	{ GDBUS_METHOD("GetVsies",
+			NULL, GDBUS_ARGS({ "Vsie", "a(oa{sv})" }),
+			get_wifi_vsies) },
+#endif
 	{ },
 };
 

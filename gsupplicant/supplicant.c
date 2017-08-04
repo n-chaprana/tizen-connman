@@ -211,6 +211,8 @@ struct g_supplicant_bss {
 #if defined TIZEN_EXT
 	dbus_bool_t ft_psk;
 	dbus_bool_t ft_ieee8021x;
+	char *wifi_vsie;
+	unsigned int wifi_vsie_len;
 #endif
 	unsigned int wps_capabilities;
 };
@@ -237,6 +239,8 @@ struct _GSupplicantNetwork {
 	char *identity;
 	char *phase2;
 	unsigned int keymgmt;
+	char *wifi_vsie;
+	unsigned int wifi_vsie_len;
 #endif
 };
 
@@ -641,6 +645,10 @@ static void remove_network(gpointer data)
 	g_free(network->identity);
 	g_free(network->phase2);
 #endif
+#if defined TIZEN_EXT
+	g_free(network->wifi_vsie);
+#endif
+
 	g_free(network);
 }
 
@@ -649,6 +657,9 @@ static void remove_bss(gpointer data)
 	struct g_supplicant_bss *bss = data;
 
 	g_free(bss->path);
+#if defined TIZEN_EXT
+	g_free(bss->wifi_vsie);
+#endif
 	g_free(bss);
 }
 
@@ -1345,6 +1356,17 @@ bool g_supplicant_network_get_rsn_mode(GSupplicantNetwork *network)
 		return false;
 }
 
+const void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network,
+						unsigned int *wifi_vsie_len)
+{
+	if (!network) {
+		*wifi_vsie_len = 0;
+		return NULL;
+	}
+
+	*wifi_vsie_len = network->wifi_vsie_len;
+	return network->wifi_vsie;
+}
 #endif
 
 static void merge_network(GSupplicantNetwork *network)
@@ -1639,6 +1661,17 @@ static void add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 
 #if defined TIZEN_EXT
 	network->keymgmt = bss->keymgmt;
+
+	if (bss->wifi_vsie_len > 0) {
+		SUPPLICANT_DBG("vsie len: %d", bss->wifi_vsie_len);
+		network->wifi_vsie = (char *)g_try_malloc0(bss->wifi_vsie_len);
+		if(network->wifi_vsie) {
+			network->wifi_vsie_len = bss->wifi_vsie_len;
+			memcpy(network->wifi_vsie, bss->wifi_vsie, network->wifi_vsie_len);
+		} else {
+			SUPPLICANT_DBG("Failed to allocate memory for wifi_vsie");
+		}
+	}
 #endif
 
 	SUPPLICANT_DBG("New network %s created", network->name);
@@ -1818,6 +1851,9 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 {
 	struct g_supplicant_bss *bss = user_data;
 	const unsigned char WPS_OUI[] = { 0x00, 0x50, 0xf2, 0x04 };
+#if defined TIZEN_EXT
+	const unsigned char WIFI_OUI[] = {0x00, 0x16, 0x32};
+#endif
 	unsigned char *ie, *ie_end;
 	DBusMessageIter array;
 	unsigned int value;
@@ -1833,6 +1869,9 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 #define WPS_PBC           0x04
 #define WPS_PIN           0x00
 #define WPS_CONFIGURED    0x02
+#if defined TIZEN_EXT
+#define VENDOR_SPECIFIC_INFO 0xDD
+#endif
 
 	dbus_message_iter_recurse(iter, &array);
 	dbus_message_iter_get_fixed_array(&array, &ie, &ie_len);
@@ -1845,7 +1884,19 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 
 	for (ie_end = ie + ie_len; ie < ie_end && ie + ie[1] + 1 <= ie_end;
 							ie += ie[1] + 2) {
-
+#if defined TIZEN_EXT
+		if((ie[0] == VENDOR_SPECIFIC_INFO) && (memcmp(ie+2, WIFI_OUI, sizeof(WIFI_OUI)) == 0)) {
+				SUPPLICANT_DBG("IE: match WIFI_OUI");
+				bss->wifi_vsie = (char *)g_try_malloc0(ie[1] + 2);   // tag number size(1), tag length size(1)
+				if (bss->wifi_vsie) {
+					bss->wifi_vsie_len = ie[1] + 2;
+					memcpy(bss->wifi_vsie, ie, bss->wifi_vsie_len);
+				} else {
+					SUPPLICANT_DBG("Failed to allocate memory for wifi_vsie");
+				}
+				continue;
+		}
+#endif
 		if (ie[0] != WMM_WPA1_WPS_INFO || ie[1] < WPS_INFO_MIN_LEN ||
 			memcmp(ie+2, WPS_OUI, sizeof(WPS_OUI)) != 0)
 			continue;

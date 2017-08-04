@@ -101,6 +101,8 @@ struct connman_network {
 		char *keymgmt_type;
 		bool rsn_mode;
 		int disconnect_reason;
+		void *wifi_vsie;
+		unsigned int wifi_vsie_len;
 #endif
 	} wifi;
 
@@ -975,7 +977,9 @@ static void network_destruct(struct connman_network *network)
 	g_free(network->wifi.private_key_passphrase);
 	g_free(network->wifi.phase2_auth);
 	g_free(network->wifi.pin_wps);
-
+#if defined TIZEN_EXT
+	g_free(network->wifi.wifi_vsie);
+#endif
 	g_free(network->path);
 	g_free(network->group);
 	g_free(network->node);
@@ -2424,6 +2428,16 @@ int connman_network_set_blob(struct connman_network *network,
 			network->wifi.ssid_len = size;
 		} else
 			network->wifi.ssid_len = 0;
+#if defined TIZEN_EXT
+	} else if (g_str_equal(key, "WiFi.Vsie")){
+		g_free(network->wifi.wifi_vsie);
+		network->wifi.wifi_vsie = g_try_malloc(size);
+		if (network->wifi.wifi_vsie) {
+			memcpy(network->wifi.wifi_vsie, data, size);
+			network->wifi.wifi_vsie_len = size;
+		} else
+			network->wifi.wifi_vsie_len = 0;
+#endif
 	} else {
 		return -EINVAL;
 	}
@@ -2449,6 +2463,17 @@ const void *connman_network_get_blob(struct connman_network *network,
 			*size = network->wifi.ssid_len;
 		return network->wifi.ssid;
 	}
+
+#if defined TIZEN_EXT
+	if (g_str_equal(key, "WiFi.Vsie")) {
+		if (size) {
+			*size = network->wifi.wifi_vsie_len;
+			DBG("network %p key %s size=%d", network, key, *size);
+		}
+
+		return network->wifi.wifi_vsie;
+	}
+#endif
 
 	return NULL;
 }

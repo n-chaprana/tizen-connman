@@ -377,6 +377,8 @@ const char *g_supplicant_network_get_eap(GSupplicantNetwork *network);
 const char *g_supplicant_network_get_identity(GSupplicantNetwork *network);
 const char *g_supplicant_network_get_phase2(GSupplicantNetwork *network);
 unsigned int g_supplicant_network_get_keymgmt(GSupplicantNetwork *network);
+const void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network,
+						unsigned int *wifi_vsie_len);
 #endif
 
 struct _GSupplicantCallbacks {

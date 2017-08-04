@@ -917,6 +917,10 @@ int __connman_rtnl_init(void);
 void __connman_rtnl_start(void);
 void __connman_rtnl_cleanup(void);
 
+#if defined TIZEN_EXT
+void __connman_wifi_vsie_list_struct(DBusMessageIter *iter);
+#endif
+
 enum connman_device_type __connman_rtnl_get_device_type(int index);
 unsigned int __connman_rtnl_update_interval_add(unsigned int interval);
 unsigned int __connman_rtnl_update_interval_remove(unsigned int interval);
