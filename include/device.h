@@ -130,6 +130,11 @@ struct connman_device_driver {
 			const char *security, void *user_data);
 	int (*set_regdom) (struct connman_device *device,
 						const char *alpha2);
+#if defined TIZEN_EXT
+	int (*specific_scan) (enum connman_service_type type,
+			struct connman_device *device, int scan_type,
+			GSList *specific_scan_list, void *user_data);
+#endif
 };
 
 int connman_device_driver_register(struct connman_device_driver *driver);

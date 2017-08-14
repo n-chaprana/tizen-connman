@@ -1077,6 +1077,73 @@ void connman_device_regdom_notify(struct connman_device *device,
 	__connman_technology_notify_regdom_by_device(device, result, alpha2);
 }
 
+#if defined TIZEN_EXT
+static int device_specific_scan(enum connman_service_type type,
+				struct connman_device *device,
+				int scan_type, GSList *specific_scan_list)
+{
+	if (!device->driver || !device->driver->specific_scan)
+		return -EOPNOTSUPP;
+
+	if (!device->powered)
+		return -ENOLINK;
+
+	return device->driver->specific_scan(type, device, scan_type,
+			specific_scan_list, NULL);
+}
+
+int __connman_device_request_specific_scan(enum connman_service_type type,
+				int scan_type, GSList *specific_scan_list)
+{
+	bool success = false;
+	int last_err = -ENOSYS;
+	GSList *list;
+	int err;
+
+	switch (type) {
+	case CONNMAN_SERVICE_TYPE_UNKNOWN:
+	case CONNMAN_SERVICE_TYPE_SYSTEM:
+	case CONNMAN_SERVICE_TYPE_ETHERNET:
+	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
+	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_GPS:
+	case CONNMAN_SERVICE_TYPE_VPN:
+	case CONNMAN_SERVICE_TYPE_GADGET:
+		return -EOPNOTSUPP;
+	case CONNMAN_SERVICE_TYPE_WIFI:
+	case CONNMAN_SERVICE_TYPE_P2P:
+		break;
+	}
+
+	for (list = device_list; list; list = list->next) {
+		struct connman_device *device = list->data;
+		enum connman_service_type service_type =
+			__connman_device_get_service_type(device);
+
+		if (service_type != CONNMAN_SERVICE_TYPE_UNKNOWN) {
+			if (type == CONNMAN_SERVICE_TYPE_P2P) {
+				if (service_type != CONNMAN_SERVICE_TYPE_WIFI)
+					continue;
+			} else if (service_type != type)
+				continue;
+		}
+
+		err = device_specific_scan(type, device, scan_type, specific_scan_list);
+		if (err == 0 || err == -EALREADY || err == -EINPROGRESS) {
+			success = true;
+		} else {
+			last_err = err;
+			DBG("device %p err %d", device, err);
+		}
+	}
+
+	if (success)
+		return 0;
+
+	return last_err;
+}
+#endif
+
 int __connman_device_request_scan(enum connman_service_type type)
 {
 	bool success = false;

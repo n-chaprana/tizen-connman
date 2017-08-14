@@ -1173,6 +1173,77 @@ static DBusMessage *scan(DBusConnection *conn, DBusMessage *msg, void *data)
 }
 
 #if defined TIZEN_EXT
+static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *data)
+{
+	struct connman_technology *technology = data;
+	GSList *specific_scan_list = NULL;
+	int scan_type = 0;
+	const char *name = NULL;
+	unsigned int freq = 0;
+	DBusMessageIter iter, dict;
+	int err;
+
+	DBG("technology %p request from %s", technology,
+			dbus_message_get_sender(msg));
+
+	if (!dbus_message_iter_init(msg, &iter))
+		return __connman_error_invalid_arguments(msg);
+
+	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_ARRAY)
+		return __connman_error_invalid_arguments(msg);
+
+	dbus_message_iter_recurse(&iter, &dict);
+	while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+		DBusMessageIter entry, value2;
+		const char *key;
+		int type;
+
+		dbus_message_iter_recurse(&dict, &entry);
+		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+			return __connman_error_invalid_arguments(msg);
+
+		dbus_message_iter_get_basic(&entry, &key);
+		dbus_message_iter_next(&entry);
+
+		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT)
+			return __connman_error_invalid_arguments(msg);
+
+		dbus_message_iter_recurse(&entry, &value2);
+		type = dbus_message_iter_get_arg_type(&value2);
+		if (g_str_equal(key, "SSID")) {
+			if (type != DBUS_TYPE_STRING)
+				return __connman_error_invalid_arguments(msg);
+
+			scan_type = 1; /* SSID based scan */
+			dbus_message_iter_get_basic(&value2, &name);
+			DBG("name %s", name);
+			specific_scan_list = g_slist_append(specific_scan_list, g_strdup(name));
+		} else if (g_str_equal(key, "Frequency")) {
+			if (type != DBUS_TYPE_UINT16) {
+				g_slist_free_full(specific_scan_list, g_free);
+				return __connman_error_invalid_arguments(msg);
+			}
+
+			scan_type = 2; /* Frequency based scan */
+			dbus_message_iter_get_basic(&value2, &freq);
+			DBG("freq %d", freq);
+			specific_scan_list = g_slist_append(specific_scan_list, GINT_TO_POINTER(freq));
+		}
+		dbus_message_iter_next(&dict);
+	}
+
+	dbus_message_ref(msg);
+	technology->scan_pending =
+		g_slist_prepend(technology->scan_pending, msg);
+
+	err = __connman_device_request_specific_scan(technology->type, scan_type, specific_scan_list);
+	if (err < 0)
+		reply_scan_pending(technology, err);
+
+	g_slist_free_full(specific_scan_list, g_free);
+	return NULL;
+}
+
 static DBusMessage *get_scan_state(DBusConnection *conn, DBusMessage *msg, void *data)
 {
 	DBusMessage *reply;
@@ -1216,6 +1287,8 @@ static const GDBusMethodTable technology_methods[] = {
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" }),
 			NULL, set_property) },
 	{ GDBUS_ASYNC_METHOD("Scan", NULL, NULL, scan) },
+	{ GDBUS_ASYNC_METHOD("SpecificScan", GDBUS_ARGS({ "specificscan", "a{sv}" }),
+			NULL, specific_scan) },
 #if defined TIZEN_EXT
 	{ GDBUS_METHOD("GetScanState", NULL, GDBUS_ARGS({ "scan_state", "a{sv}" }),
 			get_scan_state) },

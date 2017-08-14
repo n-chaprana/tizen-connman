@@ -1831,6 +1831,125 @@ static int p2p_find(struct connman_device *device)
 	return ret;
 }
 
+#if defined TIZEN_EXT
+static void specific_scan_callback(int result, GSupplicantInterface *interface,
+						void *user_data)
+{
+	struct connman_device *device = user_data;
+	struct wifi_data *wifi = connman_device_get_data(device);
+	bool scanning;
+
+	DBG("result %d wifi %p", result, wifi);
+
+	if (wifi && wifi->scan_params) {
+		g_supplicant_free_scan_params(wifi->scan_params);
+		wifi->scan_params = NULL;
+	}
+
+	scanning = connman_device_get_scanning(device);
+	if (scanning) {
+		connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_WIFI, false);
+		connman_device_unref(device);
+	}
+}
+
+static int wifi_specific_scan(enum connman_service_type type,
+			struct connman_device *device, int scan_type,
+			GSList *specific_scan_list, void *user_data)
+{
+	GSList *list = NULL;
+	char *ssid = NULL;
+	struct wifi_data *wifi = connman_device_get_data(device);
+	GSupplicantScanParams *scan_params = NULL;
+	struct scan_ssid *scan_ssid;
+	bool scanning;
+	int ret;
+	int freq;
+	int count = 0;
+
+	if (!wifi)
+		return -ENODEV;
+
+	if (wifi->p2p_device)
+		return 0;
+
+	if (type == CONNMAN_SERVICE_TYPE_P2P)
+		return p2p_find(device);
+
+	if (wifi->tethering)
+		return 0;
+
+	scanning = connman_device_get_scanning(device);
+	if (scanning)
+		return -EALREADY;
+
+	DBG("scan_type: %d", scan_type);
+	if (scan_type == 1) { /* ssid based scan */
+		scan_params = g_try_malloc0(sizeof(GSupplicantScanParams));
+		if (!scan_params)
+			return -ENOMEM;
+
+		scan_ssid = g_try_new0(struct scan_ssid, 1);
+		if (!scan_ssid) {
+			g_free(scan_params);
+			return -ENOMEM;
+		}
+		for (list = specific_scan_list; list; list = list->next) {
+			ssid = (char *)list->data;
+			int ssid_len = strlen(ssid);
+
+			memcpy(scan_ssid->ssid, ssid, (ssid_len + 1));
+			DBG("scan ssid %s len: %d", scan_ssid->ssid, ssid_len);
+			scan_ssid->ssid_len = ssid_len;
+			scan_params->ssids = g_slist_prepend(scan_params->ssids, scan_ssid);
+			count++;
+		}
+		scan_params->num_ssids = count;
+
+	} else if (scan_type == 2) { /* frequency based scan */
+
+		scan_params = g_try_malloc0(sizeof(GSupplicantScanParams));
+		if (!scan_params)
+			return -ENOMEM;
+
+		scan_params->freqs = g_try_new0(uint16_t, 1);
+		if (!scan_params->freqs) {
+			g_free(scan_params);
+			return -ENOMEM;
+		}
+		count = 0;
+		for (list = specific_scan_list; list; list = list->next) {
+			freq = (int)list->data;
+			DBG("freq: %d", freq);
+			scan_params->freqs[count] = freq;
+			count++;
+		}
+		scan_params->num_freqs = count;
+
+	} else {
+		DBG("Invalid scan");
+		return -EINVAL;
+	}
+
+	reset_autoscan(device);
+	connman_device_ref(device);
+
+	ret = g_supplicant_interface_scan(wifi->interface, scan_params,
+						specific_scan_callback, device);
+
+	if (ret == 0) {
+		connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_WIFI, true);
+	} else {
+		g_supplicant_free_scan_params(scan_params);
+		connman_device_unref(device);
+	}
+
+	return ret;
+}
+#endif
+
 /*
  * Note that the hidden scan is only used when connecting to this specific
  * hidden AP first time. It is not used when system autoconnects to hidden AP.
@@ -2009,6 +2128,9 @@ static struct connman_device_driver wifi_ng_driver = {
 	.disable	= wifi_disable,
 	.scan		= wifi_scan,
 	.set_regdom	= wifi_set_regdom,
+#if defined TIZEN_EXT
+	.specific_scan  = wifi_specific_scan,
+#endif
 };
 
 static void system_ready(void)
