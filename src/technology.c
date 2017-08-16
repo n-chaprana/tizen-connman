@@ -1857,6 +1857,10 @@ int __connman_technology_add_rfkill(unsigned int index,
 	g_hash_table_insert(rfkill_list, GINT_TO_POINTER(index), rfkill);
 
 done:
+#if defined TIZEN_EXT
+	/* Fix Svace Issue [WGID: 1348]. */
+	g_free(rfkill);
+#endif
 	technology = technology_get(type);
 	/* If there is no driver for this type, ignore it. */
 	if (!technology)
