@@ -4316,7 +4316,11 @@ static void interface_scan_params(DBusMessageIter *iter, void *user_data)
 		supplicant_dbus_dict_append_basic(&dict, "Type",
 					DBUS_TYPE_STRING, &type);
 
-		supplicant_dbus_dict_append_array(&dict, "SSIDs",
+#if defined TIZEN_EXT
+		SUPPLICANT_DBG("[specific_scan] num_ssids %d", data->scan_params->num_ssids);
+		if (data->scan_params->num_ssids != 0)
+#endif
+			supplicant_dbus_dict_append_array(&dict, "SSIDs",
 						DBUS_TYPE_STRING,
 						append_ssids,
 						data->scan_params);

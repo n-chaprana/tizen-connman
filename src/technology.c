@@ -1240,7 +1240,10 @@ static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *
 	if (err < 0)
 		reply_scan_pending(technology, err);
 
-	g_slist_free_full(specific_scan_list, g_free);
+	if (scan_type == 1) {
+		g_slist_free_full(specific_scan_list, g_free);
+		scan_type = 0;
+	}
 	return NULL;
 }
 
@@ -1287,9 +1290,9 @@ static const GDBusMethodTable technology_methods[] = {
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" }),
 			NULL, set_property) },
 	{ GDBUS_ASYNC_METHOD("Scan", NULL, NULL, scan) },
+#if defined TIZEN_EXT
 	{ GDBUS_ASYNC_METHOD("SpecificScan", GDBUS_ARGS({ "specificscan", "a{sv}" }),
 			NULL, specific_scan) },
-#if defined TIZEN_EXT
 	{ GDBUS_METHOD("GetScanState", NULL, GDBUS_ARGS({ "scan_state", "a{sv}" }),
 			get_scan_state) },
 #endif

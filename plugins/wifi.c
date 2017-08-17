@@ -1862,7 +1862,7 @@ static int wifi_specific_scan(enum connman_service_type type,
 	char *ssid = NULL;
 	struct wifi_data *wifi = connman_device_get_data(device);
 	GSupplicantScanParams *scan_params = NULL;
-	struct scan_ssid *scan_ssid;
+	struct scan_ssid *scan_ssid = NULL;
 	bool scanning;
 	int ret;
 	int freq;
@@ -1887,17 +1887,21 @@ static int wifi_specific_scan(enum connman_service_type type,
 	DBG("scan_type: %d", scan_type);
 	if (scan_type == 1) { /* ssid based scan */
 		scan_params = g_try_malloc0(sizeof(GSupplicantScanParams));
-		if (!scan_params)
-			return -ENOMEM;
-
-		scan_ssid = g_try_new0(struct scan_ssid, 1);
-		if (!scan_ssid) {
-			g_free(scan_params);
+		if (!scan_params) {
+			DBG("Failed to allocate memory.");
 			return -ENOMEM;
 		}
+
 		for (list = specific_scan_list; list; list = list->next) {
 			ssid = (char *)list->data;
 			int ssid_len = strlen(ssid);
+
+			scan_ssid = g_try_new0(struct scan_ssid, 1);
+			if (!scan_ssid) {
+				DBG("Failed to allocate memory.");
+				g_supplicant_free_scan_params(scan_params);
+				return -ENOMEM;
+			}
 
 			memcpy(scan_ssid->ssid, ssid, (ssid_len + 1));
 			DBG("scan ssid %s len: %d", scan_ssid->ssid, ssid_len);
@@ -1910,19 +1914,27 @@ static int wifi_specific_scan(enum connman_service_type type,
 	} else if (scan_type == 2) { /* frequency based scan */
 
 		scan_params = g_try_malloc0(sizeof(GSupplicantScanParams));
-		if (!scan_params)
+		if (!scan_params) {
+			DBG("Failed to allocate memory.");
 			return -ENOMEM;
+		}
 
-		scan_params->freqs = g_try_new0(uint16_t, 1);
+		guint num_freqs = g_slist_length(specific_scan_list);
+		DBG("num_freqs: %d", num_freqs);
+
+		scan_params->freqs = g_try_new0(uint16_t, num_freqs);
 		if (!scan_params->freqs) {
+			DBG("Failed to allocate memory.");
 			g_free(scan_params);
 			return -ENOMEM;
 		}
+
 		count = 0;
 		for (list = specific_scan_list; list; list = list->next) {
 			freq = (int)list->data;
-			DBG("freq: %d", freq);
+
 			scan_params->freqs[count] = freq;
+			DBG("scan_params->freqs[%d]: %d", count, scan_params->freqs[count]);
 			count++;
 		}
 		scan_params->num_freqs = count;
