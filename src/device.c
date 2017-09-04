@@ -1129,7 +1129,7 @@ int __connman_device_request_specific_scan(enum connman_service_type type,
 		}
 
 		err = device_specific_scan(type, device, scan_type, specific_scan_list);
-		if (err == 0 || err == -EALREADY || err == -EINPROGRESS) {
+		if (err == 0 || err == -EINPROGRESS) {
 			success = true;
 		} else {
 			last_err = err;
@@ -1180,7 +1180,15 @@ int __connman_device_request_scan(enum connman_service_type type)
 		}
 
 		err = device_scan(type, device);
+#if defined TIZEN_EXT
+		/* When Scan is already in progress then return Error so that
+		 * wifi-manager can block the scan-done signal to be sent to
+		 * application and start requested scan after scan already in progress
+		 * is completed then notify to application about the scan event */
+		if (err == 0 || err == -EINPROGRESS) {
+#else
 		if (err == 0 || err == -EALREADY || err == -EINPROGRESS) {
+#endif
 			success = true;
 		} else {
 			last_err = err;

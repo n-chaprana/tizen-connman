@@ -43,6 +43,16 @@ static GHashTable *rfkill_list;
 
 static bool global_offlinemode;
 
+#if defined TIZEN_EXT
+typedef enum {
+	CONNMAN_SCAN_TYPE_FULL_CHANNEL = 0x00,
+	CONNMAN_SCAN_TYPE_SPECIFIC_AP,
+	CONNMAN_SCAN_TYPE_MULTI_AP,
+} connman_scan_type_e;
+
+static connman_scan_type_e g_scan_type = -1;
+#endif
+
 struct connman_rfkill {
 	unsigned int index;
 	enum connman_service_type type;
@@ -1099,17 +1109,24 @@ void __connman_technology_scan_stopped(struct connman_device *device,
 #if defined TIZEN_EXT
 	if (count == 0) {
 		DBusMessage *signal;
+		DBusMessageIter iter;
 		dbus_bool_t status = 0;
 		__connman_technology_notify_scan_changed("scan_done", &status);
 
 		signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
-										CONNMAN_MANAGER_INTERFACE, "ScanDone");
+				CONNMAN_MANAGER_INTERFACE, "ScanDone");
 		if (!signal)
 			return;
+
+		dbus_message_iter_init_append(signal, &iter);
+		connman_dbus_property_append_basic(&iter, "Scantype",
+				DBUS_TYPE_INT32, &g_scan_type);
 
 		dbus_connection_send(connection, signal, NULL);
 		dbus_message_unref(signal);
 		reply_scan_pending(technology, 0);
+
+		DBG("Successfuly sent ScanDone signal");
 	}
 #else
 	if (count == 0)
@@ -1169,6 +1186,12 @@ static DBusMessage *scan(DBusConnection *conn, DBusMessage *msg, void *data)
 	if (err < 0)
 		reply_scan_pending(technology, err);
 
+#if defined TIZEN_EXT
+	if (err == 0) {
+		g_scan_type = CONNMAN_SCAN_TYPE_FULL_CHANNEL;
+		DBG("g_scan_type %d", g_scan_type);
+	}
+#endif
 	return NULL;
 }
 
@@ -1239,6 +1262,15 @@ static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *
 	err = __connman_device_request_specific_scan(technology->type, scan_type, specific_scan_list);
 	if (err < 0)
 		reply_scan_pending(technology, err);
+
+	if (err == 0) {
+		guint list_size = g_slist_length(specific_scan_list);
+		if (list_size == 1)
+			g_scan_type = CONNMAN_SCAN_TYPE_SPECIFIC_AP;
+		else
+			g_scan_type = CONNMAN_SCAN_TYPE_MULTI_AP;
+		DBG("list_size %u g_scan_type %d", list_size, g_scan_type);
+	}
 
 	if (scan_type == 1) {
 		g_slist_free_full(specific_scan_list, g_free);
