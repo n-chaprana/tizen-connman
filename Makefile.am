@@ -131,7 +131,6 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ @LIBSYSTEMD_LIBS@ \
-			@TPKP_GNUTLS_LIBS@ \
 			-lresolv -ldl -lrt
 
 src_connmand_LDFLAGS = -Wl,--export-dynamic -pie \
@@ -178,7 +177,7 @@ vpn_connman_vpnd_SOURCES = $(gdhcp_sources) $(builtin_vpn_sources) \
 
 vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
 				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
-				@TPKP_GNUTLS_LIBS@ @LIBSYSTEMD_LIBS@ \
+				@LIBSYSTEMD_LIBS@ \
 				-lresolv -ldl
 
 vpn_connman_vpnd_LDFLAGS = -Wl,--export-dynamic \
@@ -224,7 +223,7 @@ endif
 endif
 
 AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ @LIBSYSTEMD_CFLAGS@\
-				@GNUTLS_CFLAGS@ @TPKP_GNUTLS_CFLAGS@ $(builtin_cflags) \
+				@GNUTLS_CFLAGS@ $(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DSTATEDIR=\""$(statedir)"\" \
 				-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
@@ -236,13 +235,13 @@ AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ @LIBSYSTEMD_CFLAGS@\
 				-fPIE
 
 if VPN
-AM_CPPFLAGS = @TPKP_GNUTLS_CFLAGS@ -I$(builddir)/include -I$(srcdir)/gdbus
+AM_CPPFLAGS = -I$(builddir)/include -I$(srcdir)/gdbus
 else
-AM_CPPFLAGS = @TPKP_GNUTLS_CFLAGS@ -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/gdbus
+AM_CPPFLAGS = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/gdbus
 endif
 
 src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
-				@GNUTLS_CFLAGS@ @TPKP_GNUTLS_CFLAGS@ $(builtin_cflags) \
+				@GNUTLS_CFLAGS@ $(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DSTATEDIR=\""$(statedir)"\" \
 				-DPLUGINDIR=\""$(build_plugindir)"\" \
@@ -309,7 +308,7 @@ if WISPR
 noinst_PROGRAMS += tools/wispr
 
 tools_wispr_SOURCES = $(gweb_sources) tools/wispr.c
-tools_wispr_LDADD = @GLIB_LIBS@ @GNUTLS_LIBS@ @TPKP_GNUTLS_LIBS@ -lresolv
+tools_wispr_LDADD = @GLIB_LIBS@ @GNUTLS_LIBS@ -lresolv
 endif
 
 if TOOLS
@@ -329,7 +328,7 @@ tools_supplicant_test_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@
 
 tools_web_test_SOURCES = $(gweb_sources) tools/web-test.c
-tools_web_test_LDADD = @GLIB_LIBS@ @GNUTLS_LIBS@ @TPKP_GNUTLS_LIBS@ -lresolv
+tools_web_test_LDADD = @GLIB_LIBS@ @GNUTLS_LIBS@ -lresolv
 
 tools_resolv_test_SOURCES = gweb/gresolv.h gweb/gresolv.c tools/resolv-test.c
 tools_resolv_test_LDADD = @GLIB_LIBS@ -lresolv
