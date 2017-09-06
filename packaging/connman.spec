@@ -18,7 +18,6 @@ BuildRequires:  pkgconfig(gio-2.0)
 BuildRequires:  pkgconfig(libiptc)
 BuildRequires:  pkgconfig(xtables)
 BuildRequires:  pkgconfig(libsmack)
-BuildRequires:  pkgconfig(tpkp-gnutls)
 BuildRequires:  pkgconfig(libsystemd-daemon)
 %if %{with connman_openconnect}
 BuildRequires:  openconnect
@@ -30,7 +29,6 @@ BuildRequires:  openvpn
 BuildRequires:  strongswan
 BuildRequires:  pkgconfig(openssl)
 %endif
-BuildRequires:  ca-certificates-devel
 BuildRequires:  readline-devel
 #%systemd_requires
 Requires:       iptables
@@ -131,7 +129,6 @@ This overwrites conf file of %{name}.
 
 %build
 #CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
-CFLAGS+=" -DTIZEN_SYS_CA_BUNDLE=\"%TZ_SYS_RO_CA_BUNDLE\""
 
 %if %{with connman_vpnd}
 VPN_CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"

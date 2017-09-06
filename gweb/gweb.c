@@ -39,8 +39,6 @@
 #include <netinet/tcp.h>
 #include <ifaddrs.h>
 
-#include <tpkp_gnutls.h>
-
 #include "giognutls.h"
 #include "gresolv.h"
 #include "gweb.h"
@@ -1056,7 +1054,6 @@ static int connect_session_transport(struct web_session *session)
 
 	if (session->flags & SESSION_FLAG_USE_TLS) {
 		debug(session->web, "using TLS encryption");
-		tpkp_gnutls_set_url_data(session->host);
 		session->transport_channel = g_io_channel_gnutls_new(sk);
 	} else {
 		debug(session->web, "no encryption");
