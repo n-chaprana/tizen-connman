@@ -267,7 +267,7 @@ static int read_der_file(const char *path, X509 **cert)
 	}
 
 	*cert = d2i_X509_fp(fp, NULL);
-	if (!fp) {
+	if (!(*cert)) {
 		connman_error("Failed to read der file");
 		err = -EINVAL;
 	}
@@ -295,7 +295,7 @@ static int read_pem_file(const char *path, X509 **cert)
 	}
 
 	*cert = PEM_read_X509(fp, cert, NULL, NULL);
-	if (!fp) {
+	if (!(*cert)) {
 		connman_error("Failed to read pem file");
 		err = -EINVAL;
 	}
