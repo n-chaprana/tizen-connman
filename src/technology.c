@@ -1179,18 +1179,27 @@ static DBusMessage *scan(DBusConnection *conn, DBusMessage *msg, void *data)
 			dbus_message_get_sender(msg));
 
 	dbus_message_ref(msg);
+#if !defined TIZEN_EXT
 	technology->scan_pending =
 		g_slist_prepend(technology->scan_pending, msg);
+#endif
 
 	err = __connman_device_request_scan(technology->type);
+#if defined TIZEN_EXT
+	if (err < 0)
+		return __connman_error_failed(msg, -err);
+#else
 	if (err < 0)
 		reply_scan_pending(technology, err);
+#endif
 
 #if defined TIZEN_EXT
 	if (err == 0) {
 		g_scan_type = CONNMAN_SCAN_TYPE_FULL_CHANNEL;
 		DBG("g_scan_type %d", g_scan_type);
 	}
+	technology->scan_pending =
+		g_slist_prepend(technology->scan_pending, msg);
 #endif
 	return NULL;
 }
@@ -1256,12 +1265,10 @@ static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *
 	}
 
 	dbus_message_ref(msg);
-	technology->scan_pending =
-		g_slist_prepend(technology->scan_pending, msg);
 
 	err = __connman_device_request_specific_scan(technology->type, scan_type, specific_scan_list);
 	if (err < 0)
-		reply_scan_pending(technology, err);
+		return __connman_error_failed(msg, -err);
 
 	if (err == 0) {
 		guint list_size = g_slist_length(specific_scan_list);
@@ -1271,6 +1278,8 @@ static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *
 			g_scan_type = CONNMAN_SCAN_TYPE_MULTI_AP;
 		DBG("list_size %u g_scan_type %d", list_size, g_scan_type);
 	}
+	technology->scan_pending =
+		g_slist_prepend(technology->scan_pending, msg);
 
 	if (scan_type == 1) {
 		g_slist_free_full(specific_scan_list, g_free);
