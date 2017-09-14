@@ -58,6 +58,10 @@ static unsigned int vpn_autoconnect_timeout = 0;
 static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
 
+#if defined TIZEN_EXT
+static bool auto_connect_mode = TRUE;
+#endif
+
 struct connman_stats {
 	bool valid;
 	bool enabled;
@@ -4962,12 +4966,34 @@ static gboolean run_auto_connect(gpointer data)
 	return FALSE;
 }
 
+#if defined TIZEN_EXT
+bool __connman_service_get_auto_connect_mode(void)
+{
+	return auto_connect_mode;
+}
+
+void __connman_service_set_auto_connect_mode(bool enable)
+{
+	DBG("set auto_connect_mode = %d", enable);
+
+	if (auto_connect_mode != enable)
+		auto_connect_mode = enable;
+}
+#endif
+
 void __connman_service_auto_connect(enum connman_service_connect_reason reason)
 {
 	DBG("");
 
 	if (autoconnect_timeout != 0)
 		return;
+
+#if defined TIZEN_EXT
+	if (auto_connect_mode == FALSE) {
+		DBG("Currently, not auto connection mode");
+		return;
+	}
+#endif
 
 	if (!__connman_session_policy_autoconnect(reason))
 		return;

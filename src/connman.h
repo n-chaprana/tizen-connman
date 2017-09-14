@@ -764,6 +764,12 @@ int __connman_service_disconnect(struct connman_service *service);
 int __connman_service_disconnect_all(void);
 void __connman_service_set_active_session(bool enable, GSList *list);
 void __connman_service_auto_connect(enum connman_service_connect_reason reason);
+
+#if defined TIZEN_EXT
+bool __connman_service_get_auto_connect_mode(void);
+void __connman_service_set_auto_connect_mode(bool enable);
+#endif
+
 bool __connman_service_remove(struct connman_service *service);
 bool __connman_service_is_provider_pending(struct connman_service *service);
 void __connman_service_set_provider_pending(struct connman_service *service,

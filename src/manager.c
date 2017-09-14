@@ -65,6 +65,9 @@ static DBusMessage *get_properties(DBusConnection *conn,
 	DBusMessageIter array, dict;
 	dbus_bool_t offlinemode;
 	const char *str;
+#if defined TIZEN_EXT
+	dbus_bool_t autoconnectmode;
+#endif
 
 	DBG("conn %p", conn);
 
@@ -87,6 +90,12 @@ static DBusMessage *get_properties(DBusConnection *conn,
 	connman_dbus_dict_append_basic(&dict, "SessionMode",
 					DBUS_TYPE_BOOLEAN,
 					&sessionmode);
+#if defined TIZEN_EXT
+	autoconnectmode = __connman_service_get_auto_connect_mode();
+	connman_dbus_dict_append_basic(&dict, "AutoConnectMode",
+					DBUS_TYPE_BOOLEAN,
+					&autoconnectmode);
+#endif
 
 	connman_dbus_dict_close(&array, &dict);
 
@@ -147,8 +156,20 @@ static DBusMessage *set_property(DBusConnection *conn,
 			return __connman_error_invalid_arguments(msg);
 
 		dbus_message_iter_get_basic(&value, &sessionmode);
+	}
+#if defined TIZEN_EXT
+	else if (g_str_equal(name, "AutoConnectMode") == TRUE) {
+		bool automode;
 
-	} else
+		if (type != DBUS_TYPE_BOOLEAN)
+			return __connman_error_invalid_arguments(msg);
+
+		dbus_message_iter_get_basic(&value, &automode);
+
+		__connman_service_set_auto_connect_mode(automode);
+	}
+#endif
+	else
 		return __connman_error_invalid_property(msg);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
