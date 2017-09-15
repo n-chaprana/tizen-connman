@@ -3166,6 +3166,7 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 	unsigned int keymgmt;
 	uint16_t frequency;
 	const char *enc_mode;
+	const char *str;
 	gboolean passpoint;
 
 	ssid = connman_network_get_blob(network, "WiFi.SSID", &ssid_len);
@@ -3194,6 +3195,41 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 					DBUS_TYPE_BOOLEAN, &passpoint);
 	connman_dbus_dict_append_basic(dict, "Keymgmt",
 					DBUS_TYPE_UINT32, &keymgmt);
+
+	str = connman_network_get_string(network, "WiFi.Security");
+	if (str != NULL && g_str_equal(str, "ieee8021x") == TRUE) {
+		str = connman_network_get_string(network, "WiFi.EAP");
+		if (str != NULL)
+			connman_dbus_dict_append_basic(dict, "EAP",
+					DBUS_TYPE_STRING, &str);
+
+		str = connman_network_get_string(network, "WiFi.Phase2");
+		if (str != NULL)
+			connman_dbus_dict_append_basic(dict, "Phase2",
+					DBUS_TYPE_STRING, &str);
+
+		str = connman_network_get_string(network, "WiFi.Identity");
+		if (str != NULL)
+			connman_dbus_dict_append_basic(dict, "Identity",
+					DBUS_TYPE_STRING, &str);
+
+		str = connman_network_get_string(network, "WiFi.CACertFile");
+		if (str != NULL)
+			connman_dbus_dict_append_basic(dict, "CACertFile",
+					DBUS_TYPE_STRING, &str);
+
+		str = connman_network_get_string(network,
+				"WiFi.ClientCertFile");
+		if (str != NULL)
+			connman_dbus_dict_append_basic(dict, "ClientCertFile",
+					DBUS_TYPE_STRING, &str);
+
+		str = connman_network_get_string(network,
+				"WiFi.PrivateKeyFile");
+		if (str != NULL)
+			connman_dbus_dict_append_basic(dict, "PrivateKeyFile",
+					DBUS_TYPE_STRING, &str);
+	}
 }
 #endif
 
