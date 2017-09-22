@@ -1323,7 +1323,11 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 	 * unreferenced the device, obviating the need to do it here.
 	 */
 
+#if defined TIZEN_EXT
+	if (scanning && wifi && !wifi->allow_full_scan)
+#else
 	if (scanning)
+#endif
 		connman_device_unref(device);
 
 #if defined TIZEN_EXT
