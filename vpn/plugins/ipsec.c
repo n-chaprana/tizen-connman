@@ -714,7 +714,7 @@ static int ipsec_load_shared_psk(struct vpn_provider *provider)
 
 	if (!provider) {
 		connman_error("invalid provider");
-		ret = -EINVAL;
+		return -EINVAL;
 	}
 
 	data = vpn_provider_get_string(provider, "IPsec.IKEData");
@@ -840,8 +840,10 @@ static int ipsec_load_key(struct vpn_provider *provider)
 		return 0;
 
 	sect = vici_create_section(NULL);
-	if (!sect)
+	if (!sect) {
+		g_free(data);
 		return -ENOMEM;
+	}
 
 	vici_add_kv(sect, "type", type, NULL);
 	vici_add_kv(sect, "data", data, NULL);
