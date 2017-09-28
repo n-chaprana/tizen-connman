@@ -1231,14 +1231,18 @@ static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *
 		int type;
 
 		dbus_message_iter_recurse(&dict, &entry);
-		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING) {
+			g_slist_free_full(specific_scan_list, g_free);
 			return __connman_error_invalid_arguments(msg);
+		}
 
 		dbus_message_iter_get_basic(&entry, &key);
 		dbus_message_iter_next(&entry);
 
-		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT)
+		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT) {
+			g_slist_free_full(specific_scan_list, g_free);
 			return __connman_error_invalid_arguments(msg);
+		}
 
 		dbus_message_iter_recurse(&entry, &value2);
 		type = dbus_message_iter_get_arg_type(&value2);
