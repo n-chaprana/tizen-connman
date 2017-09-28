@@ -1301,12 +1301,24 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 		return scan_callback(ret, interface, user_data);
 	}
 
-	scanning = connman_device_get_scanning(device);
 #if defined TIZEN_EXT
-	if (scanning && wifi && !wifi->allow_full_scan)
-#else
-	if (scanning)
+	if (wifi && wifi->allow_full_scan) {
+		int ret;
+		DBG("Trigger Full Channel Scan");
+		wifi->allow_full_scan = FALSE;
+
+		ret = g_supplicant_interface_scan(wifi->interface, NULL,
+							scan_callback, device);
+		if (ret == 0)
+			return;
+
+		/* On error, let's recall scan_callback, which will cleanup */
+		return scan_callback(ret, interface, user_data);
+	}
 #endif
+
+	scanning = connman_device_get_scanning(device);
+	if (scanning)
 		connman_device_set_scanning(device,
 				CONNMAN_SERVICE_TYPE_WIFI, false);
 
@@ -1327,11 +1339,6 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 		connman_device_unref(device);
 
 #if defined TIZEN_EXT
-	if (wifi && wifi->allow_full_scan) {
-		DBG("Trigger Full Channel Scan");
-		throw_wifi_scan(device, scan_callback);
-		wifi->allow_full_scan = FALSE;
-	}
 	if (wifi && wifi->scan_pending_network && result != -EIO) {
 		network_connect(wifi->scan_pending_network);
 		wifi->scan_pending_network = NULL;
@@ -2072,13 +2079,6 @@ static int wifi_scan(enum connman_service_type type,
 
 	connman_device_ref(device);
 
-#if defined TIZEN_EXT
-	/*To allow the Full Scan after ssid based scan, set the flag here
-     It is required because Tizen does not use the ConnMan specific
-     backgroung Scan feature.Tizen has added the BG Scan feature in net-config
-     To sync with up ConnMan, we need to issue the Full Scan after SSID specific scan.*/
-	 wifi->allow_full_scan = TRUE;
-#endif
 	reset_autoscan(device);
 
 	ret = g_supplicant_interface_scan(wifi->interface, scan_params,
@@ -2087,6 +2087,14 @@ static int wifi_scan(enum connman_service_type type,
 	if (ret == 0) {
 		connman_device_set_scanning(device,
 				CONNMAN_SERVICE_TYPE_WIFI, true);
+#if defined TIZEN_EXT
+		/*To allow the Full Scan after ssid based scan, set the flag here
+		  It is required because Tizen does not use the ConnMan specific
+		  backgroung Scan feature.Tizen has added the BG Scan feature in
+		  net-config. To sync with up ConnMan, we need to issue the Full Scan
+		  after SSID specific scan.*/
+		wifi->allow_full_scan = TRUE;
+#endif
 	} else {
 		g_supplicant_free_scan_params(scan_params);
 		connman_device_unref(device);
