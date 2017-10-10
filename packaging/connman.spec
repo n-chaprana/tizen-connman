@@ -41,6 +41,9 @@ Provides:       %{name}-profile_common = %{version}-%{release}
 Provides:       %{name}-profile_mobile = %{version}-%{release}
 Provides:       %{name}-profile_wearable = %{version}-%{release}
 
+%define upgrade_script_filename 500.connman_upgrade.sh
+%define upgrade_script_path /usr/share/upgrade/scripts
+
 %description
 Connection Manager provides a daemon for managing Internet connections
 within embedded devices running the Linux operating system.
@@ -218,6 +221,10 @@ cp src/connman.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/
 cp vpn/vpn-dbus.conf %{buildroot}%{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
 %endif
 
+#OS Upgrade
+mkdir -p %{buildroot}%{upgrade_script_path}
+cp -f scripts/%{upgrade_script_filename} %{buildroot}%{upgrade_script_path}
+
 %post
 #chsmack -a 'System' /%{_localstatedir}/lib/connman
 #chsmack -a 'System' /%{_localstatedir}/lib/connman/settings
@@ -251,6 +258,7 @@ systemctl daemon-reload
 %attr(644,root,root) %{_libdir}/systemd/system/sockets.target.wants/connman.socket
 %endif
 %license COPYING
+%{upgrade_script_path}/%{upgrade_script_filename}
 
 %files test
 %manifest connman.manifest
