@@ -749,7 +749,6 @@ static void debug_vici_message(char *buf, unsigned int size)
 			pos++;
 			g_strlcpy(temp + key_len + 1, (const gchar *)&buf[pos], value_len + 1);
 			pos += value_len;
-			len = key_len + 1 + value_len;
 		}
 			break;
 		case VICI_LIST_START:
