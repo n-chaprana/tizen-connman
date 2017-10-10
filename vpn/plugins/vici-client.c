@@ -280,6 +280,12 @@ static char *load_cert_from_path(const char *path)
 	}
 
 	fd = fileno(fp);
+	if (fd == -1) {
+		connman_error("fp is not a valid stream");
+		fclose(fp);
+		return NULL;
+	}
+
 	fstat(fd, &st);
 	file_size = st.st_size;
 	file_buff = g_try_malloc0(sizeof(char)*st.st_size);
