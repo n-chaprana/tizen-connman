@@ -5255,6 +5255,9 @@ static DBusMessage *connect_service(DBusConnection *conn,
 	 */
 	if (service->type == CONNMAN_SERVICE_TYPE_CELLULAR)
 		connman_service_user_pdn_connection_ref(service);
+
+	/*Reset the Disconnect Reason while issue connect request*/
+	service->disconnect_reason = 0;
 #endif
 
 	if (service->pending)
