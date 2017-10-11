@@ -356,7 +356,6 @@ void connman_inet_update_device_ident(struct connman_device *device)
 	}
 
 	switch (type) {
-	case CONNMAN_DEVICE_TYPE_UNKNOWN:
 	case CONNMAN_DEVICE_TYPE_VENDOR:
 	case CONNMAN_DEVICE_TYPE_GPS:
 		break;
