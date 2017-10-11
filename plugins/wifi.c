@@ -2630,7 +2630,7 @@ static bool handle_4way_handshake_failure(GSupplicantInterface *interface,
 
 	security = connman_network_get_string(network, "WiFi.Security");
 
-	if (g_str_equal(security, "ieee8021x") == true &&
+	if (security && g_str_equal(security, "ieee8021x") == true &&
 			wifi->state == G_SUPPLICANT_STATE_ASSOCIATED) {
 		wifi->retries = 0;
 		connman_network_set_error(network, CONNMAN_NETWORK_ERROR_INVALID_KEY);
@@ -2686,7 +2686,7 @@ static bool handle_wifi_assoc_retry(struct connman_network *network,
 	}
 
 	security = connman_network_get_string(network, "WiFi.Security");
-	if (g_str_equal(security, "ieee8021x") == true &&
+	if (security && g_str_equal(security, "ieee8021x") == true &&
 			wifi->state == G_SUPPLICANT_STATE_ASSOCIATED) {
 		wifi->assoc_retry_count = 0;
 		return false;
