@@ -1247,8 +1247,10 @@ static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *
 		dbus_message_iter_recurse(&entry, &value2);
 		type = dbus_message_iter_get_arg_type(&value2);
 		if (g_str_equal(key, "SSID")) {
-			if (type != DBUS_TYPE_STRING)
+			if (type != DBUS_TYPE_STRING) {
+				g_slist_free_full(specific_scan_list, g_free);
 				return __connman_error_invalid_arguments(msg);
+			}
 
 			scan_type = 1; /* SSID based scan */
 			dbus_message_iter_get_basic(&value2, &name);
