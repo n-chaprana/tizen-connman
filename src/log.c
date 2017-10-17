@@ -77,15 +77,13 @@ static void __connman_log_update_file_revision(int rev)
 	next_log_file = g_strdup_printf("%s.%d", LOG_FILE_PATH, next_log_rev);
 
 	if (next_log_rev >= MAX_LOG_COUNT)
-		if (remove(next_log_file) != 0)
-			__connman_log_s(LOG_INFO, "error: remove failed for %s", next_log_file);
+		remove(next_log_file);
 
 	if (access(next_log_file, F_OK) == 0)
 		__connman_log_update_file_revision(next_log_rev);
 
 	if (rename(log_file, next_log_file) != 0)
-		if (remove(log_file) != 0)
-			__connman_log_s(LOG_INFO, "error: remove failed for %s", log_file);
+		remove(log_file);
 
 	g_free(log_file);
 	g_free(next_log_file);
@@ -102,8 +100,7 @@ static void __connman_log_make_backup(void)
 		__connman_log_update_file_revision(rev);
 
 	if (rename(LOG_FILE_PATH, backup) != 0)
-		if (remove(LOG_FILE_PATH) != 0)
-			__connman_log_s(LOG_INFO, "error: remove failed for %s", LOG_FILE_PATH);
+		remove(LOG_FILE_PATH);
 
 	g_free(backup);
 }
