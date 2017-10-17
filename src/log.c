@@ -52,7 +52,6 @@ static const char *program_path;
 #define syslog __connman_log_s
 
 static FILE *log_file = NULL;
-void __connman_log_s(int log_priority, const char *format, ...);
 
 void __connman_log_open(const char *ident, int option, int facility)
 {
