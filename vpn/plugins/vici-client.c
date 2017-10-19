@@ -286,7 +286,12 @@ static char *load_cert_from_path(const char *path)
 		return NULL;
 	}
 
-	fstat(fd, &st);
+	if (fstat(fd, &st) != 0) {
+		connman_error("fstat failed");
+		fclose(fp);
+		return NULL;
+	}
+
 	file_size = st.st_size;
 	file_buff = g_try_malloc0(sizeof(char)*st.st_size);
 	if (file_buff == NULL) {
