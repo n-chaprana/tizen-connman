@@ -596,6 +596,9 @@ static void ipsec_add_default_child_sa_data(struct vpn_provider *provider, VICIS
 static void ipsec_add_default_conn_data(struct vpn_provider *provider, VICISection *conn)
 {
 	const char *version = vpn_provider_get_string(provider, "IPsec.Version");
+	const char *remote_addr = vpn_provider_get_string(provider, "Host");
+
+	vici_add_kvl(conn, "remote_addrs", remote_addr, NULL);
 	if (g_strcmp0(version, "1") == 0) {
 		int i = 0;
 		GSList *list;
