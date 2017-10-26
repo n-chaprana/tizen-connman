@@ -71,6 +71,7 @@
 #define P2P_LISTEN_PERIOD 500
 #define P2P_LISTEN_INTERVAL 2000
 
+
 static struct connman_technology *wifi_technology = NULL;
 static struct connman_technology *p2p_technology = NULL;
 
@@ -134,6 +135,7 @@ struct wifi_data {
 	bool allow_full_scan;
 #endif
 	int disconnect_code;
+	int assoc_code;
 };
 
 #if defined TIZEN_EXT
@@ -2785,6 +2787,7 @@ static void interface_state(GSupplicantInterface *interface)
 
 		connman_network_set_connected(network, true);
 		wifi->disconnect_code = 0;
+		wifi->assoc_code = 0;
 		break;
 
 	case G_SUPPLICANT_STATE_DISCONNECTED:
@@ -3577,12 +3580,29 @@ static void disconnect_reasoncode(GSupplicantInterface *interface,
 				int reasoncode)
 {
 	struct wifi_data *wifi = g_supplicant_interface_get_data(interface);
-
 	if (wifi != NULL) {
 		wifi->disconnect_code = reasoncode;
 	}
 }
 
+static void assoc_status_code(GSupplicantInterface *interface, int status_code)
+{
+	struct wifi_data *wifi = g_supplicant_interface_get_data(interface);
+
+#if defined TIZEN_EXT
+	struct connman_network *network;
+#endif
+
+	if (wifi != NULL) {
+		wifi->assoc_code = status_code;
+
+#if defined TIZEN_EXT
+		network = wifi->network;
+		connman_network_set_assoc_status_code(network,status_code);
+#endif
+
+	}
+}
 
 static const GSupplicantCallbacks callbacks = {
 	.system_ready		= system_ready,
@@ -3607,6 +3627,7 @@ static const GSupplicantCallbacks callbacks = {
 	.network_merged	= network_merged,
 #endif
 	.disconnect_reasoncode  = disconnect_reasoncode,
+	.assoc_status_code      = assoc_status_code,
 	.debug			= debug,
 };
 

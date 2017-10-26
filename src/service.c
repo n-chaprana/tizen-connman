@@ -160,6 +160,7 @@ struct connman_service {
 	 */
 	char *keymgmt_type;
 	int disconnect_reason;
+	int assoc_status_code;
 #endif
 #ifdef TIZEN_EXT
 	enum connman_dnsconfig_method dns_config_method_ipv4;
@@ -7172,6 +7173,9 @@ static int service_indicate_state(struct connman_service *service)
 
 	case CONNMAN_SERVICE_STATE_FAILURE:
 #if defined TIZEN_EXT
+
+		service->assoc_status_code = connman_network_get_assoc_status_code(service->network);
+
 		if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
 			service->order = 5;
 		__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);

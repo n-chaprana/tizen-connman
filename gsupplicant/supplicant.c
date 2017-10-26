@@ -577,6 +577,19 @@ static void callback_disconnect_reason_code(GSupplicantInterface *interface,
 							reason_code);
 }
 
+static void callback_assoc_status_code(GSupplicantInterface *interface,
+				int status_code)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->assoc_status_code)
+		return;
+
+	callbacks_pointer->assoc_status_code(interface, status_code);
+
+}
+
 static void remove_group(gpointer data)
 {
 	GSupplicantGroup *group = data;
@@ -2358,6 +2371,12 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 		if (dbus_message_iter_get_arg_type(iter) != DBUS_TYPE_INVALID) {
 			dbus_message_iter_get_basic(iter, &reason_code);
 			callback_disconnect_reason_code(interface, reason_code);
+		}
+	} else if (g_strcmp0(key, "AssocStatusCode") == 0) {
+		int status_code;
+		if (dbus_message_iter_get_arg_type(iter) != DBUS_TYPE_INVALID) {
+			dbus_message_iter_get_basic(iter, &status_code);
+			callback_assoc_status_code(interface, status_code);
 		}
 	} else
 		SUPPLICANT_DBG("key %s type %c",

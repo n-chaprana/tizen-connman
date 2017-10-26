@@ -101,6 +101,7 @@ struct connman_network {
 		char *keymgmt_type;
 		bool rsn_mode;
 		int disconnect_reason;
+		int assoc_status_code;
 		void *wifi_vsie;
 		unsigned int wifi_vsie_len;
 #endif
@@ -2092,6 +2093,26 @@ int connman_network_get_disconnect_reason(struct connman_network *network)
 
 	return network->wifi.disconnect_reason;
 }
+
+int connman_network_set_assoc_status_code(struct connman_network *network,
+				int assoc_status_code)
+{
+
+	if (network == NULL)
+		return 0;
+
+	network->wifi.assoc_status_code = assoc_status_code;
+	return 0;
+}
+
+int connman_network_get_assoc_status_code(struct connman_network *network)
+{
+	if (network == NULL)
+		return 0;
+
+	return network->wifi.assoc_status_code;
+}
+
 #endif
 
 int connman_network_set_nameservers(struct connman_network *network,
