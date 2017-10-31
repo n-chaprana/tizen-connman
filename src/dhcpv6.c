@@ -685,6 +685,9 @@ static void set_address(int ifindex, struct connman_ipconfig *ipconfig,
 		/* Is this prefix part of the subnet we are suppose to use? */
 		prefix_len = check_ipv6_addr_prefix(prefixes, address);
 
+#if defined TIZEN_EXT
+		char *gateway = g_strdup(__connman_ipconfig_get_gateway(ipconfig));
+#endif
 		__connman_ipconfig_address_remove(ipconfig);
 		__connman_ipconfig_set_local(ipconfig, address);
 		__connman_ipconfig_set_prefixlen(ipconfig, prefix_len);
@@ -692,6 +695,11 @@ static void set_address(int ifindex, struct connman_ipconfig *ipconfig,
 		DBG("new address %s/%d", address, prefix_len);
 
 		__connman_ipconfig_set_dhcp_address(ipconfig, address);
+#if defined TIZEN_EXT
+		DBG("Set gateway %s", gateway);
+		__connman_ipconfig_set_gateway(ipconfig, gateway);
+		g_free(gateway);
+#endif
 		__connman_service_save(
 			__connman_service_lookup_from_index(ifindex));
 	}
