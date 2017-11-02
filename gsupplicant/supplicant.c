@@ -5036,6 +5036,7 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 		bssid = g_try_malloc0(18);
 		if (bssid == NULL) {
 			SUPPLICANT_DBG("memory allocation error");
+			supplicant_dbus_dict_close(iter, &dict);
 			return;
 		}
 		snprintf(bssid, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
