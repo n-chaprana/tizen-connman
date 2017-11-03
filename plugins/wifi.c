@@ -530,6 +530,11 @@ static void register_peer_service_cb(int result,
 	struct wifi_data *wifi = g_supplicant_interface_get_data(iface);
 	struct peer_service_registration *reg_data = user_data;
 
+#if defined TIZEN_EXT
+	if (!wifi)
+		return;
+#endif
+
 	DBG("");
 
 	if (result == 0)
@@ -3318,7 +3323,10 @@ static void peer_found(GSupplicantPeer *peer)
 	struct connman_peer *connman_peer;
 	const char *identifier, *name;
 	int ret;
-
+#if defined TIZEN_EXT
+	if (!wifi)
+		return;
+#endif
 	identifier = g_supplicant_peer_get_identifier(peer);
 	name = g_supplicant_peer_get_name(peer);
 
@@ -3370,6 +3378,11 @@ static void peer_changed(GSupplicantPeer *peer, GSupplicantPeerState state)
 	enum connman_peer_state p_state = CONNMAN_PEER_STATE_UNKNOWN;
 	struct connman_peer *connman_peer;
 	const char *identifier;
+
+#if defined TIZEN_EXT
+	if (!wifi)
+		return;
+#endif
 
 	identifier = g_supplicant_peer_get_identifier(peer);
 
@@ -3448,6 +3461,11 @@ static void peer_request(GSupplicantPeer *peer)
 	struct wifi_data *wifi = g_supplicant_interface_get_data(iface);
 	struct connman_peer *connman_peer;
 	const char *identifier;
+
+#if defined TIZEN_EXT
+	if (!wifi)
+		return;
+#endif
 
 	identifier = g_supplicant_peer_get_identifier(peer);
 
