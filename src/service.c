@@ -3429,53 +3429,6 @@ void __connman_service_list_struct(DBusMessageIter *iter)
 	g_list_foreach(service_list, append_struct, iter);
 }
 
-#if defined TIZEN_EXT
-static void append_wifi_vsie_properties(DBusMessageIter *iter,
-					struct connman_service *service)
-{
-	DBusMessageIter dict;
-	const void *wifi_vsie;
-	unsigned int wifi_vsie_len;
-
-	connman_dbus_dict_open(iter, &dict);
-
-	wifi_vsie = connman_network_get_blob(service->network, "WiFi.Vsie", &wifi_vsie_len);
-
-	if(wifi_vsie_len > 0) {
-		DBG("ConnMan, service->path=%s vsie length=%d", service->path, wifi_vsie_len);
-	}
-
-	connman_dbus_dict_append_fixed_array(&dict, "Vsie", DBUS_TYPE_BYTE,
-			&wifi_vsie, wifi_vsie_len);
-
-	connman_dbus_dict_close(iter, &dict);
-}
-
-void __connman_wifi_vsie_list_struct(DBusMessageIter *iter)
-{
-	GList *list;
-	DBusMessageIter entry;
-
-	DBG("ConnMan, __connman_wifi_vsie_list_struct API called");
-
-	for (list = service_list; list; list = list->next) {
-		struct connman_service *service = list->data;
-
-		if (!service->path ||
-				service->type !=  CONNMAN_SERVICE_TYPE_WIFI ||
-				service->network == NULL)
-			continue;
-
-		dbus_message_iter_open_container(iter, DBUS_TYPE_STRUCT,
-				NULL, &entry);
-		dbus_message_iter_append_basic(&entry, DBUS_TYPE_OBJECT_PATH,
-				&service->path);
-		append_wifi_vsie_properties(&entry, service);
-		dbus_message_iter_close_container(iter, &entry);
-	}
-}
-#endif
-
 bool __connman_service_is_hidden(struct connman_service *service)
 {
 	return service->hidden;
