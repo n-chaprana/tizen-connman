@@ -3333,6 +3333,9 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		connman_dbus_dict_append_basic(dict, "DisconnectReason",
 				DBUS_TYPE_INT32, &service->disconnect_reason);
 
+		connman_dbus_dict_append_basic(dict, "AssocStatusCode",
+				DBUS_TYPE_INT32, &service->assoc_status_code);
+
 		break;
 #endif
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
@@ -5220,6 +5223,9 @@ static DBusMessage *connect_service(DBusConnection *conn,
 
 	/*Reset the Disconnect Reason while issue connect request*/
 	service->disconnect_reason = 0;
+
+	/*Reset the association status code while issue connect request*/
+	service->assoc_status_code = 0;
 #endif
 
 	if (service->pending)
@@ -7094,6 +7100,7 @@ static int service_indicate_state(struct connman_service *service)
 
 		def_service = __connman_service_get_default();
 		service->disconnect_reason = connman_network_get_disconnect_reason(service->network);
+		service->assoc_status_code = connman_network_get_assoc_status_code(service->network);
 
 		if (!__connman_notifier_is_connected() &&
 			def_service &&
