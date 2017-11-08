@@ -1197,8 +1197,11 @@ static struct connman_ipconfig *create_ipv6config(int index)
 
 	ipdevice = g_hash_table_lookup(ipdevice_hash, GINT_TO_POINTER(index));
 	if (ipdevice)
+#if !defined TIZEN_EXT
 		ipv6config->ipv6_privacy_config = ipdevice->ipv6_privacy;
-
+#else
+		ipv6config->ipv6_privacy_config = ipdevice->ipv6_privacy = 2;
+#endif
 	ipv6config->address = connman_ipaddress_alloc(AF_INET6);
 	if (!ipv6config->address) {
 		g_free(ipv6config);
