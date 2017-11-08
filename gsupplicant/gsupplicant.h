@@ -410,6 +410,8 @@ struct _GSupplicantCallbacks {
 	void (*debug) (const char *str);
 	void (*disconnect_reasoncode)(GSupplicantInterface *interface,
 								int reasoncode);
+	void (*assoc_status_code)(GSupplicantInterface *interface,
+				int reasoncode);
 };
 
 typedef struct _GSupplicantCallbacks GSupplicantCallbacks;
