@@ -37,6 +37,7 @@ Requires(post):   systemd
 Requires(preun):  systemd
 Requires(postun): systemd
 Requires:         net-config
+Requires:         security-config
 Provides:       %{name}-profile_common = %{version}-%{release}
 Provides:       %{name}-profile_mobile = %{version}-%{release}
 Provides:       %{name}-profile_wearable = %{version}-%{release}
