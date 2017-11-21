@@ -126,10 +126,6 @@ if (test "${enable_ipsec}" != "no"); then
 					AC_MSG_ERROR(GIO >= 2.28 is required))
 	AC_SUBST(GIO_CFLAGS)
 	AC_SUBST(GIO_LIBS)
-	PKG_CHECK_MODULES(OPENSSL, openssl, dummy=yes,
-					AC_MSG_ERROR(openssl library is required))
-	AC_SUBST(OPENSSL_CFLAGS)
-	AC_SUBST(OPENSSL_LIBS)
 	if (test -z "${path_ipsec}"); then
 		AC_PATH_PROG(IPSEC, [charon], [/usr/bin/charon], $PATH:/usr/bin)
 		if (test -z "${IPSEC}"); then

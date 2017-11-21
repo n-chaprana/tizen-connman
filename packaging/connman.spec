@@ -5,7 +5,7 @@
 
 Name:           connman
 Version:        1.29
-Release:        24
+Release:        25
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -27,7 +27,6 @@ BuildRequires:  openvpn
 %endif
 %if %{with connman_ipsec}
 BuildRequires:  strongswan
-BuildRequires:  pkgconfig(openssl)
 %endif
 BuildRequires:  readline-devel
 #%systemd_requires
@@ -74,7 +73,6 @@ OpenVPN support for Connman.
 Summary:        IPsec Support for Connman
 Requires:       %{name} = %{version}
 Requires:       strongswan
-BuildRequires:  pkgconfig(openssl)
 
 %description plugin-ipsec
 OpenVPN support for Connman.

@@ -32,14 +32,6 @@
 #include <glib.h>
 #include <gio/gio.h>
 
-#include <openssl/bio.h>
-#include <openssl/pem.h>
-#include <openssl/err.h>
-#include <openssl/safestack.h>
-#include <openssl/pkcs12.h>
-#include <openssl/x509.h>
-#include <openssl/conf.h>
-
 #define CONNMAN_API_SUBJECT_TO_CHANGE
 #include <connman/plugin.h>
 #include <connman/log.h>
@@ -67,15 +59,8 @@ static DBusConnection *connection;
 static VICIClient *vici_client;
 static GFileMonitor* monitor;
 
-struct openssl_private_data {
-	EVP_PKEY *private_key;
-	X509 *local_cert;
-	STACK_OF(X509) *ca_certs;
-};
-
 struct ipsec_private_data {
 	struct vpn_provider *provider;
-	struct openssl_private_data openssl_data;
 	vpn_provider_connect_cb_t connect_cb;
 	void *connect_user_data;
 };
@@ -168,351 +153,8 @@ static const char *ikev2_proposals = "aes256-aes128-sha512-sha384-sha256-sha1-mo
 
 static struct ipsec_event_data event_data;
 
-static void init_openssl(void)
-{
-	/* Load the human readable error strings for libcrypto */
-#if OPENSSL_API_COMPAT < 0x10100000L
-	/* TODO :remove this after debug */
-	DBG("openssl version is under 1.01");
-	ERR_load_crypto_strings();
-#else
-	/* As of version 1.1.0 OpenSSL will automatically allocate
-	 * all resources that it needs so no explicit initialisation
-	 * is required. Similarly it will also automatically
-	 * deinitialise as required. */
-	/* OPENSSL_init_crypto(); */
-#endif
-	/* Load all digest and cipher algorithms */
-#if OPENSSL_API_COMPAT < 0x10100000L
-	OpenSSL_add_all_algorithms();
-#else
-        /* As of version 1.1.0 OpenSSL will automatically allocate
-         * all resources that it needs so no explicit initialisation
-         * is required. Similarly it will also automatically
-         * deinitialise as required. */
-        /* OPENSSL_init_crypto(); */
-#endif
-#if OPENSSL_API_COMPAT < 0x10100000L
-	OPENSSL_config(NULL);
-#else
-#endif
-	/* TODO :remove this after debug */
-	DBG("init openssl");
-	return;
-}
-
-static void deinit_openssl(void)
-{
-#if OPENSSL_API_COMPAT < 0x10100000L
-	EVP_cleanup();
-#else
-#endif
-#if OPENSSL_API_COMPAT < 0x10100000L
-	ERR_free_strings();
-#else
-#endif
-	return;
-}
-
-static int print_openssl_error_cb(const char *str, size_t len, void *u)
-{
-	connman_error("%s", str);
-	return 0;
-}
-
-static void print_openssl_error()
-{
-	ERR_print_errors_cb(print_openssl_error_cb, NULL);
-	return;
-}
-
-static int get_cert_type(const char *path)
-{
-	char *down_str = NULL;
-	int cert_type;
-
-	down_str = g_ascii_strdown(path, strlen(path));
-	if (!down_str)
-		return CERT_TYPE_NONE;
-
-	if(g_str_has_suffix(down_str, ".pem"))
-		cert_type = CERT_TYPE_PEM;
-	else if (g_str_has_suffix(down_str, ".der") || g_str_has_suffix(down_str, ".crt"))
-		cert_type = CERT_TYPE_DER;
-	else if (g_str_has_suffix(down_str, ".p12") || g_str_has_suffix(down_str, ".pfx"))
-		cert_type = CERT_TYPE_PKCS12;
-	else
-		cert_type = CERT_TYPE_NONE;
-	g_free(down_str);
-
-	return cert_type;
-}
-
-static int read_der_file(const char *path, X509 **cert)
-{
-	FILE *fp = NULL;
-	int err = 0;
-
-	if(!path || !cert) {
-		/* TODO :remove this after debug */
-		DBG("there's no cert data");
-		return 0;
-	}
-
-	DBG("der path %s\n", path);
-	fp = fopen(path, "r");
-	if (!fp) {
-		connman_error("Failed to open file");
-		return -EINVAL;
-	}
-
-	*cert = d2i_X509_fp(fp, NULL);
-	if (!(*cert)) {
-		connman_error("Failed to read der file");
-		err = -EINVAL;
-	}
-
-	fclose(fp);
-	return err;
-}
-
-static int read_pem_file(const char *path, X509 **cert)
-{
-	FILE *fp = NULL;
-	int err = 0;
-
-	if(!path || !cert) {
-		/* TODO :remove this after debug */
-		DBG("there's no cert data");
-		return 0;
-	}
-
-	DBG("pem path %s\n", path);
-	fp = fopen(path, "r");
-	if (!fp) {
-		connman_error("Failed to open file");
-		return -EINVAL;
-	}
-
-	*cert = PEM_read_X509(fp, cert, NULL, NULL);
-	if (!(*cert)) {
-		connman_error("Failed to read pem file");
-		err = -EINVAL;
-	}
-
-	fclose(fp);
-	return err;
-}
-
-static int read_pkcs12_file(const char *path, const char *pass, EVP_PKEY **pkey, X509 **cert, STACK_OF(X509) **ca)
-{
-	FILE *fp = NULL;
-	PKCS12 *p12;
-	int err = 0;
-
-	if(!path || !pass || !pkey || !cert || !ca) {
-		/* TODO :remove this after debug */
-		DBG("there's no cert data");
-		return 0;
-	}
-
-	DBG("pkcs12 path %s\n", path);
-	fp = fopen(path, "r");
-	if (!fp) {
-		connman_error("Failed to open file");
-		return -EINVAL;
-	}
-
-	p12 = d2i_PKCS12_fp(fp, NULL);
-	if (!p12) {
-		connman_error("Failed to open pkcs12");
-		fclose(fp);
-		return -EINVAL;
-	}
-
-	if (!PKCS12_parse(p12, pass, pkey, cert, ca)) {
-		connman_error("Failed to parse pkcs12");
-		err = -EINVAL;
-	}
-
-	PKCS12_free(p12);
-	fclose(fp);
-
-	return err;
-}
-
-static char *get_private_key_str(struct openssl_private_data *data)
-{
-	EVP_PKEY *pkey;
-	BIO* bio;
-	BUF_MEM *buf_ptr;
-	char *private_key_str = NULL;
-
-	if (!data)
-		return NULL;
-
-	if (!(pkey = data->private_key))
-		return NULL;
-
-	bio = BIO_new(BIO_s_mem());
-	if (!bio) {
-		print_openssl_error();
-		return NULL;
-	}
-
-	if (!PEM_write_bio_PrivateKey(bio, pkey, NULL, NULL, 0, NULL, NULL)) {
-		print_openssl_error();
-		BIO_free(bio);
-		return NULL;
-	}
-
-	BIO_get_mem_ptr(bio, &buf_ptr);
-	if (!buf_ptr) {
-		print_openssl_error();
-		BIO_free(bio);
-		return NULL;
-	}
-
-	private_key_str = g_try_malloc0(buf_ptr->length + 1);
-	if (!private_key_str) {
-		print_openssl_error();
-		BIO_free(bio);
-		return NULL;
-	}
-
-	g_strlcpy(private_key_str, buf_ptr->data, buf_ptr->length);
-
-	BIO_free(bio);
-
-	return private_key_str;
-}
-
-static char *get_cert_str(X509 *cert)
-{
-	BIO* bio;
-	BUF_MEM *buf_ptr;
-	char *cert_str = NULL;
-
-	if (!cert)
-		return NULL;
-
-	bio = BIO_new(BIO_s_mem());
-	if (!bio) {
-		print_openssl_error();
-		return NULL;
-	}
-
-	if (!PEM_write_bio_X509_AUX(bio, cert)) {
-		print_openssl_error();
-		BIO_free(bio);
-		return NULL;
-	}
-
-	BIO_get_mem_ptr(bio, &buf_ptr);
-	if (!buf_ptr) {
-		print_openssl_error();
-		BIO_free(bio);
-		return NULL;
-	}
-
-	cert_str = g_try_malloc0(buf_ptr->length + 1);
-	if (!cert_str) {
-		print_openssl_error();
-		BIO_free(bio);
-		return NULL;
-	}
-
-	g_strlcpy(cert_str, buf_ptr->data, buf_ptr->length);
-
-	BIO_free(bio);
-	return cert_str;
-}
-
-static char * get_local_cert_str(struct openssl_private_data *data)
-{
-	if (!data)
-		return NULL;
-
-	if (!(data->local_cert))
-		return NULL;
-
-	return get_cert_str(data->local_cert);
-}
-
-int get_ca_cert_num(struct openssl_private_data *data)
-{
-	if(!data || !data->ca_certs)
-		return 0;
-
-	return sk_X509_num(data->ca_certs);
-}
-
-static char * get_nth_ca_cert_str(struct openssl_private_data *data, int num)
-{
-	X509 *cert = NULL;
-
-	if (!data)
-		return NULL;
-
-	if (!(data->ca_certs))
-		return NULL;
-
-	cert = sk_X509_value(data->ca_certs, num);
-
-	return get_cert_str(cert);
-}
-
-static int extract_cert_info(const char *path, const char *pass, struct openssl_private_data *data)
-{
-	int err = 0;
-	if(!path || !data) {
-		/* TODO :remove this after debug */
-		DBG("there's no cert data");
-		return 0;
-	}
-
-	switch (get_cert_type(path)) {
-	case CERT_TYPE_DER:
-		err = read_der_file(path, &(data->local_cert));
-		break;
-	case CERT_TYPE_PEM:
-		err = read_pem_file(path, &(data->local_cert));
-		break;
-	case CERT_TYPE_PKCS12:
-		err = read_pkcs12_file(path, pass, &(data->private_key), &(data->local_cert), &(data->ca_certs));
-		break;
-	default:
-		break;
-	}
-
-	return err;
-}
-
-static void free_openssl_private_data(struct openssl_private_data *data)
-{
-	if (!data)
-		return;
-
-	EVP_PKEY *private_key = data->private_key;
-	X509 *local_cert = data->local_cert;
-	STACK_OF(X509) *ca_certs = data->ca_certs;
-
-	if (private_key)
-		EVP_PKEY_free(private_key);
-
-	if (local_cert)
-		X509_free(local_cert);
-
-	if (ca_certs)
-		sk_X509_pop_free(ca_certs, X509_free);
-
-	return;
-}
-
 static void free_private_data(struct ipsec_private_data *data)
 {
-	free_openssl_private_data(&(data->openssl_data));
-	deinit_openssl();
 	g_free(data);
 }
 
@@ -550,23 +192,6 @@ static int vici_load_cert(const char* type, const char* flag, const char* data)
 	vici_add_kv(sect, "data", data, NULL);
 
 	ret = vici_send_request(vici_client, VICI_CMD_LOAD_CERT, sect);
-	if (ret < 0)
-		connman_error("vici_send_request failed");
-
-	vici_destroy_section(sect);
-
-	return ret;
-}
-
-static int vici_load_key(const char* type, const char* data)
-{
-	VICISection *sect;
-	sect = vici_create_section(NULL);
-	int ret = 0;
-
-	vici_add_kv(sect, "type", type, NULL);
-	vici_add_kv(sect, "data", data, NULL);
-	ret = vici_send_request(vici_client, VICI_CMD_LOAD_KEY, sect);
 	if (ret < 0)
 		connman_error("vici_send_request failed");
 
@@ -619,6 +244,67 @@ static void ipsec_add_default_conn_data(struct vpn_provider *provider, VICISecti
 	return;
 }
 
+static char *load_file_from_path(const char *path)
+{
+	struct stat st;
+	FILE *fp = NULL;
+	int fd = 0;
+	size_t  file_size = 0;
+	char *file_buff = NULL;
+
+	if (!path) {
+		connman_error("File path is NULL\n");
+		return NULL;
+	}
+
+	fp = fopen(path, "rb");
+	if (!fp) {
+		connman_error("fopen %s is failed\n", path);
+		return NULL;
+	}
+
+	fd = fileno(fp);
+	if (fd == -1) {
+		connman_error("fp is not a valid stream");
+		fclose(fp);
+		return NULL;
+	}
+
+	if (fstat(fd, &st) != 0) {
+		connman_error("fstat failed");
+		fclose(fp);
+		return NULL;
+	}
+
+	file_size = st.st_size;
+	file_buff = g_try_malloc0(sizeof(char)*st.st_size);
+	if (file_buff == NULL) {
+		connman_error("g_try_malloc0 failed\n");
+		fclose(fp);
+		return NULL;
+	}
+
+	if (fread(file_buff, 1, file_size, fp) != file_size) {
+		connman_error("file size not matched\n");
+		g_free(file_buff);
+		file_buff = NULL;
+	}
+
+	fclose(fp);
+	return file_buff;
+}
+
+static char * get_local_cert_str(struct vpn_provider *provider)
+{
+	const char *path;
+
+	if (!provider)
+		return NULL;
+
+	path = vpn_provider_get_string(provider, "IPsec.LocalCerts");
+
+	return load_file_from_path(path);
+}
 
 static int ipsec_load_conn(struct vpn_provider *provider, struct ipsec_private_data *data)
 {
@@ -652,7 +338,7 @@ static int ipsec_load_conn(struct vpn_provider *provider, struct ipsec_private_d
 		ipsec_conn_options[i].add_elem(conn, key, value, subsection);
 	}
 
-	local_cert_str = get_local_cert_str(&(data->openssl_data));
+	local_cert_str = get_local_cert_str(provider);
 	if (local_cert_str) {
 		/* TODO :remove this after debug */
 		DBG("There's local certification to add local section");
@@ -668,42 +354,6 @@ static int ipsec_load_conn(struct vpn_provider *provider, struct ipsec_private_d
 		connman_error("vici_send_request failed");
 
 	vici_destroy_section(conn);
-
-	return ret;
-}
-
-static int ipsec_load_private_data(struct ipsec_private_data *data)
-{
-	char *private_key_str;
-	char *ca_cert_str;
-	int ca_cert_num;
-	int i;
-	int ret = 0;
-
-	private_key_str = get_private_key_str(&(data->openssl_data));
-	if (private_key_str) {
-		/* TODO :remove this after debug */
-		DBG("load private key");
-		ret = vici_load_key("RSA", private_key_str);
-		g_free(private_key_str);
-	}
-
-	if (ret < 0)
-		return ret;
-
-	ca_cert_num = get_ca_cert_num(&(data->openssl_data));
-	if (ca_cert_num < 1)
-		return 0;
-
-	for (i = 0; i < ca_cert_num; i++) {
-		/* TODO :remove this after debug */
-		DBG("load CA cert");
-		ca_cert_str = get_nth_ca_cert_str(&(data->openssl_data), i);
-		ret = vici_load_cert("X509", "CA", ca_cert_str);
-		g_free(ca_cert_str);
-		if (ret < 0)
-			return ret;
-	}
 
 	return ret;
 }
@@ -777,56 +427,6 @@ static int ipsec_load_shared_xauth(struct vpn_provider *provider)
 	vici_destroy_section(sect);
 
 	return ret;
-}
-
-static char *load_file_from_path(const char *path)
-{
-	struct stat st;
-	FILE *fp = NULL;
-	int fd = 0;
-	size_t  file_size = 0;
-	char *file_buff = NULL;
-
-	if (!path) {
-		connman_error("File path is NULL\n");
-		return NULL;
-	}
-
-	fp = fopen(path, "rb");
-	if (!fp) {
-		connman_error("fopen %s is failed\n", path);
-		return NULL;
-	}
-
-	fd = fileno(fp);
-	if (fd == -1) {
-		connman_error("fp is not a valid stream");
-		fclose(fp);
-		return NULL;
-	}
-
-	if (fstat(fd, &st) != 0) {
-		connman_error("fstat failed");
-		fclose(fp);
-		return NULL;
-	}
-
-	file_size = st.st_size;
-	file_buff = g_try_malloc0(sizeof(char)*st.st_size);
-	if (file_buff == NULL) {
-		connman_error("g_try_malloc0 failed\n");
-		fclose(fp);
-		return NULL;
-	}
-
-	if (fread(file_buff, 1, file_size, fp) != file_size) {
-		connman_error("file size not matched\n");
-		g_free(file_buff);
-		file_buff = NULL;
-	}
-
-	fclose(fp);
-	return file_buff;
 }
 
 static int ipsec_load_key(struct vpn_provider *provider)
@@ -1007,8 +607,6 @@ static struct ipsec_private_data* create_ipsec_private_data(struct vpn_provider 
 		return NULL;
 	}
 
-	init_openssl();
-
 	data->provider = provider;
 	data->connect_cb = cb;
 	data->connect_user_data = user_data;
@@ -1057,12 +655,6 @@ static void vici_connect(struct ipsec_private_data *data)
 
 	/* TODO :remove this after debug */
 	DBG("success to ipsec_load_conn");
-
-	err = ipsec_load_private_data(data);
-	IPSEC_ERROR_CHECK_GOTO(err, done, "load private data failed");
-
-	/* TODO :remove this after debug */
-	DBG("success to ipsec_load_private_data");
 
 	/*
 	 * Send the load-shared command for PSK
@@ -1174,8 +766,6 @@ static int ipsec_connect(struct vpn_provider *provider,
 			void *user_data)
 {
 	struct ipsec_private_data *data;
-	const char *path;
-	const char *pass;
 	int err = 0;
 
 	data = create_ipsec_private_data(provider, cb, user_data);
@@ -1189,18 +779,6 @@ static int ipsec_connect(struct vpn_provider *provider,
 	err = connman_task_run(task, ipsec_died, provider, NULL, NULL, NULL);
 	if (err < 0) {
 		connman_error("charon start failed");
-		if (cb)
-			cb(provider, user_data, err);
-
-		g_free(data);
-		return err;
-	}
-
-	path = vpn_provider_get_string(provider, "IPsec.LocalCerts");
-	pass = vpn_provider_get_string(provider, "IPsec.LocalCertPass");
-	err = extract_cert_info(path, pass, &(data->openssl_data));
-	if (err < 0) {
-		connman_error("extract cert info failed");
 		if (cb)
 			cb(provider, user_data, err);
 
