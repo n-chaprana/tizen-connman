@@ -11,7 +11,7 @@ BusName=net.connman.vpn
 SmackProcessLabel=System
 ExecStart=@bindir@/connman-vpnd -n
 StandardOutput=null
-Capabilities=cap_setgid,cap_net_admin,cap_net_bind_service,cap_net_broadcast,cap_net_raw=i
+Capabilities=cap_setgid,cap_net_admin,cap_net_bind_service,cap_net_broadcast,cap_net_raw,cap_dac_override=i
 SecureBits=keep-caps
 
 [Install]

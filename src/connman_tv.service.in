@@ -12,7 +12,7 @@ Restart=on-failure
 SmackProcessLabel=System
 ExecStart=@bindir@/connmand -n --noplugin vpn
 StandardOutput=null
-Capabilities=cap_net_admin,cap_net_bind_service,cap_net_broadcast,cap_net_raw=i
+Capabilities=cap_setgid,cap_net_admin,cap_net_bind_service,cap_net_broadcast,cap_net_raw,cap_dac_override=i
 SecureBits=keep-caps
 
 [Install]
