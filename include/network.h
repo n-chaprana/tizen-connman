@@ -157,6 +157,9 @@ unsigned int connman_network_get_keymgmt(struct connman_network *network);
 int connman_network_set_disconnect_reason(struct connman_network *network,
 				int reason_code);
 int connman_network_get_disconnect_reason(struct connman_network *network);
+int connman_network_get_assoc_status_code(struct connman_network *network);
+int connman_network_set_assoc_status_code(struct connman_network *network,
+				int assoc_status_code);
 #endif
 
 int connman_network_set_name(struct connman_network *network,

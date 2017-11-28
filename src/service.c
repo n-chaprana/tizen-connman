@@ -3960,7 +3960,14 @@ int __connman_service_set_passphrase(struct connman_service *service,
 	if (service->immutable &&
 			service->security != CONNMAN_SERVICE_SECURITY_8021X)
 		return -EINVAL;
-
+#if defined TIZEN_EXT
+	/* The encrypted passphrase is used here
+	 * and validation is done by net-config before being encrypted.
+	 */
+	if (service->security != CONNMAN_SERVICE_SECURITY_PSK &&
+			service->security != CONNMAN_SERVICE_SECURITY_RSN &&
+			service->security != CONNMAN_SERVICE_SECURITY_WEP)
+#endif
 	err = check_passphrase(service->security, passphrase);
 
 	if (err < 0)
@@ -8528,6 +8535,20 @@ static enum connman_service_security convert_wifi_security(const char *security)
 	else
 		return CONNMAN_SERVICE_SECURITY_UNKNOWN;
 }
+
+#if defined TIZEN_EXT
+int check_passphrase_ext(struct connman_network *network,
+					const char *passphrase)
+{
+	const char *str;
+	enum connman_service_security security;
+
+	str = connman_network_get_string(network, "WiFi.Security");
+	security = convert_wifi_security(str);
+
+	return check_passphrase(security, passphrase);
+}
+#endif
 
 static void update_from_network(struct connman_service *service,
 					struct connman_network *network)

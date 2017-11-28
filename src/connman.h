@@ -823,6 +823,8 @@ void __connman_service_set_pac(struct connman_service *service,
 int __connman_service_get_connected_count_of_iface(struct connman_service *service);
 void __connman_service_set_proxy(struct connman_service *service,
                                        const char *proxies);
+int check_passphrase_ext(struct connman_network *network,
+					const char *passphrase);
 #endif
 bool __connman_service_is_hidden(struct connman_service *service);
 bool __connman_service_is_split_routing(struct connman_service *service);

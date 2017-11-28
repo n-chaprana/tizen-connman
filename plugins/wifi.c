@@ -140,6 +140,7 @@ struct wifi_data {
 
 #if defined TIZEN_EXT
 #include "connman.h"
+#include "dbus.h"
 
 #define TIZEN_ASSOC_RETRY_COUNT		4
 
@@ -156,6 +157,73 @@ static GList *p2p_iface_list = NULL;
 bool wfd_service_registered = false;
 
 static void start_autoscan(struct connman_device *device);
+
+#if defined TIZEN_EXT
+#define NETCONFIG_SERVICE "net.netconfig"
+#define NETCONFIG_WIFI_PATH "/net/netconfig/wifi"
+#define NETCONFIG_WIFI_INTERFACE NETCONFIG_SERVICE ".wifi"
+
+static gchar* send_cryptographic_request(const char *passphrase, const char *method)
+{
+	DBusConnection *connection = NULL;
+	DBusMessage *msg = NULL, *reply = NULL;
+	DBusError error;
+	gchar *result;
+	const char *out_data;
+
+	if (!passphrase || !method) {
+		DBG("Invalid parameter");
+		return NULL;
+	}
+
+	dbus_error_init(&error);
+
+	connection = connman_dbus_get_connection();
+	if (!connection) {
+		DBG("dbus connection does not exist");
+		return NULL;
+	}
+
+	msg = dbus_message_new_method_call(NETCONFIG_SERVICE, NETCONFIG_WIFI_PATH,
+			NETCONFIG_WIFI_INTERFACE, method);
+	if (!msg) {
+		dbus_connection_unref(connection);
+		return NULL;
+	}
+
+	dbus_message_append_args(msg, DBUS_TYPE_STRING, &passphrase,
+							DBUS_TYPE_INVALID);
+
+	reply = dbus_connection_send_with_reply_and_block(connection, msg,
+					DBUS_TIMEOUT_USE_DEFAULT, &error);
+	if (reply == NULL) {
+		if (dbus_error_is_set(&error)) {
+			DBG("%s", error.message);
+			dbus_error_free(&error);
+		} else {
+			DBG("Failed to request cryptographic request");
+		}
+		dbus_connection_unref(connection);
+		dbus_message_unref(msg);
+		return NULL;
+	}
+
+	dbus_message_unref(msg);
+	dbus_connection_unref(connection);
+
+	if (!dbus_message_get_args(reply, NULL,
+				DBUS_TYPE_STRING, &out_data,
+				DBUS_TYPE_INVALID)) {
+		dbus_message_unref(reply);
+		return NULL;
+	}
+
+	result = g_strdup((const gchar *)out_data);
+	dbus_message_unref(reply);
+
+	return result;
+}
+#endif
 
 static int p2p_tech_probe(struct connman_technology *technology)
 {
@@ -2281,7 +2349,28 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid->security = network_security(security);
 	ssid->passphrase = connman_network_get_string(network,
 						"WiFi.Passphrase");
+#if defined TIZEN_EXT
+	/* Decrypt the passphrase
+	 */
+	 static gchar* origin_value = NULL;
+	 gchar *passphrase = g_strdup(ssid->passphrase);
+	 g_free(origin_value);
+	 origin_value = NULL;
 
+	 if (passphrase && g_strcmp0(passphrase, "") != 0) {
+		 origin_value = send_cryptographic_request(passphrase,
+				 	 	 	 "DecryptPassphrase");
+
+		 if (!origin_value) {
+			 DBG("Decryption failed");
+		 } else {
+			 DBG("Decryption succeeded");
+			 ssid->passphrase = origin_value;
+		 }
+
+	 }
+	 g_free(passphrase);
+#endif
 	ssid->eap = connman_network_get_string(network, "WiFi.EAP");
 
 	/*
@@ -2615,10 +2704,39 @@ static bool handle_wps_completion(GSupplicantInterface *interface,
 		}
 
 		wps_key = g_supplicant_interface_get_wps_key(interface);
+#if defined TIZEN_EXT
+		/* Check the passphrase and encrypt it
+		 */
+		 gchar *encrypted_value = NULL;
+		 gchar *passphrase = g_strdup(wps_key);
+
+		 connman_network_set_string(network, "WiFi.PinWPS", NULL);
+
+		 if (check_passphrase_ext(network, passphrase) < 0) {
+			 DBG("[WPS] Invalid passphrase");
+			 g_free(passphrase);
+			 return true;
+		 }
+
+		 encrypted_value = send_cryptographic_request(passphrase, "EncryptPassphrase");
+
+		 g_free(passphrase);
+
+		 if (!encrypted_value) {
+			 DBG("[WPS] Encryption failed");
+			 return true;
+		 }
+		 DBG("[WPS] Encryption succeeded");
+		 connman_network_set_string(network, "WiFi.Passphrase",
+				 encrypted_value);
+		 g_free(encrypted_value);
+
+#else
 		connman_network_set_string(network, "WiFi.Passphrase",
 					wps_key);
 
 		connman_network_set_string(network, "WiFi.PinWPS", NULL);
+#endif
 	}
 
 	return true;
