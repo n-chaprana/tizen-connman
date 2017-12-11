@@ -1768,7 +1768,9 @@ static gboolean timeout_solicitation(gpointer user_data)
 static int dhcpv6_solicitation(struct connman_dhcpv6 *dhcp)
 {
 	struct connman_service *service;
+#if !defined TIZEN_EXT
 	struct connman_ipconfig *ipconfig_ipv6;
+#endif
 	GDHCPClient *dhcp_client;
 	GDHCPClientError error;
 	int index, ret;
@@ -1811,8 +1813,20 @@ static int dhcpv6_solicitation(struct connman_dhcpv6 *dhcp)
 	g_dhcpv6_client_set_oro(dhcp_client, 3, G_DHCPV6_DNS_SERVERS,
 				G_DHCPV6_DOMAIN_LIST, G_DHCPV6_SNTP_SERVERS);
 
+#if defined TIZEN_EXT
+	/**
+	  When privacy extension is enabled then connman requests
+	  OPTION_IA_TA (4) from DHCPv6 server. This option is used to request
+	  temporary IPv6 address from DHCPv6 server but we found that DHCPv6
+	  server never provided temporary IPv6 address and connman resend dhcpv6
+	  requests. So always set OPTION_IA_NA in dhcpv6 request to get IPv6
+	  address from DHCPv6 server.
+	 */
+	dhcp->use_ta = FALSE;
+#else
 	ipconfig_ipv6 = __connman_service_get_ip6config(service);
 	dhcp->use_ta = __connman_ipconfig_ipv6_privacy_enabled(ipconfig_ipv6);
+#endif
 
 	g_dhcpv6_client_set_ia(dhcp_client, index,
 			dhcp->use_ta ? G_DHCPV6_IA_TA : G_DHCPV6_IA_NA,
