@@ -1316,30 +1316,33 @@ static void rtnl_newnduseropt(struct nlmsghdr *hdr)
 
 #if defined TIZEN_EXT
 	struct connman_service *service;
+	enum connman_service_state state;
 	enum connman_dnsconfig_method ipv6_dns_method;
-	char *ifname;
 
 	service = __connman_service_lookup_from_index(index);
-	if (!service || !(__connman_service_index_is_default(index))) {
-		DBG("Invalid service, index: %d\n", index);
+	if (!service) {
+		DBG("Invalid service");
 		return;
 	}
 
 	DBG("service: %p index: %d\n", service, index);
 
-	ifname = connman_inet_ifname(index);
-	if (ifname == NULL) {
-		DBG("Interface is NULL, return");
-		return;
+	if (connman_setting_get_bool("SingleConnectedTechnology") == TRUE) {
+		state = __connman_service_ipconfig_get_state(service, CONNMAN_IPCONFIG_TYPE_IPV6);
+		if (state != CONNMAN_SERVICE_STATE_ASSOCIATION &&
+				state != CONNMAN_SERVICE_STATE_CONFIGURATION &&
+				state != CONNMAN_SERVICE_STATE_READY &&
+				state != CONNMAN_SERVICE_STATE_ONLINE) {
+			DBG("Service state[%d] is not connecting/connected", state);
+			return;
+		}
 	}
 
 	ipv6_dns_method = connman_service_get_ipv6_dns_method(service);
 	if (ipv6_dns_method != CONNMAN_DNSCONFIG_METHOD_DHCP) {
 		DBG("IPv6 DNS method is not Auto ignore RA!!! [DNS method: %d]", ipv6_dns_method);
-		g_free(ifname);
 		return;
 	}
-	g_free(ifname);
 #endif
 
 	for (opt = (void *)&msg[1];
