@@ -1442,7 +1442,11 @@ int __connman_ipconfig_address_unset(struct connman_ipconfig *ipconfig)
 	if (!ipconfig)
 		return 0;
 
+#if defined TIZEN_EXT
+	DBG("ipconfig method %d type %d", ipconfig->method, ipconfig->type);
+#else
 	DBG("method %d", ipconfig->method);
+#endif
 
 	switch (ipconfig->method) {
 	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:

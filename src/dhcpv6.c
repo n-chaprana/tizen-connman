@@ -203,10 +203,23 @@ static int set_duid(struct connman_service *service,
 	int duid_len;
 
 	ident = __connman_service_get_ident(service);
+#if defined TIZEN_EXT
+	if(ident != NULL)
+		DBG("ident : %s", ident);
+#endif
 
 	keyfile = connman_storage_load_service(ident);
+
+#if defined TIZEN_EXT
+	if (!keyfile) {
+		keyfile = g_key_file_new();
+		if (!keyfile)
+			return -EIO;
+	}
+#else
 	if (!keyfile)
 		return -EINVAL;
+#endif
 
 	hex_duid = g_key_file_get_string(keyfile, ident, "IPv6.DHCP.DUID",
 					NULL);
