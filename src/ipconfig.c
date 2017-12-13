@@ -2000,7 +2000,7 @@ void __connman_ipconfig_append_ipv6config(struct connman_ipconfig *ipconfig,
 							DBusMessageIter *iter)
 {
 	const char *str, *privacy;
-#if defined TIZEN_EXT
+#if !defined TIZEN_EXT
 	DBG("");
 #endif
 
@@ -2045,7 +2045,7 @@ void __connman_ipconfig_append_ipv4config(struct connman_ipconfig *ipconfig,
 							DBusMessageIter *iter)
 {
 	const char *str;
-#if defined TIZEN_EXT
+#if !defined TIZEN_EXT
 	DBG("");
 #endif
 

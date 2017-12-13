@@ -2454,7 +2454,9 @@ int connman_network_set_blob(struct connman_network *network,
 const void *connman_network_get_blob(struct connman_network *network,
 					const char *key, unsigned int *size)
 {
+#if !defined TIZEN_EXT
 	DBG("network %p key %s", network, key);
+#endif
 
 	if (g_str_equal(key, "WiFi.SSID")) {
 		if (size)
@@ -2464,11 +2466,8 @@ const void *connman_network_get_blob(struct connman_network *network,
 
 #if defined TIZEN_EXT
 	if (g_str_equal(key, "WiFi.Vsie")) {
-		if (size) {
+		if (size)
 			*size = network->wifi.wifi_vsie_len;
-			DBG("network %p key %s size=%d", network, key, *size);
-		}
-
 		return network->wifi.wifi_vsie;
 	}
 #endif
