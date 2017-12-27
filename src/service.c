@@ -3175,7 +3175,7 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 	maxrate = connman_network_get_maxrate(network);
 	frequency = connman_network_get_frequency(network);
 	enc_mode = connman_network_get_enc_mode(network);
-	passpoint = connman_network_get_is_hs20AP(network);
+	passpoint = connman_network_get_bool(network, "WiFi.HS20AP");
 	keymgmt = connman_network_get_keymgmt(network);
 
 	snprintf(bssid_str, WIFI_BSSID_STR_LEN, "%02x:%02x:%02x:%02x:%02x:%02x",

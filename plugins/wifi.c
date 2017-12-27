@@ -3287,6 +3287,8 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 			g_supplicant_network_get_rsn_mode(supplicant_network));
 	connman_network_set_keymgmt(network,
 			g_supplicant_network_get_keymgmt(supplicant_network));
+	connman_network_set_bool(network, "WiFi.HS20AP",
+			g_supplicant_network_is_hs20AP(supplicant_network));
 #endif
 	connman_network_set_available(network, true);
 	connman_network_set_string(network, "WiFi.Mode", mode);
@@ -3627,7 +3629,7 @@ static void network_merged(GSupplicantNetwork *network)
 	struct wifi_data *wifi;
 	const char *identifier;
 	struct connman_network *connman_network;
-	unsigned int ishs20AP = 0;
+	bool ishs20AP = 0;
 	char *temp = NULL;
 
 	interface = g_supplicant_network_get_interface(network);
@@ -3669,7 +3671,6 @@ static void network_merged(GSupplicantNetwork *network)
 	}
 
 	ishs20AP = g_supplicant_network_is_hs20AP(network);
-	connman_network_set_is_hs20AP(connman_network, ishs20AP);
 
 	if (ishs20AP &&
 		g_strcmp0(g_supplicant_network_get_security(network), "ieee8021x") == 0) {

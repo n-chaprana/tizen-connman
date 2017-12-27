@@ -103,7 +103,7 @@ struct connman_network {
 		char encryption_mode[WIFI_ENCYPTION_MODE_LEN_MAX];
 		unsigned char bssid[WIFI_BSSID_LEN_MAX];
 		unsigned int maxrate;
-		unsigned int isHS20AP;
+		bool isHS20AP;
 		unsigned int keymgmt;
 		char *keymgmt_type;
 		bool rsn_mode;
@@ -2022,25 +2022,6 @@ int connman_network_set_proxy(struct connman_network *network,
 	return 0;
 }
 
-int connman_network_set_is_hs20AP(struct connman_network *network,
-				unsigned int isHS20AP)
-{
-	if (!network)
-		return 0;
-
-	network->wifi.isHS20AP = isHS20AP;
-
-	return 0;
-}
-
-unsigned int connman_network_get_is_hs20AP(struct connman_network *network)
-{
-	if (!network)
-		return 0;
-
-	return network->wifi.isHS20AP;
-}
-
 int connman_network_set_keymgmt(struct connman_network *network,
 				unsigned int keymgmt)
 {
@@ -2377,6 +2358,8 @@ int connman_network_set_bool(struct connman_network *network,
 #if defined TIZEN_EXT
 	else if (g_strcmp0(key, "DefaultInternet") == 0)
 		network->default_internet = value;
+	else if (g_strcmp0(key, "WiFi.HS20AP") == 0)
+		network->wifi.isHS20AP = value;
 #endif
 
 	return -EINVAL;
@@ -2405,6 +2388,8 @@ bool connman_network_get_bool(struct connman_network *network,
 #if defined TIZEN_EXT
 	else if (g_str_equal(key, "DefaultInternet"))
 		return network->default_internet;
+	else if (g_str_equal(key, "WiFi.HS20AP"))
+		return network->wifi.isHS20AP;
 #endif
 
 	return false;

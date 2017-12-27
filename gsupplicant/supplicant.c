@@ -213,6 +213,7 @@ struct g_supplicant_bss {
 	dbus_bool_t ft_ieee8021x;
 	char *wifi_vsie;
 	unsigned int wifi_vsie_len;
+	dbus_bool_t hs20;
 #endif
 	unsigned int wps_capabilities;
 };
@@ -234,7 +235,7 @@ struct _GSupplicantNetwork {
 	GHashTable *bss_table;
 	GHashTable *config_table;
 #if defined TIZEN_EXT
-	unsigned int isHS20AP;
+	bool isHS20AP;
 	char *eap;
 	char *identity;
 	char *phase2;
@@ -1182,7 +1183,7 @@ const char *g_supplicant_peer_get_name(GSupplicantPeer *peer)
 }
 
 #if defined TIZEN_EXT
-unsigned int g_supplicant_network_is_hs20AP(GSupplicantNetwork *network)
+bool g_supplicant_network_is_hs20AP(GSupplicantNetwork *network)
 {
 	if (!network)
 		return 0;
@@ -1685,6 +1686,8 @@ static void add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 			SUPPLICANT_DBG("Failed to allocate memory for wifi_vsie");
 		}
 	}
+
+	network->isHS20AP = bss->hs20;
 #endif
 
 	SUPPLICANT_DBG("New network %s created", network->name);
@@ -2101,6 +2104,12 @@ static void bss_property(const char *key, DBusMessageIter *iter,
 		bss->rsn_selected = FALSE;
 
 		supplicant_dbus_property_foreach(iter, bss_wpa, bss);
+#if defined TIZEN_EXT
+	} else if (g_strcmp0(key, "HS20") == 0) {
+		dbus_bool_t hs20 = FALSE;
+		dbus_message_iter_get_basic(iter, &hs20);
+		bss->hs20 = hs20;
+#endif
 	} else if (g_strcmp0(key, "IEs") == 0)
 		bss_process_ies(iter, bss);
 	else

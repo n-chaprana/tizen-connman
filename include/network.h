@@ -147,9 +147,6 @@ int connman_network_set_proxy(struct connman_network *network,
                                const char *proxies);
 
 void connman_network_clear_associating(struct connman_network *network);
-int connman_network_set_is_hs20AP(struct connman_network *network,
-				unsigned int isHS20AP);
-unsigned int connman_network_get_is_hs20AP(struct connman_network *network);
 
 int connman_network_set_keymgmt(struct connman_network *network,
 				unsigned int keymgmt);
