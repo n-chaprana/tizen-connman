@@ -503,6 +503,17 @@ static void callback_network_merged(GSupplicantNetwork *network)
 
 	callbacks_pointer->network_merged(network);
 }
+
+static void callback_assoc_failed(void *user_data)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->assoc_failed)
+		return;
+
+	callbacks_pointer->assoc_failed(user_data);
+}
 #endif
 
 static void callback_network_changed(GSupplicantNetwork *network,
@@ -5173,6 +5184,135 @@ static void wps_process_credentials(DBusMessageIter *iter, void *user_data)
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_BOOLEAN, &credentials);
 }
 
+#if defined TIZEN_EXT
+#define NETCONFIG_SERVICE "net.netconfig"
+#define NETCONFIG_WIFI_PATH "/net/netconfig/wifi"
+#define NETCONFIG_WIFI_INTERFACE NETCONFIG_SERVICE ".wifi"
+
+struct dec_method_call_data {
+	struct interface_connect_data *data;
+	DBusPendingCall *pending_call;
+};
+
+static struct dec_method_call_data decrypt_request_data;
+
+static void crypt_method_call_cancel(void)
+{
+	if (decrypt_request_data.pending_call) {
+		dbus_pending_call_cancel(decrypt_request_data.pending_call);
+		dbus_pending_call_unref(decrypt_request_data.pending_call);
+		decrypt_request_data.pending_call = NULL;
+	}
+
+	g_free(decrypt_request_data.data->path);
+	g_free(decrypt_request_data.data->ssid);
+	dbus_free(decrypt_request_data.data);
+	decrypt_request_data.data = NULL;
+}
+
+static void decryption_request_reply(DBusPendingCall *call,
+						void *user_data)
+{
+	DBusMessage *reply;
+	DBusError error;
+	DBusMessageIter args;
+	char *out_data;
+	int ret;
+	static gchar* origin_value = NULL;
+	struct interface_connect_data *data = user_data;
+
+	g_free(origin_value);
+	origin_value = NULL;
+
+	SUPPLICANT_DBG("");
+
+	reply = dbus_pending_call_steal_reply(call);
+
+	dbus_error_init(&error);
+	if (dbus_set_error_from_message(&error, reply)) {
+		SUPPLICANT_DBG("decryption_request_reply() %s %s", error.name, error.message);
+		dbus_error_free(&error);
+		goto done;
+	}
+
+	if (dbus_message_iter_init(reply, &args) == FALSE) {
+		SUPPLICANT_DBG("dbus_message_iter_init() failed");
+		goto done;
+	}
+
+	dbus_message_iter_get_basic(&args, &out_data);
+
+	origin_value = g_strdup((const gchar *)out_data);
+	data->ssid->passphrase = origin_value;
+
+	ret = supplicant_dbus_method_call(data->interface->path,
+		SUPPLICANT_INTERFACE ".Interface", "AddNetwork",
+		interface_add_network_params,
+		interface_add_network_result, data,
+		data->interface);
+
+	if (ret < 0) {
+		SUPPLICANT_DBG("AddNetwork failed %d", ret);
+		callback_assoc_failed(decrypt_request_data.data->user_data);
+		g_free(data->path);
+		g_free(data->ssid);
+		dbus_free(data);
+	}
+
+done:
+	dbus_message_unref(reply);
+	dbus_pending_call_unref(call);
+
+	decrypt_request_data.pending_call = NULL;
+	decrypt_request_data.data = NULL;
+}
+
+static int send_decryption_request(const char *passphrase,
+			struct interface_connect_data *data)
+{
+	DBusMessage *msg = NULL;
+	DBusPendingCall *call;
+
+	SUPPLICANT_DBG("Decryption request");
+
+	if (!passphrase) {
+		SUPPLICANT_DBG("Invalid parameter");
+		return -EINVAL;
+	}
+
+	if (!connection)
+		return -EINVAL;
+
+	msg = dbus_message_new_method_call(NETCONFIG_SERVICE, NETCONFIG_WIFI_PATH,
+			NETCONFIG_WIFI_INTERFACE, "DecryptPassphrase");
+	if (!msg)
+		return -EINVAL;
+
+	dbus_message_append_args(msg, DBUS_TYPE_STRING, &passphrase,
+							DBUS_TYPE_INVALID);
+
+	if (!dbus_connection_send_with_reply(connection, msg,
+				&call, DBUS_TIMEOUT_USE_DEFAULT)) {
+		dbus_message_unref(msg);
+		return -EIO;
+	}
+
+	if (!call) {
+		dbus_message_unref(msg);
+		return -EIO;
+	}
+
+	decrypt_request_data.pending_call = call;
+	decrypt_request_data.data = data;
+
+	dbus_pending_call_set_notify(call, decryption_request_reply, data, NULL);
+	dbus_message_unref(msg);
+
+	SUPPLICANT_DBG("Decryption request succeeded");
+
+	return 0;
+}
+#endif
 
 int g_supplicant_interface_connect(GSupplicantInterface *interface,
 				GSupplicantSSID *ssid,
@@ -5210,6 +5350,13 @@ int g_supplicant_interface_connect(GSupplicantInterface *interface,
 			"ProcessCredentials", DBUS_TYPE_BOOLEAN_AS_STRING,
 			wps_process_credentials, wps_start, data, interface);
 	} else
+#if defined TIZEN_EXT
+		if (ssid->passphrase && g_strcmp0(ssid->passphrase, "") != 0) {
+			ret = send_decryption_request(ssid->passphrase, data);
+			if (ret < 0)
+				SUPPLICANT_DBG("Decryption request failed %d", ret);
+		} else
+#endif
 		ret = supplicant_dbus_method_call(interface->path,
 			SUPPLICANT_INTERFACE ".Interface", "AddNetwork",
 			interface_add_network_params,
@@ -5334,7 +5481,17 @@ int g_supplicant_interface_disconnect(GSupplicantInterface *interface,
 
 	if (!system_available)
 		return -EFAULT;
+#if defined TIZEN_EXT
+	if (decrypt_request_data.pending_call &&
+			decrypt_request_data.data &&
+			decrypt_request_data.data->user_data == user_data) {
 
+		callback_assoc_failed(decrypt_request_data.data->user_data);
+		crypt_method_call_cancel();
+
+		return 0;
+	}
+#endif
 	data = dbus_malloc0(sizeof(*data));
 	if (!data)
 		return -ENOMEM;

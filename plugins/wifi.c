@@ -163,65 +163,115 @@ static void start_autoscan(struct connman_device *device);
 #define NETCONFIG_WIFI_PATH "/net/netconfig/wifi"
 #define NETCONFIG_WIFI_INTERFACE NETCONFIG_SERVICE ".wifi"
 
-static gchar* send_cryptographic_request(const char *passphrase, const char *method)
-{
-	DBusConnection *connection = NULL;
-	DBusMessage *msg = NULL, *reply = NULL;
-	DBusError error;
-	gchar *result;
-	const char *out_data;
+struct enc_method_call_data {
+	DBusConnection *connection;
+	struct connman_network *network;
+};
 
-	if (!passphrase || !method) {
-		DBG("Invalid parameter");
-		return NULL;
-	}
+static struct enc_method_call_data encrypt_request_data;
+
+static void encryption_request_reply(DBusPendingCall *call,
+						void *user_data)
+{
+	DBusMessage *reply;
+	DBusError error;
+	DBusMessageIter args;
+	char *out_data;
+	struct connman_service *service;
+	gchar* encrypted_value = NULL;
+	struct connman_network *network = encrypt_request_data.network;
+
+	DBG("");
+
+	reply = dbus_pending_call_steal_reply(call);
 
 	dbus_error_init(&error);
+	if (dbus_set_error_from_message(&error, reply)) {
+		DBG("send_encryption_request() %s %s", error.name, error.message);
+		dbus_error_free(&error);
+		goto done;
+	}
+
+	if (dbus_message_iter_init(reply, &args) == FALSE)
+		goto done;
+
+	dbus_message_iter_get_basic(&args, &out_data);
+
+	encrypted_value = g_strdup((const gchar *)out_data);
+	service = connman_service_lookup_from_network(network);
+
+	if (!service) {
+		DBG("encryption result: no service");
+		goto done;
+	}
+
+	if (connman_service_get_favorite(service)) {
+		__connman_service_set_passphrase(service, encrypted_value);
+		__connman_service_save(service);
+	} else
+		connman_network_set_string(network, "WiFi.Passphrase",
+							encrypted_value);
+
+	DBG("encryption result: succeeded");
+
+done:
+	dbus_message_unref(reply);
+	dbus_pending_call_unref(call);
+	dbus_connection_unref(encrypt_request_data.connection);
+	g_free(encrypted_value);
+
+	encrypt_request_data.connection = NULL;
+	encrypt_request_data.network = NULL;
+}
+
+static int send_encryption_request(const char *passphrase,
+				struct connman_network *network)
+{
+	DBusConnection *connection = NULL;
+	DBusMessage *msg = NULL;
+	DBusPendingCall *call;
+
+	if (!passphrase) {
+		DBG("Invalid parameter");
+		return -EINVAL;
+	}
 
 	connection = connman_dbus_get_connection();
 	if (!connection) {
 		DBG("dbus connection does not exist");
-		return NULL;
+		return -EINVAL;
 	}
 
 	msg = dbus_message_new_method_call(NETCONFIG_SERVICE, NETCONFIG_WIFI_PATH,
-			NETCONFIG_WIFI_INTERFACE, method);
+			NETCONFIG_WIFI_INTERFACE, "EncryptPassphrase");
 	if (!msg) {
 		dbus_connection_unref(connection);
-		return NULL;
+		return -EINVAL;
 	}
 
 	dbus_message_append_args(msg, DBUS_TYPE_STRING, &passphrase,
 							DBUS_TYPE_INVALID);
 
-	reply = dbus_connection_send_with_reply_and_block(connection, msg,
-					DBUS_TIMEOUT_USE_DEFAULT, &error);
-	if (reply == NULL) {
-		if (dbus_error_is_set(&error)) {
-			DBG("%s", error.message);
-			dbus_error_free(&error);
-		} else {
-			DBG("Failed to request cryptographic request");
-		}
-		dbus_connection_unref(connection);
+	if (!dbus_connection_send_with_reply(connection, msg,
+				&call, DBUS_TIMEOUT_USE_DEFAULT)) {
 		dbus_message_unref(msg);
-		return NULL;
+		dbus_connection_unref(connection);
+		return -EIO;
 	}
 
+	if (!call) {
+		dbus_message_unref(msg);
+		dbus_connection_unref(connection);
+		return -EIO;
+	}
+
+	encrypt_request_data.connection = connection;
+	encrypt_request_data.network = network;
+
+	dbus_pending_call_set_notify(call, encryption_request_reply, NULL, NULL);
 	dbus_message_unref(msg);
-	dbus_connection_unref(connection);
 
-	if (!dbus_message_get_args(reply, NULL,
-				DBUS_TYPE_STRING, &out_data,
-				DBUS_TYPE_INVALID)) {
-		dbus_message_unref(reply);
-		return NULL;
-	}
-
-	result = g_strdup((const gchar *)out_data);
-	dbus_message_unref(reply);
-
-	return result;
+	return 0;
 }
 #endif
 
@@ -2349,28 +2399,6 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid->security = network_security(security);
 	ssid->passphrase = connman_network_get_string(network,
 						"WiFi.Passphrase");
-#if defined TIZEN_EXT
-	/* Decrypt the passphrase
-	 */
-	 static gchar* origin_value = NULL;
-	 gchar *passphrase = g_strdup(ssid->passphrase);
-	 g_free(origin_value);
-	 origin_value = NULL;
-
-	 if (passphrase && g_strcmp0(passphrase, "") != 0) {
-		 origin_value = send_cryptographic_request(passphrase,
-				 	 	 	 "DecryptPassphrase");
-
-		 if (!origin_value) {
-			 DBG("Decryption failed");
-		 } else {
-			 DBG("Decryption succeeded");
-			 ssid->passphrase = origin_value;
-		 }
-
-	 }
-	 g_free(passphrase);
-#endif
 	ssid->eap = connman_network_get_string(network, "WiFi.EAP");
 
 	/*
@@ -2707,7 +2735,7 @@ static bool handle_wps_completion(GSupplicantInterface *interface,
 #if defined TIZEN_EXT
 		/* Check the passphrase and encrypt it
 		 */
-		 gchar *encrypted_value = NULL;
+		 int ret;
 		 gchar *passphrase = g_strdup(wps_key);
 
 		 connman_network_set_string(network, "WiFi.PinWPS", NULL);
@@ -2718,18 +2746,14 @@ static bool handle_wps_completion(GSupplicantInterface *interface,
 			 return true;
 		 }
 
-		 encrypted_value = send_cryptographic_request(passphrase, "EncryptPassphrase");
+		 ret = send_encryption_request(passphrase, network);
 
 		 g_free(passphrase);
 
-		 if (!encrypted_value) {
-			 DBG("[WPS] Encryption failed");
-			 return true;
-		 }
-		 DBG("[WPS] Encryption succeeded");
-		 connman_network_set_string(network, "WiFi.Passphrase",
-				 encrypted_value);
-		 g_free(encrypted_value);
+		 if (!ret)
+			 DBG("[WPS] Encryption request succeeded");
+		 else
+			 DBG("[WPS] Encryption request failed %d", ret);
 
 #else
 		connman_network_set_string(network, "WiFi.Passphrase",
@@ -3687,6 +3711,12 @@ static void network_merged(GSupplicantNetwork *network)
 
 	wifi->network = connman_network;
 }
+
+static void assoc_failed(void *user_data)
+{
+	struct connman_network *network = user_data;
+	connman_network_set_associating(network, false);
+}
 #endif
 
 static void debug(const char *str)
@@ -3743,7 +3773,8 @@ static const GSupplicantCallbacks callbacks = {
 	.peer_request		= peer_request,
 #if defined TIZEN_EXT
 	.system_power_off	= system_power_off,
-	.network_merged	= network_merged,
+	.network_merged		= network_merged,
+	.assoc_failed		= assoc_failed,
 #endif
 	.disconnect_reasoncode  = disconnect_reasoncode,
 	.assoc_status_code      = assoc_status_code,

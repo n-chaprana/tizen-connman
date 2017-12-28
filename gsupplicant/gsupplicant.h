@@ -399,6 +399,7 @@ struct _GSupplicantCallbacks {
 					const char *property);
 #if defined TIZEN_EXT
 	void (*system_power_off) (void);
+	void (*assoc_failed) (void *user_data);
 #endif
 	void (*add_station) (const char *mac);
 	void (*remove_station) (const char *mac);
