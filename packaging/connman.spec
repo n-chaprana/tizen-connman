@@ -112,6 +112,7 @@ Summary:        Connman service script for TV profile
 Requires:       %{name} = %{version}-%{release}
 Provides:       %{name}-profile_tv = %{version}-%{release}
 Conflicts:      %{name}-extension-ivi
+Conflicts:      %{name}-extension-disable-eth
 %description extension-tv
 Supplies Tizen TV profile systemd service scripts instead of the default one.
 This overwrites service script of %{name}.
@@ -121,8 +122,18 @@ Summary:        Connman configuration for IVI profile
 Requires:       %{name} = %{version}-%{release}
 Provides:       %{name}-profile_ivi = %{version}-%{release}
 Conflicts:      %{name}-extension-tv
+Conflicts:      %{name}-extension-disable-eth
 %description extension-ivi
 Supplies Tizen IVI profile configuration instead of the default one.
+This overwrites conf file of %{name}.
+
+%package extension-disable-eth
+Summary:        Connman configuration for testing which requires the ethernet to be disabled
+Requires:       %{name} = %{version}-%{release}
+Conflicts:      %{name}-extension-tv
+Conflicts:      %{name}-extension-ivi
+%description extension-disable-eth
+Connman without ethernet support
 This overwrites conf file of %{name}.
 
 %prep
@@ -210,6 +221,7 @@ mkdir -p %{buildroot}/etc/connman
 
 cp src/main_ivi.conf %{buildroot}/etc/connman/main.conf.ivi
 cp src/main_tv.conf %{buildroot}/etc/connman/main.conf.tv
+cp src/main_disable_eth.conf %{buildroot}/etc/connman/main.conf.disable.eth
 cp src/main.conf %{buildroot}/etc/connman/main.conf
 
 rm %{buildroot}%{_sysconfdir}/dbus-1/system.d/*.conf
@@ -324,4 +336,8 @@ mv -f %{_sysconfdir}/connman/main.conf.ivi %{_sysconfdir}/connman/main.conf
 %files extension-ivi
 %attr(644,network_fw,network_fw) %{_sysconfdir}/connman/main.conf.ivi
 %license COPYING
-
+%post extension-disable-eth
+mv -f %{_sysconfdir}/connman/main.conf.disable.eth %{_sysconfdir}/connman/main.conf
+%files extension-disable-eth
+%attr(644,network_fw,network_fw) %{_sysconfdir}/connman/main.conf.disable.eth
+%license COPYING
