@@ -3335,8 +3335,7 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 	bool wps_advertizing;
 
 #if defined TIZEN_EXT
-	const char *wifi_vsie;
-	unsigned int wifi_vsie_len;
+	GSList *vsie_list = NULL;
 #endif
 
 	mode = g_supplicant_network_get_mode(supplicant_network);
@@ -3363,9 +3362,6 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 
 	ssid = g_supplicant_network_get_ssid(supplicant_network, &ssid_len);
 
-#if defined TIZEN_EXT
-	wifi_vsie = g_supplicant_network_get_wifi_vsie(supplicant_network, &wifi_vsie_len);
-#endif
 	network = connman_device_get_network(wifi->device, identifier);
 
 	if (!network) {
@@ -3390,9 +3386,11 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 	connman_network_set_blob(network, "WiFi.SSID",
 						ssid, ssid_len);
 #if defined TIZEN_EXT
-	if(wifi_vsie_len > 0 && wifi_vsie)
-		connman_network_set_blob(network, "WiFi.Vsie",
-							wifi_vsie, wifi_vsie_len);
+	vsie_list = (GSList *)g_supplicant_network_get_wifi_vsie(supplicant_network);
+	if (vsie_list)
+		connman_network_set_vsie_list(network, vsie_list);
+	else
+		DBG("vsie_list is NULL");
 #endif
 	connman_network_set_string(network, "WiFi.Security", security);
 	connman_network_set_strength(network,

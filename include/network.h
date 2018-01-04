@@ -183,6 +183,10 @@ int connman_network_set_blob(struct connman_network *network,
 			const char *key, const void *data, unsigned int size);
 const void *connman_network_get_blob(struct connman_network *network,
 					const char *key, unsigned int *size);
+#if defined TIZEN_EXT
+void connman_network_set_vsie_list(struct connman_network *network, GSList *vsie_list);
+void *connman_network_get_vsie_list(struct connman_network *network);
+#endif
 
 struct connman_device *connman_network_get_device(struct connman_network *network);
 
