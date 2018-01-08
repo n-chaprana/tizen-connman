@@ -141,12 +141,12 @@ int connman_provider_disconnect(struct connman_provider *provider)
 		provider_indicate_state(provider,
 					CONNMAN_SERVICE_STATE_DISCONNECT);
 
-	if (err < 0) {
-		if (err != -EINPROGRESS)
-			return err;
+	if (err < 0)
+		return err;
 
-		return -EINPROGRESS;
-	}
+	if (provider->vpn_service)
+		provider_indicate_state(provider,
+					CONNMAN_SERVICE_STATE_IDLE);
 
 	return 0;
 }
@@ -164,14 +164,15 @@ int connman_provider_remove(struct connman_provider *provider)
 	return 0;
 }
 
-int __connman_provider_connect(struct connman_provider *provider)
+int __connman_provider_connect(struct connman_provider *provider,
+					const char *dbus_sender)
 {
 	int err;
 
 	DBG("provider %p", provider);
 
 	if (provider->driver && provider->driver->connect)
-		err = provider->driver->connect(provider);
+		err = provider->driver->connect(provider, dbus_sender);
 	else
 		return -EOPNOTSUPP;
 

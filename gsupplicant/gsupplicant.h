@@ -142,7 +142,12 @@ struct _GSupplicantSSID {
 	const char *eap;
 	const char *passphrase;
 	const char *identity;
+	const char *anonymous_identity;
 	const char *ca_cert_path;
+	const char *subject_match;
+	const char *altsubject_match;
+	const char *domain_suffix_match;
+	const char *domain_match;
 	const char *client_cert_path;
 	const char *private_key_path;
 	const char *private_key_passphrase;
@@ -341,16 +346,22 @@ struct _GSupplicantCallbacks {
 	void (*p2p_support) (GSupplicantInterface *interface);
 	void (*scan_started) (GSupplicantInterface *interface);
 	void (*scan_finished) (GSupplicantInterface *interface);
+	void (*ap_create_fail) (GSupplicantInterface *interface);
 	void (*network_added) (GSupplicantNetwork *network);
 	void (*network_removed) (GSupplicantNetwork *network);
 	void (*network_changed) (GSupplicantNetwork *network,
 					const char *property);
+	void (*network_associated) (GSupplicantNetwork *network);
 	void (*peer_found) (GSupplicantPeer *peer);
 	void (*peer_lost) (GSupplicantPeer *peer);
 	void (*peer_changed) (GSupplicantPeer *peer,
 					GSupplicantPeerState state);
 	void (*peer_request) (GSupplicantPeer *peer);
 	void (*debug) (const char *str);
+	void (*disconnect_reasoncode)(GSupplicantInterface *interface,
+				int reasoncode);
+	void (*assoc_status_code)(GSupplicantInterface *interface,
+				int reasoncode);
 };
 
 typedef struct _GSupplicantCallbacks GSupplicantCallbacks;

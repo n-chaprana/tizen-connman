@@ -26,6 +26,11 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <net/ethernet.h>
+
+#ifndef IPV6_MIN_MTU
+#define IPV6_MIN_MTU 1280
+#endif
 
 #include <connman/ipconfig.h>
 #include <include/setting.h>
@@ -54,10 +59,11 @@ struct connman_dhcp {
 	GDHCPClient *dhcp_client;
 	char *ipv4ll_debug_prefix;
 	char *dhcp_debug_prefix;
+
+	bool ipv4ll_running;
 };
 
 static GHashTable *ipconfig_table;
-static bool ipv4ll_running;
 
 static void dhcp_free(struct connman_dhcp *dhcp)
 {
@@ -80,7 +86,7 @@ static void ipv4ll_stop_client(struct connman_dhcp *dhcp)
 	g_dhcp_client_stop(dhcp->ipv4ll_client);
 	g_dhcp_client_unref(dhcp->ipv4ll_client);
 	dhcp->ipv4ll_client = NULL;
-	ipv4ll_running = false;
+	dhcp->ipv4ll_running = false;
 
 	g_free(dhcp->ipv4ll_debug_prefix);
 	dhcp->ipv4ll_debug_prefix = NULL;
@@ -108,12 +114,16 @@ static bool apply_dhcp_invalidate_on_network(struct connman_dhcp *dhcp)
 			__connman_service_timeserver_remove(service,
 							dhcp->timeservers[i]);
 		}
+		g_strfreev(dhcp->timeservers);
+		dhcp->timeservers = NULL;
 	}
 	if (dhcp->nameservers) {
 		for (i = 0; dhcp->nameservers[i]; i++) {
 			__connman_service_nameserver_remove(service,
 						dhcp->nameservers[i], false);
 		}
+		g_strfreev(dhcp->nameservers);
+		dhcp->nameservers = NULL;
 	}
 
 	return true;
@@ -223,7 +233,7 @@ static int ipv4ll_start_client(struct connman_dhcp *dhcp)
 		return err;
 	}
 
-	ipv4ll_running = true;
+	dhcp->ipv4ll_running = true;
 	return 0;
 }
 
@@ -244,13 +254,16 @@ static void no_lease_cb(GDHCPClient *dhcp_client, gpointer user_data)
 	struct connman_dhcp *dhcp = user_data;
 	int err;
 
-	DBG("No lease available ipv4ll %d client %p", ipv4ll_running,
+	DBG("No lease available ipv4ll %d client %p", dhcp->ipv4ll_running,
 		dhcp->ipv4ll_client);
+
+	if (dhcp->timeout > 0)
+		g_source_remove(dhcp->timeout);
 
 	dhcp->timeout = g_timeout_add_seconds(RATE_LIMIT_INTERVAL,
 						dhcp_retry_cb,
 						dhcp);
-	if (ipv4ll_running)
+	if (dhcp->ipv4ll_running)
 		return;
 
 	err = ipv4ll_start_client(dhcp);
@@ -258,7 +271,7 @@ static void no_lease_cb(GDHCPClient *dhcp_client, gpointer user_data)
 		DBG("Cannot start ipv4ll client (%d/%s)", err, strerror(-err));
 
 	/* Only notify upper layer if we have a problem */
-	dhcp_invalidate(dhcp, !ipv4ll_running);
+	dhcp_invalidate(dhcp, !dhcp->ipv4ll_running);
 }
 
 static void lease_lost_cb(GDHCPClient *dhcp_client, gpointer user_data)
@@ -321,6 +334,20 @@ static bool apply_lease_available_on_network(GDHCPClient *dhcp_client,
 	if (!service) {
 		connman_error("Can not lookup service");
 		return false;
+	}
+
+	option = g_dhcp_client_get_option(dhcp_client, G_DHCP_MTU);
+	if (option && option->data) {
+		int mtu, index, err;
+
+		mtu = atoi(option->data);
+
+		if (mtu >= IPV6_MIN_MTU && mtu <= ETH_DATA_LEN) {
+			index = __connman_ipconfig_get_index(dhcp->ipconfig);
+			err = connman_inet_set_mtu(index, mtu);
+
+			DBG("MTU %d index %d err %d", mtu, index, err);
+		}
 	}
 
 	option = g_dhcp_client_get_option(dhcp_client, 252);
@@ -399,7 +426,8 @@ static bool apply_lease_available_on_network(GDHCPClient *dhcp_client,
 								dhcp->pac);
 	}
 
-	__connman_6to4_probe(service);
+	if (connman_setting_get_bool("Enable6to4"))
+		__connman_6to4_probe(service);
 
 	return true;
 }
@@ -408,10 +436,11 @@ static void lease_available_cb(GDHCPClient *dhcp_client, gpointer user_data)
 {
 	struct connman_dhcp *dhcp = user_data;
 	GList *option = NULL;
+	enum connman_ipconfig_method old_method;
 	char *address, *netmask = NULL, *gateway = NULL;
 	const char *c_address, *c_gateway;
 	unsigned char prefixlen, c_prefixlen;
-	bool ip_change;
+	bool ip_change = false;
 
 	DBG("Lease available");
 
@@ -443,17 +472,40 @@ static void lease_available_cb(GDHCPClient *dhcp_client, gpointer user_data)
 
 	DBG("c_address %s", c_address);
 
-	if (g_strcmp0(address, c_address))
+	if (g_strcmp0(address, c_address)) {
 		ip_change = true;
-	else if (g_strcmp0(gateway, c_gateway))
+		if (c_address) {
+			/* Remove old ip address */
+			__connman_ipconfig_address_remove(dhcp->ipconfig);
+		}
+	}
+	if (g_strcmp0(gateway, c_gateway)) {
 		ip_change = true;
-	else if (prefixlen != c_prefixlen)
+		if (c_gateway) {
+			/* Remove gateway ip address */
+			__connman_ipconfig_gateway_remove(dhcp->ipconfig);
+		}
+	} else if (prefixlen != c_prefixlen)
 		ip_change = true;
-	else
-		ip_change = false;
 
+	old_method = __connman_ipconfig_get_method(dhcp->ipconfig);
 	__connman_ipconfig_set_method(dhcp->ipconfig,
 						CONNMAN_IPCONFIG_METHOD_DHCP);
+
+	/*
+	 * Notify IPv4.Configuration's method moved back to DHCP.
+	 *
+	 * This is the case ConnMan initially set an address by using
+	 * IPv4LL because DHCP failed but now we got an address from DHCP.
+	 */
+	if (old_method == CONNMAN_IPCONFIG_METHOD_AUTO) {
+		struct connman_service *service =
+			connman_service_lookup_from_network(dhcp->network);
+
+		if (service)
+			__connman_service_notify_ipv4_configuration(service);
+	}
+
 	if (ip_change) {
 		__connman_ipconfig_set_local(dhcp->ipconfig, address);
 		__connman_ipconfig_set_prefixlen(dhcp->ipconfig, prefixlen);
@@ -461,11 +513,12 @@ static void lease_available_cb(GDHCPClient *dhcp_client, gpointer user_data)
 	}
 
 	if (!apply_lease_available_on_network(dhcp_client, dhcp))
-		return;
+		goto done;
 
 	if (ip_change)
 		dhcp_valid(dhcp);
 
+done:
 	g_free(address);
 	g_free(netmask);
 	g_free(gateway);
@@ -474,6 +527,7 @@ static void lease_available_cb(GDHCPClient *dhcp_client, gpointer user_data)
 static void ipv4ll_available_cb(GDHCPClient *ipv4ll_client, gpointer user_data)
 {
 	struct connman_dhcp *dhcp = user_data;
+	enum connman_ipconfig_method old_method;
 	char *address, *netmask;
 	unsigned char prefixlen;
 
@@ -484,8 +538,25 @@ static void ipv4ll_available_cb(GDHCPClient *ipv4ll_client, gpointer user_data)
 
 	prefixlen = connman_ipaddress_calc_netmask_len(netmask);
 
+	old_method = __connman_ipconfig_get_method(dhcp->ipconfig);
 	__connman_ipconfig_set_method(dhcp->ipconfig,
-						CONNMAN_IPCONFIG_METHOD_DHCP);
+						CONNMAN_IPCONFIG_METHOD_AUTO);
+
+	/*
+	 * Notify IPv4.Configuration's method is AUTO now.
+	 *
+	 * This is the case DHCP failed thus ConnMan used IPv4LL to get an
+	 * address. Set IPv4.Configuration method to AUTO allows user to
+	 * ask for a DHCP address by setting the method again to DHCP.
+	 */
+	if (old_method == CONNMAN_IPCONFIG_METHOD_DHCP) {
+		struct connman_service *service =
+			connman_service_lookup_from_network(dhcp->network);
+
+		if (service)
+			__connman_service_notify_ipv4_configuration(service);
+	}
+
 	__connman_ipconfig_set_local(dhcp->ipconfig, address);
 	__connman_ipconfig_set_prefixlen(dhcp->ipconfig, prefixlen);
 	__connman_ipconfig_set_gateway(dhcp->ipconfig, NULL);
@@ -501,6 +572,7 @@ static int dhcp_initialize(struct connman_dhcp *dhcp)
 	GDHCPClient *dhcp_client;
 	GDHCPClientError error;
 	int index;
+	const char *vendor_class_id;
 
 	DBG("dhcp %p", dhcp);
 
@@ -538,10 +610,16 @@ static int dhcp_initialize(struct connman_dhcp *dhcp)
 		g_dhcp_client_set_request(dhcp_client, G_DHCP_DOMAIN_NAME);
 		g_dhcp_client_set_request(dhcp_client, G_DHCP_NTP_SERVER);
 		g_dhcp_client_set_request(dhcp_client, 252);
+		g_dhcp_client_set_request(dhcp_client, G_DHCP_MTU);
 	}
 
-	g_dhcp_client_set_request(dhcp_client, G_DHCP_SUBNET);
 	g_dhcp_client_set_request(dhcp_client, G_DHCP_ROUTER);
+	g_dhcp_client_set_request(dhcp_client, G_DHCP_SUBNET);
+
+	vendor_class_id = connman_option_get_string("VendorClassID");
+	if (vendor_class_id)
+		g_dhcp_client_set_send(dhcp_client, G_DHCP_VENDOR_CLASS_ID,
+					vendor_class_id);
 
 	g_dhcp_client_register_event(dhcp_client,
 			G_DHCP_CLIENT_EVENT_LEASE_AVAILABLE,

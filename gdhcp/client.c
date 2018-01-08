@@ -827,16 +827,19 @@ int g_dhcpv6_client_get_timeouts(GDHCPClient *dhcp_client,
 		return -EINVAL;
 
 	if (T1)
-		*T1 = dhcp_client->T1;
+		*T1 = (dhcp_client->expire == 0xffffffff) ? 0xffffffff:
+			dhcp_client->T1;
 
 	if (T2)
-		*T2 = dhcp_client->T2;
+		*T2 = (dhcp_client->expire == 0xffffffff) ? 0xffffffff:
+			dhcp_client->T2;
 
 	if (started)
 		*started = dhcp_client->last_request;
 
 	if (expire)
-		*expire = dhcp_client->last_request + dhcp_client->expire;
+		*expire = (dhcp_client->expire == 0xffffffff) ? 0xffffffff:
+			dhcp_client->last_request + dhcp_client->expire;
 
 	return 0;
 }
@@ -1266,7 +1269,7 @@ static int dhcp_l2_socket(int ifindex)
 		.filter = (struct sock_filter *) filter_instr,
 	};
 
-	fd = socket(PF_PACKET, SOCK_DGRAM | SOCK_CLOEXEC, htons(ETH_P_IP));
+	fd = socket(PF_PACKET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
 	if (fd < 0)
 		return -errno;
 
@@ -1625,8 +1628,7 @@ static uint32_t get_lease(struct dhcp_packet *packet)
 		return 3600;
 
 	lease_seconds = get_be32(option);
-	/* paranoia: must not be prone to overflows */
-	lease_seconds &= 0x0fffffff;
+
 	if (lease_seconds < 10)
 		lease_seconds = 10;
 
@@ -1674,8 +1676,10 @@ static gboolean continue_rebound(gpointer user_data)
 	switch_listening_mode(dhcp_client, L2);
 	send_request(dhcp_client);
 
-	if (dhcp_client->t2_timeout> 0)
+	if (dhcp_client->t2_timeout> 0) {
 		g_source_remove(dhcp_client->t2_timeout);
+		dhcp_client->t2_timeout = 0;
+	}
 
 	/*recalculate remaining rebind time*/
 	dhcp_client->T2 >>= 1;
@@ -1722,6 +1726,8 @@ static gboolean continue_renew (gpointer user_data)
 
 	if (dhcp_client->t1_timeout > 0)
 		g_source_remove(dhcp_client->t1_timeout);
+
+	dhcp_client->t1_timeout = 0;
 
 	dhcp_client->T1 >>= 1;
 
@@ -2285,6 +2291,8 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 		if (dhcp_client->type == G_DHCP_IPV6) {
 			re = dhcpv6_recv_l3_packet(&packet6, buf, sizeof(buf),
 						dhcp_client->listener_sockfd);
+			if (re < 0)
+			    return TRUE;
 			pkt_len = re;
 			pkt = packet6;
 			xid = packet6->transaction_id[0] << 16 |
@@ -2346,10 +2354,6 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 		if (!message_type)
 			return TRUE;
 	}
-
-	if (!message_type && !client_id)
-		/* No message type / client id option, ignore package */
-		return TRUE;
 
 	debug(dhcp_client, "received DHCP packet xid 0x%04x "
 		"(current state %d)", ntohl(xid), dhcp_client->state);
@@ -2680,6 +2684,7 @@ static gboolean ipv4ll_announce_timeout(gpointer dhcp_data)
 		dhcp_client->ipv4ll_available_cb(dhcp_client,
 					dhcp_client->ipv4ll_available_data);
 	dhcp_client->conflicts = 0;
+	dhcp_client->timeout = 0;
 
 	return FALSE;
 }
@@ -2711,6 +2716,8 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 	int re;
 	uint32_t addr;
 	uint64_t rand;
+
+	remove_timeouts(dhcp_client);
 
 	if (dhcp_client->type == G_DHCP_IPV6) {
 		if (dhcp_client->information_req_cb) {
@@ -2828,9 +2835,10 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 		addr = 0;
 	} else {
 		addr = ntohl(inet_addr(last_address));
-		if (addr == 0xFFFFFFFF) {
+		if (addr == 0xFFFFFFFF || ((addr & LINKLOCAL_ADDR) ==
+					LINKLOCAL_ADDR)) {
 			addr = 0;
-		} else {
+		} else if (dhcp_client->last_address != last_address) {
 			g_free(dhcp_client->last_address);
 			dhcp_client->last_address = g_strdup(last_address);
 		}
@@ -3109,13 +3117,14 @@ GDHCPClientError g_dhcp_client_set_id(GDHCPClient *dhcp_client)
 	return G_DHCP_CLIENT_ERROR_NONE;
 }
 
-/* Now only support send hostname */
+/* Now only support send hostname and vendor class ID */
 GDHCPClientError g_dhcp_client_set_send(GDHCPClient *dhcp_client,
 		unsigned char option_code, const char *option_value)
 {
 	uint8_t *binary_option;
 
-	if (option_code == G_DHCP_HOST_NAME && option_value) {
+	if ((option_code == G_DHCP_HOST_NAME ||
+		option_code == G_DHCP_VENDOR_CLASS_ID) && option_value) {
 		binary_option = alloc_dhcp_string_option(option_code,
 							option_value);
 		if (!binary_option)

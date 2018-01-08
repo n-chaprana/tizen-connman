@@ -25,7 +25,10 @@
 #endif
 
 #include <errno.h>
-#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "connman.h"
 
@@ -42,46 +45,52 @@ struct connman_nat {
 
 static int enable_ip_forward(bool enable)
 {
-	FILE *f;
+	static char value = 0;
+	int f, err = 0;
 
-	f = fopen("/proc/sys/net/ipv4/ip_forward", "r+");
-	if (!f)
+	if ((f = open("/proc/sys/net/ipv4/ip_forward", O_CLOEXEC | O_RDWR)) < 0)
 		return -errno;
 
-	if (enable)
-		fprintf(f, "1");
-	else
-		fprintf(f, "0");
+	if (!value) {
+		if (read(f, &value, sizeof(value)) < 0)
+			value = 0;
 
-	fclose(f);
+		if (lseek(f, 0, SEEK_SET) < 0)
+			return -errno;
+	}
 
-	return 0;
+	if (enable) {
+		char allow = '1';
+
+		if (write (f, &allow, sizeof(allow)) < 0)
+			err = -errno;
+	} else {
+		char deny = '0';
+
+		if (value)
+			deny = value;
+
+		if (write(f, &deny, sizeof(deny)) < 0)
+			err = -errno;
+
+		value = 0;
+	}
+
+	close(f);
+
+	return err;
 }
 
 static int enable_nat(struct connman_nat *nat)
 {
-	char *cmd;
-	int err;
-
 	g_free(nat->interface);
 	nat->interface = g_strdup(default_interface);
 
 	if (!nat->interface)
 		return 0;
 
-	/* Enable masquerading */
-	cmd = g_strdup_printf("-s %s/%d -o %s -j MASQUERADE",
-					nat->address,
-					nat->prefixlen,
-					nat->interface);
-
-	err = __connman_firewall_add_rule(nat->fw, "nat",
-				"POSTROUTING", cmd);
-	g_free(cmd);
-	if (err < 0)
-		return err;
-
-	return __connman_firewall_enable(nat->fw);
+	return __connman_firewall_enable_nat(nat->fw, nat->address,
+					nat->prefixlen,	nat->interface);
 }
 
 static void disable_nat(struct connman_nat *nat)
@@ -89,8 +98,7 @@ static void disable_nat(struct connman_nat *nat)
 	if (!nat->interface)
 		return;
 
-	/* Disable masquerading */
-	__connman_firewall_disable(nat->fw);
+	__connman_firewall_disable_nat(nat->fw);
 }
 
 int __connman_nat_enable(const char *name, const char *address,
