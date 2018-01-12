@@ -5232,11 +5232,13 @@ static void decryption_request_reply(DBusPendingCall *call,
 	if (dbus_set_error_from_message(&error, reply)) {
 		SUPPLICANT_DBG("decryption_request_reply() %s %s", error.name, error.message);
 		dbus_error_free(&error);
+		ret = -EINVAL;
 		goto done;
 	}
 
 	if (dbus_message_iter_init(reply, &args) == FALSE) {
 		SUPPLICANT_DBG("dbus_message_iter_init() failed");
+		ret = -EINVAL;
 		goto done;
 	}
 
@@ -5251,6 +5253,7 @@ static void decryption_request_reply(DBusPendingCall *call,
 		interface_add_network_result, data,
 		data->interface);
 
+done:
 	if (ret < 0) {
 		SUPPLICANT_DBG("AddNetwork failed %d", ret);
 		callback_assoc_failed(decrypt_request_data.data->user_data);
@@ -5259,7 +5262,6 @@ static void decryption_request_reply(DBusPendingCall *call,
 		dbus_free(data);
 	}
 
-done:
 	dbus_message_unref(reply);
 	dbus_pending_call_unref(call);
 
