@@ -3248,14 +3248,25 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		connman_dbus_dict_append_basic(dict, "Frequency",
 				DBUS_TYPE_UINT16, &frequency);
 	}
-	const void *wifi_vsie;
+
+	unsigned char *wifi_vsie;
 	unsigned int wifi_vsie_len;
-	wifi_vsie = connman_network_get_blob(service->network, "WiFi.Vsie", &wifi_vsie_len);
-	if(wifi_vsie_len > 0) {
-		DBG("ConnMan, service->path=%s vsie length=%d", service->path, wifi_vsie_len);
+	GSList *vsie_list = NULL;
+
+	if (service->network)
+		vsie_list = (GSList *)connman_network_get_vsie_list(service->network);
+
+	if (vsie_list) {
+		DBG("ConnMan, service->path=%s No.of elements in list: %d", service->path, g_slist_length(vsie_list));
+		GSList *list;
+		for (list = vsie_list; list; list = list->next) {
+			wifi_vsie = (unsigned char *)list->data;
+			wifi_vsie_len = wifi_vsie[1] + 2;
+
+			connman_dbus_dict_append_fixed_array(dict, "Vsie", DBUS_TYPE_BYTE,
+					&wifi_vsie, wifi_vsie_len);
+		}
 	}
-	connman_dbus_dict_append_fixed_array(dict, "Vsie", DBUS_TYPE_BYTE,
-			&wifi_vsie, wifi_vsie_len);
 #endif
 
 	str = __connman_service_type2string(service->type);

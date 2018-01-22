@@ -109,8 +109,7 @@ struct connman_network {
 		bool rsn_mode;
 		int disconnect_reason;
 		int assoc_status_code;
-		void *wifi_vsie;
-		unsigned int wifi_vsie_len;
+		GSList *vsie_list;
 #endif
 	} wifi;
 
@@ -971,7 +970,7 @@ static void network_destruct(struct connman_network *network)
 	g_free(network->wifi.phase2_auth);
 	g_free(network->wifi.pin_wps);
 #if defined TIZEN_EXT
-	g_free(network->wifi.wifi_vsie);
+	g_slist_free_full(network->wifi.vsie_list, g_free);
 #endif
 	g_free(network->path);
 	g_free(network->group);
@@ -2395,6 +2394,31 @@ bool connman_network_get_bool(struct connman_network *network,
 	return false;
 }
 
+#if defined TIZEN_EXT
+/**
+ * connman_network_set_vsie_list:
+ * @network: network structure
+ * @vsie_list: GSList pointer
+ *
+ * Set vendor specific list pointer
+ */
+void connman_network_set_vsie_list(struct connman_network *network, GSList *vsie_list)
+{
+	network->wifi.vsie_list = vsie_list;
+}
+
+/**
+ * connman_network_get_vsie_list:
+ * @network: network structure
+ *
+ * Get vendor specific list pointer
+ */
+void *connman_network_get_vsie_list(struct connman_network *network)
+{
+	return network->wifi.vsie_list;
+}
+#endif
+
 /**
  * connman_network_set_blob:
  * @network: network structure
@@ -2419,16 +2443,6 @@ int connman_network_set_blob(struct connman_network *network,
 			network->wifi.ssid_len = size;
 		} else
 			network->wifi.ssid_len = 0;
-#if defined TIZEN_EXT
-	} else if (g_str_equal(key, "WiFi.Vsie")){
-		g_free(network->wifi.wifi_vsie);
-		network->wifi.wifi_vsie = g_try_malloc(size);
-		if (network->wifi.wifi_vsie) {
-			memcpy(network->wifi.wifi_vsie, data, size);
-			network->wifi.wifi_vsie_len = size;
-		} else
-			network->wifi.wifi_vsie_len = 0;
-#endif
 	} else {
 		return -EINVAL;
 	}
@@ -2456,14 +2470,6 @@ const void *connman_network_get_blob(struct connman_network *network,
 			*size = network->wifi.ssid_len;
 		return network->wifi.ssid;
 	}
-
-#if defined TIZEN_EXT
-	if (g_str_equal(key, "WiFi.Vsie")) {
-		if (size)
-			*size = network->wifi.wifi_vsie_len;
-		return network->wifi.wifi_vsie;
-	}
-#endif
 
 	return NULL;
 }
