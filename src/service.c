@@ -4096,6 +4096,7 @@ int __connman_service_set_passphrase(struct connman_service *service,
 	/* The encrypted passphrase is used here
 	 * and validation is done by net-config before being encrypted.
 	 */
+	err = 0;
 	if (service->security != CONNMAN_SERVICE_SECURITY_PSK &&
 			service->security != CONNMAN_SERVICE_SECURITY_RSN &&
 			service->security != CONNMAN_SERVICE_SECURITY_WEP)
