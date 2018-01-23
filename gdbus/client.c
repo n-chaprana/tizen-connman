@@ -857,6 +857,21 @@ gboolean g_dbus_proxy_method_call(GDBusProxy *proxy, const char *method,
 	if (client == NULL)
 		return FALSE;
 
+	msg = dbus_message_new_method_call(client->service_name,
+				proxy->obj_path, proxy->interface, method);
+	if (msg == NULL)
+		return FALSE;
+
+	if (setup) {
+		DBusMessageIter iter;
+
+		dbus_message_iter_init_append(msg, &iter);
+		setup(&iter, user_data);
+	}
+
+	if (!function)
+		return g_dbus_send_message(client->dbus_conn, msg);
+
 	data = g_try_new0(struct method_call_data, 1);
 	if (data == NULL)
 		return FALSE;
@@ -865,19 +880,6 @@ gboolean g_dbus_proxy_method_call(GDBusProxy *proxy, const char *method,
 	data->user_data = user_data;
 	data->destroy = destroy;
 
-	msg = dbus_message_new_method_call(client->service_name,
-				proxy->obj_path, proxy->interface, method);
-	if (msg == NULL) {
-		g_free(data);
-		return FALSE;
-	}
-
-	if (setup) {
-		DBusMessageIter iter;
-
-		dbus_message_iter_init_append(msg, &iter);
-		setup(&iter, data->user_data);
-	}
 
 	if (g_dbus_send_message_with_reply(client->dbus_conn, msg,
 					&call, METHOD_CALL_TIMEOUT) == FALSE) {
@@ -1077,10 +1079,6 @@ static void parse_managed_objects(GDBusClient *client, DBusMessage *msg)
 
 		dbus_message_iter_next(&dict);
 	}
-#if !defined TIZEN_EXT
-	if (client->ready)
-		client->ready(client, client->ready_data);
-#endif
 }
 
 static void get_managed_objects_reply(DBusPendingCall *call, void *user_data)
@@ -1101,6 +1099,11 @@ static void get_managed_objects_reply(DBusPendingCall *call, void *user_data)
 	parse_managed_objects(client, reply);
 
 done:
+#if !defined TIZEN_EXT
+	if (client->ready)
+		client->ready(client, client->ready_data);
+#endif
+
 	dbus_message_unref(reply);
 
 	dbus_pending_call_unref(client->get_objects_call);

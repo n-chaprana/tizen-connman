@@ -59,6 +59,8 @@ static char *default_blacklist[] = {
 	"vboxnet",
 	"virbr",
 	"ifb",
+	"ve-",
+	"vb-",
 	NULL
 };
 
@@ -67,6 +69,7 @@ static struct {
 	char **pref_timeservers;
 	unsigned int *auto_connect;
 	unsigned int *preferred_techs;
+	unsigned int *always_connected_techs;
 	char **fallback_nameservers;
 	unsigned int timeout_inputreq;
 	unsigned int timeout_browserlaunch;
@@ -76,6 +79,8 @@ static struct {
 	char **tethering_technologies;
 	bool persistent_tethering_mode;
 	bool enable_6to4;
+	char *vendor_class_id;
+	bool enable_online_check;
 #if defined TIZEN_EXT
 	char **cellular_interfaces;
 	bool tizen_tv_extension;
@@ -85,6 +90,7 @@ static struct {
 	.pref_timeservers = NULL,
 	.auto_connect = NULL,
 	.preferred_techs = NULL,
+	.always_connected_techs = NULL,
 	.fallback_nameservers = NULL,
 	.timeout_inputreq = DEFAULT_INPUT_REQUEST_TIMEOUT,
 	.timeout_browserlaunch = DEFAULT_BROWSER_LAUNCH_TIMEOUT,
@@ -94,6 +100,8 @@ static struct {
 	.tethering_technologies = NULL,
 	.persistent_tethering_mode = false,
 	.enable_6to4 = false,
+	.vendor_class_id = NULL,
+	.enable_online_check = true,
 #if defined TIZEN_EXT
 	.cellular_interfaces = NULL,
 	.tizen_tv_extension = false,
@@ -103,6 +111,7 @@ static struct {
 #define CONF_BG_SCAN                    "BackgroundScanning"
 #define CONF_PREF_TIMESERVERS           "FallbackTimeservers"
 #define CONF_AUTO_CONNECT               "DefaultAutoConnectTechnologies"
+#define CONF_ALWAYS_CONNECTED_TECHS     "AlwaysConnectedTechnologies"
 #define CONF_PREFERRED_TECHS            "PreferredTechnologies"
 #define CONF_FALLBACK_NAMESERVERS       "FallbackNameservers"
 #define CONF_TIMEOUT_INPUTREQ           "InputRequestTimeout"
@@ -113,6 +122,8 @@ static struct {
 #define CONF_TETHERING_TECHNOLOGIES      "TetheringTechnologies"
 #define CONF_PERSISTENT_TETHERING_MODE  "PersistentTetheringMode"
 #define CONF_ENABLE_6TO4                "Enable6to4"
+#define CONF_VENDOR_CLASS_ID            "VendorClassID"
+#define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
 #if defined TIZEN_EXT
 #define CONF_CELLULAR_INTERFACE         "NetworkCellularInterfaceList"
 #define CONF_TIZEN_TV_EXT		"TizenTVExtension"
@@ -122,6 +133,7 @@ static const char *supported_options[] = {
 	CONF_BG_SCAN,
 	CONF_PREF_TIMESERVERS,
 	CONF_AUTO_CONNECT,
+	CONF_ALWAYS_CONNECTED_TECHS,
 	CONF_PREFERRED_TECHS,
 	CONF_FALLBACK_NAMESERVERS,
 	CONF_TIMEOUT_INPUTREQ,
@@ -132,6 +144,7 @@ static const char *supported_options[] = {
 	CONF_TETHERING_TECHNOLOGIES,
 	CONF_PERSISTENT_TETHERING_MODE,
 	CONF_ENABLE_6TO4,
+	CONF_ENABLE_ONLINE_CHECK,
 #if defined TIZEN_EXT
 	CONF_CELLULAR_INTERFACE,
 	CONF_TIZEN_TV_EXT,
@@ -298,6 +311,7 @@ static void parse_config(GKeyFile *config)
 	char **interfaces;
 	char **str_list;
 	char **tethering;
+        char *vendor_class_id;
 	gsize len;
 	int timeout;
 
@@ -344,6 +358,17 @@ static void parse_config(GKeyFile *config)
 
 	if (!error)
 		connman_settings.preferred_techs =
+			parse_service_types(str_list, len);
+
+	g_strfreev(str_list);
+
+	g_clear_error(&error);
+
+	str_list = __connman_config_get_string_list(config, "General",
+			CONF_ALWAYS_CONNECTED_TECHS, &len, &error);
+
+	if (!error)
+		connman_settings.always_connected_techs =
 			parse_service_types(str_list, len);
 
 	g_strfreev(str_list);
@@ -421,6 +446,23 @@ static void parse_config(GKeyFile *config)
 					CONF_ENABLE_6TO4, &error);
 	if (!error)
 		connman_settings.enable_6to4 = boolean;
+
+	g_clear_error(&error);
+
+	vendor_class_id = __connman_config_get_string(config, "General",
+					CONF_VENDOR_CLASS_ID, &error);
+	if (!error)
+		connman_settings.vendor_class_id = vendor_class_id;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
+					CONF_ENABLE_ONLINE_CHECK, &error);
+	if (!error) {
+		connman_settings.enable_online_check = boolean;
+		if (!boolean)
+			connman_info("Online check disabled by main config.");
+	}
 
 	g_clear_error(&error);
 
@@ -539,10 +581,34 @@ static gboolean option_version = FALSE;
 static bool parse_debug(const char *key, const char *value,
 					gpointer user_data, GError **error)
 {
-	if (value)
-		option_debug = g_strdup(value);
-	else
+	if (value) {
+		if (option_debug) {
+			char *prev = option_debug;
+
+			option_debug = g_strconcat(prev, ",", value, NULL);
+			g_free(prev);
+		} else {
+			option_debug = g_strdup(value);
+		}
+	} else {
+		g_free(option_debug);
 		option_debug = g_strdup("*");
+	}
+
+	return true;
+}
+
+static bool parse_noplugin(const char *key, const char *value,
+					gpointer user_data, GError **error)
+{
+	if (option_noplugin) {
+		char *prev = option_noplugin;
+
+		option_noplugin = g_strconcat(prev, ",", value, NULL);
+		g_free(prev);
+	} else {
+		option_noplugin = g_strdup(value);
+	}
 
 	return true;
 }
@@ -560,7 +626,7 @@ static GOptionEntry options[] = {
 			"Specify networking interface to ignore", "DEV" },
 	{ "plugin", 'p', 0, G_OPTION_ARG_STRING, &option_plugin,
 				"Specify plugins to load", "NAME,..." },
-	{ "noplugin", 'P', 0, G_OPTION_ARG_STRING, &option_noplugin,
+	{ "noplugin", 'P', 0, G_OPTION_ARG_CALLBACK, &parse_noplugin,
 				"Specify plugins not to load", "NAME,..." },
 	{ "wifi", 'W', 0, G_OPTION_ARG_STRING, &option_wifi,
 				"Specify driver for WiFi/Supplicant", "NAME" },
@@ -580,6 +646,9 @@ static GOptionEntry options[] = {
 
 const char *connman_option_get_string(const char *key)
 {
+	if (g_str_equal(key, CONF_VENDOR_CLASS_ID))
+		return connman_settings.vendor_class_id;
+
 	if (g_strcmp0(key, "wifi") == 0) {
 		if (!option_wifi)
 			return "nl80211,wext";
@@ -606,6 +675,9 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_ENABLE_6TO4))
 		return connman_settings.enable_6to4;
+
+	if (g_str_equal(key, CONF_ENABLE_ONLINE_CHECK))
+		return connman_settings.enable_online_check;
 
 	return false;
 }
@@ -639,6 +711,9 @@ unsigned int *connman_setting_get_uint_list(const char *key)
 
 	if (g_str_equal(key, CONF_PREFERRED_TECHS))
 		return connman_settings.preferred_techs;
+
+	if (g_str_equal(key, CONF_ALWAYS_CONNECTED_TECHS))
+		return connman_settings.always_connected_techs;
 
 	return NULL;
 }
@@ -737,7 +812,6 @@ int main(int argc, char *argv[])
 	__connman_device_init(option_device, option_nodevice);
 
 	__connman_ippool_init();
-	__connman_iptables_init();
 	__connman_firewall_init();
 	__connman_nat_init();
 	__connman_tethering_init();
@@ -746,7 +820,6 @@ int main(int argc, char *argv[])
 	__connman_stats_init();
 	__connman_clock_init();
 
-	__connman_resolver_init(option_dnsproxy);
 	__connman_ipconfig_init();
 	__connman_rtnl_init();
 	__connman_task_init();
@@ -758,6 +831,7 @@ int main(int argc, char *argv[])
 
 	__connman_plugin_init(option_plugin, option_noplugin);
 
+	__connman_resolver_init(option_dnsproxy);
 	__connman_rtnl_start();
 	__connman_dhcp_init();
 	__connman_dhcpv6_init();
@@ -804,7 +878,6 @@ int main(int argc, char *argv[])
 	__connman_tethering_cleanup();
 	__connman_nat_cleanup();
 	__connman_firewall_cleanup();
-	__connman_iptables_cleanup();
 	__connman_peer_service_cleanup();
 	__connman_peer_cleanup();
 	__connman_ippool_cleanup();

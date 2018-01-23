@@ -157,7 +157,12 @@ struct _GSupplicantSSID {
 	const char *eap;
 	const char *passphrase;
 	const char *identity;
+	const char *anonymous_identity;
 	const char *ca_cert_path;
+	const char *subject_match;
+	const char *altsubject_match;
+	const char *domain_suffix_match;
+	const char *domain_match;
 	const char *client_cert_path;
 	const char *private_key_path;
 	const char *private_key_passphrase;
@@ -377,7 +382,8 @@ const char *g_supplicant_network_get_eap(GSupplicantNetwork *network);
 const char *g_supplicant_network_get_identity(GSupplicantNetwork *network);
 const char *g_supplicant_network_get_phase2(GSupplicantNetwork *network);
 unsigned int g_supplicant_network_get_keymgmt(GSupplicantNetwork *network);
-void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network);
+const void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network,
+						unsigned int *wifi_vsie_len);
 #endif
 
 struct _GSupplicantCallbacks {
@@ -389,6 +395,7 @@ struct _GSupplicantCallbacks {
 	void (*p2p_support) (GSupplicantInterface *interface);
 	void (*scan_started) (GSupplicantInterface *interface);
 	void (*scan_finished) (GSupplicantInterface *interface);
+	void (*ap_create_fail) (GSupplicantInterface *interface);
 	void (*network_added) (GSupplicantNetwork *network);
 	void (*network_removed) (GSupplicantNetwork *network);
 #if defined TIZEN_EXT
@@ -396,6 +403,7 @@ struct _GSupplicantCallbacks {
 #endif
 	void (*network_changed) (GSupplicantNetwork *network,
 					const char *property);
+	void (*network_associated) (GSupplicantNetwork *network);
 #if defined TIZEN_EXT
 	void (*system_power_off) (void);
 	void (*assoc_failed) (void *user_data);
@@ -409,7 +417,7 @@ struct _GSupplicantCallbacks {
 	void (*peer_request) (GSupplicantPeer *peer);
 	void (*debug) (const char *str);
 	void (*disconnect_reasoncode)(GSupplicantInterface *interface,
-								int reasoncode);
+				int reasoncode);
 	void (*assoc_status_code)(GSupplicantInterface *interface,
 				int reasoncode);
 };

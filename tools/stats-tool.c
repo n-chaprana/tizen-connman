@@ -794,7 +794,7 @@ static void swap_and_close_files(struct stats_file *history_file,
 	munmap(history_file->addr, history_file->len);
 	munmap(temp_file->addr, temp_file->len);
 
-	TFR(close(temp_file->fd));
+	close(temp_file->fd);
 
 	unlink(history_file->name);
 
@@ -802,7 +802,7 @@ static void swap_and_close_files(struct stats_file *history_file,
 		return;
 
 	unlink(temp_file->name);
-	TFR(close(history_file->fd));
+	close(history_file->fd);
 }
 
 static void history_file_update(struct stats_file *data_file,
@@ -884,6 +884,11 @@ int main(int argc, char *argv[])
 		start_ts = time(NULL);
 	else
 		start_ts = option_start_ts;
+
+	if (option_interval == 0) {
+		printf("interval cannot be zero, using the default value\n");
+		option_interval = 3;
+	}
 
 	if (option_create > 0)
 		stats_create(data_file, option_create, option_interval,

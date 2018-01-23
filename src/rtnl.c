@@ -212,7 +212,9 @@ static void read_uevent(struct interface_data *interface)
 		} else if (strcmp(line + 8, "vlan") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
-
+		} else if (strcmp(line + 8, "bond") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
+			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
 		} else {
 			interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
 			interface->device_type = CONNMAN_DEVICE_TYPE_UNKNOWN;
@@ -551,7 +553,9 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 
 		interface = NULL;
 #endif
-	} else
+	} else if (type == ARPHRD_ETHER && interface->device_type == CONNMAN_DEVICE_TYPE_UNKNOWN)
+		read_uevent(interface);
+	else
 		interface = NULL;
 
 	for (list = rtnl_list; list; list = list->next) {
@@ -1355,7 +1359,12 @@ static void rtnl_newnduseropt(struct nlmsghdr *hdr)
 
 		if (opt->nd_opt_type == 25) { /* ND_OPT_RDNSS */
 			char buf[40];
+#if defined TIZEN_EXT
+			struct connman_service *service;
 
+			service = __connman_service_lookup_from_index(index);
+			DBG("service: %p\n",service);
+#endif
 			servers = rtnl_nd_opt_rdnss(opt, &lifetime,
 					&nr_servers);
 			for (i = 0; i < nr_servers; i++) {
@@ -1374,6 +1383,7 @@ static void rtnl_newnduseropt(struct nlmsghdr *hdr)
 				connman_resolver_append_lifetime(index,
 						NULL, buf, lifetime);
 			}
+
 		} else if (opt->nd_opt_type == 31) { /* ND_OPT_DNSSL */
 			g_free(domains);
 
@@ -1499,8 +1509,6 @@ static int process_response(guint32 seq)
 
 static void rtnl_message(void *buf, size_t len)
 {
-	DBG("buf %p len %zd", buf, len);
-
 	while (len > 0) {
 		struct nlmsghdr *hdr = buf;
 		struct nlmsgerr *err;

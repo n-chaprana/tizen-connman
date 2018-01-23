@@ -792,6 +792,9 @@ static void handle_multi_line(struct web_session *session)
 	char *str;
 	gchar *value;
 
+	if (!session->result.last_key)
+		return;
+
 	str = session->current_header->str;
 
 	if (str[0] != ' ' && str[0] != '\t')
@@ -1079,7 +1082,6 @@ static int connect_session_transport(struct web_session *session)
 			session->addr->ai_addrlen) < 0) {
 		if (errno != EINPROGRESS) {
 			debug(session->web, "connect() %s", strerror(errno));
-			close(sk);
 			return -EIO;
 		}
 	}
@@ -1360,8 +1362,7 @@ static guint do_request(GWeb *web, const char *url,
 			g_free(session->address);
 			session->address = g_strdup(host);
 		}
-		session->address_action = g_timeout_add(0, already_resolved,
-							session);
+		session->address_action = g_idle_add(already_resolved, session);
 	} else {
 		session->resolv_action = g_resolv_lookup_hostname(web->resolv,
 					host, resolv_result, session);
@@ -1480,6 +1481,9 @@ GWebParser *g_web_parser_new(const char *begin, const char *end,
 {
 	GWebParser *parser;
 
+	if (!begin || !end)
+		return NULL;
+
 	parser = g_try_new0(GWebParser, 1);
 	if (!parser)
 		return NULL;
@@ -1488,12 +1492,6 @@ GWebParser *g_web_parser_new(const char *begin, const char *end,
 
 	parser->begin_token = g_strdup(begin);
 	parser->end_token = g_strdup(end);
-
-	if (!parser->begin_token) {
-		g_free(parser);
-		return NULL;
-	}
-
 	parser->func = func;
 	parser->user_data = user_data;
 

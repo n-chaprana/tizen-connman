@@ -225,22 +225,27 @@ static void tethering_changed(struct connman_technology *technology)
 	technology_save(technology);
 }
 
-void connman_technology_tethering_notify(struct connman_technology *technology,
+int connman_technology_tethering_notify(struct connman_technology *technology,
 							bool enabled)
 {
+	int err;
+
 	DBG("technology %p enabled %u", technology, enabled);
 
 	if (technology->tethering == enabled)
-		return;
+		return -EALREADY;
+
+	if (enabled) {
+		err = __connman_tethering_set_enabled();
+		if (err < 0)
+			return err;
+	} else
+		__connman_tethering_set_disabled();
 
 	technology->tethering = enabled;
-
 	tethering_changed(technology);
 
-	if (enabled)
-		__connman_tethering_set_enabled();
-	else
-		__connman_tethering_set_disabled();
+	return 0;
 }
 
 static int set_tethering(struct connman_technology *technology,
@@ -250,11 +255,9 @@ static int set_tethering(struct connman_technology *technology,
 	int err;
 	const char *ident, *passphrase, *bridge;
 	GSList *tech_drivers;
-	bool hidden;
 
 	ident = technology->tethering_ident;
 	passphrase = technology->tethering_passphrase;
-	hidden = technology->tethering_hidden;
 
 	__sync_synchronize();
 	if (!technology->enabled)
@@ -275,15 +278,13 @@ static int set_tethering(struct connman_technology *technology,
 			continue;
 
 		err = driver->set_tethering(technology, ident, passphrase,
-				bridge, enabled, hidden);
+				bridge, enabled);
 
 		if (result == -EINPROGRESS)
 			continue;
 
-		if (err == -EINPROGRESS || err == 0) {
+		if (err == -EINPROGRESS || err == 0)
 			result = err;
-			continue;
-		}
 	}
 
 	return result;
@@ -459,15 +460,31 @@ bool __connman_technology_get_offlinemode(void)
 static void connman_technology_save_offlinemode(void)
 {
 	GKeyFile *keyfile;
+	GError *error = NULL;
+	bool offlinemode;
 
 	keyfile = __connman_storage_load_global();
-	if (!keyfile)
-		keyfile = g_key_file_new();
 
-	g_key_file_set_boolean(keyfile, "global",
+	if (!keyfile) {
+		keyfile = g_key_file_new();
+		g_key_file_set_boolean(keyfile, "global",
 					"OfflineMode", global_offlinemode);
 
-	__connman_storage_save_global(keyfile);
+		__connman_storage_save_global(keyfile);
+	}
+	else {
+		offlinemode = g_key_file_get_boolean(keyfile, "global",
+						"OfflineMode", &error);
+
+		if (error || offlinemode != global_offlinemode) {
+			g_key_file_set_boolean(keyfile, "global",
+					"OfflineMode", global_offlinemode);
+			if (error)
+				g_clear_error(&error);
+
+			__connman_storage_save_global(keyfile);
+		}
+	}
 
 	g_key_file_free(keyfile);
 
@@ -865,7 +882,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 	struct connman_technology *technology = data;
 	DBusMessageIter iter, value;
 	const char *name;
-	int type;
+	int type, err;
 
 	DBG("conn %p", conn);
 
@@ -962,30 +979,21 @@ static DBusMessage *set_property(DBusConnection *conn,
 		if (technology->type != CONNMAN_SERVICE_TYPE_WIFI)
 			return __connman_error_not_supported(msg);
 
-		if (strlen(str) < 8 || strlen(str) > 63) {
-			if (g_str_equal(str, "")) {
-				technology->tethering_passphrase = NULL;
+		err = __connman_service_check_passphrase(CONNMAN_SERVICE_SECURITY_PSK,
+							str);
+		if (err < 0)
+			return __connman_error_passphrase_required(msg);
 
-				connman_dbus_property_changed_basic(technology->path,
-						CONNMAN_TECHNOLOGY_INTERFACE,
-						"TetheringPassphrase",
-						DBUS_TYPE_STRING,
-						&str);
-			}
-			else
-				return __connman_error_passphrase_required(msg);
-		} else {
-			if (g_strcmp0(technology->tethering_passphrase, str) != 0) {
-				g_free(technology->tethering_passphrase);
-				technology->tethering_passphrase = g_strdup(str);
-				technology_save(technology);
+		if (g_strcmp0(technology->tethering_passphrase, str) != 0) {
+			g_free(technology->tethering_passphrase);
+			technology->tethering_passphrase = g_strdup(str);
+			technology_save(technology);
 
-				connman_dbus_property_changed_basic(technology->path,
-						CONNMAN_TECHNOLOGY_INTERFACE,
-						"TetheringPassphrase",
-						DBUS_TYPE_STRING,
-						&technology->tethering_passphrase);
-			}
+			connman_dbus_property_changed_basic(technology->path,
+					CONNMAN_TECHNOLOGY_INTERFACE,
+					"TetheringPassphrase",
+					DBUS_TYPE_STRING,
+					&technology->tethering_passphrase);
 		}
 	} else if (g_str_equal(name, "Hidden")) {
 		dbus_bool_t hidden;
@@ -1177,6 +1185,10 @@ static DBusMessage *scan(DBusConnection *conn, DBusMessage *msg, void *data)
 
 	DBG("technology %p request from %s", technology,
 			dbus_message_get_sender(msg));
+
+	if (technology->type == CONNMAN_SERVICE_TYPE_P2P &&
+				!technology->enabled)
+		return __connman_error_permission_denied(msg);
 
 	dbus_message_ref(msg);
 #if !defined TIZEN_EXT
@@ -1422,6 +1434,13 @@ static void technology_put(struct connman_technology *technology)
 	technology_dbus_unregister(technology);
 
 	g_slist_free(technology->device_list);
+
+    if (technology->pending_reply) {
+        dbus_message_unref(technology->pending_reply);
+        technology->pending_reply = NULL;
+        g_source_remove(technology->pending_timeout);
+        technology->pending_timeout = 0;
+    }
 
 	g_free(technology->path);
 	g_free(technology->regdom);

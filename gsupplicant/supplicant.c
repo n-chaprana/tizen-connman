@@ -143,11 +143,19 @@ static GHashTable *bss_mapping;
 static GHashTable *peer_mapping;
 static GHashTable *group_mapping;
 static GHashTable *pending_peer_connection;
+static GHashTable *config_file_table;
 
 struct _GSupplicantWpsCredentials {
 	unsigned char ssid[32];
 	unsigned int ssid_len;
 	char *key;
+};
+
+struct added_network_information {
+	char * ssid;
+	GSupplicantSecurity security;
+	char * passphrase;
+	char * private_passphrase;
 };
 
 struct _GSupplicantInterface {
@@ -163,6 +171,7 @@ struct _GSupplicantInterface {
 	unsigned int max_scan_ssids;
 	bool p2p_support;
 	bool p2p_finding;
+	bool ap_create_in_progress;
 	dbus_bool_t ready;
 	GSupplicantState state;
 	dbus_bool_t scanning;
@@ -177,10 +186,11 @@ struct _GSupplicantInterface {
 	GHashTable *network_table;
 	GHashTable *peer_table;
 	GHashTable *group_table;
-	GHashTable *net_mapping;
 	GHashTable *bss_mapping;
 	void *data;
 	const char *pending_peer_path;
+	GSupplicantNetwork *current_network;
+	struct added_network_information network_info;
 #if defined TIZEN_EXT
 	int disconnect_reason;
 #endif
@@ -211,7 +221,8 @@ struct g_supplicant_bss {
 #if defined TIZEN_EXT
 	dbus_bool_t ft_psk;
 	dbus_bool_t ft_ieee8021x;
-	GSList *vsie_list;
+	char *wifi_vsie;
+	unsigned int wifi_vsie_len;
 	dbus_bool_t hs20;
 #endif
 	unsigned int wps_capabilities;
@@ -239,7 +250,8 @@ struct _GSupplicantNetwork {
 	char *identity;
 	char *phase2;
 	unsigned int keymgmt;
-	GSList *vsie_list;
+	char *wifi_vsie;
+	unsigned int wifi_vsie_len;
 #endif
 };
 
@@ -266,12 +278,53 @@ struct _GSupplicantGroup {
 	GSList *members;
 };
 
+struct interface_data {
+	GSupplicantInterface *interface;
+	char *path; /* Interface path cannot be taken from interface (above) as
+		     * it might have been freed already.
+		     */
+	GSupplicantInterfaceCallback callback;
+	void *user_data;
+	bool network_remove_in_progress;
+	GSupplicantSSID *ssid;
+};
+
+struct interface_create_data {
+	char *ifname;
+	char *driver;
+	char *bridge;
+	GSupplicantInterface *interface;
+	GSupplicantInterfaceCallback callback;
+	void *user_data;
+};
+
+struct interface_connect_data {
+	GSupplicantInterface *interface;
+	char *path;
+	GSupplicantInterfaceCallback callback;
+	void *user_data;
+	union {
+		GSupplicantSSID *ssid;
+		GSupplicantPeerParams *peer;
+	};
+};
+
+struct interface_scan_data {
+	GSupplicantInterface *interface;
+	char *path;
+	GSupplicantInterfaceCallback callback;
+	GSupplicantScanParams *scan_params;
+	void *user_data;
+};
+
+static int network_remove(struct interface_data *data);
+
 static inline void debug(const char *format, ...)
 {
 	char str[256];
 	va_list ap;
 
-	if (!callbacks_pointer->debug)
+	if (!callbacks_pointer || !callbacks_pointer->debug)
 		return;
 
 	va_start(ap, format);
@@ -369,6 +422,70 @@ static GSupplicantState string2state(const char *state)
 	return G_SUPPLICANT_STATE_UNKNOWN;
 }
 
+static bool compare_network_parameters(GSupplicantInterface *interface,
+				GSupplicantSSID *ssid)
+{
+	if (memcmp(interface->network_info.ssid, ssid->ssid, ssid->ssid_len))
+		return FALSE;
+
+	if (interface->network_info.security != ssid->security)
+		return FALSE;
+
+	if (interface->network_info.passphrase &&
+			g_strcmp0(interface->network_info.passphrase,
+				ssid->passphrase) != 0) {
+		return FALSE;
+	}
+
+	if (interface->network_info.private_passphrase &&
+			g_strcmp0(interface->network_info.private_passphrase,
+				ssid->private_key_passphrase) != 0) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static void remove_network_information(GSupplicantInterface * interface)
+{
+	g_free(interface->network_info.ssid);
+	g_free(interface->network_info.passphrase);
+	g_free(interface->network_info.private_passphrase);
+	interface->network_info.ssid = NULL;
+	interface->network_info.passphrase = NULL;
+	interface->network_info.private_passphrase = NULL;
+}
+
+static int store_network_information(GSupplicantInterface * interface,
+				GSupplicantSSID *ssid)
+{
+	interface->network_info.ssid = g_malloc(ssid->ssid_len + 1);
+	if (interface->network_info.ssid != NULL) {
+		memcpy(interface->network_info.ssid, ssid->ssid,
+			ssid->ssid_len);
+		interface->network_info.ssid[ssid->ssid_len] = '\0';
+	} else {
+		return -ENOMEM;
+	}
+
+	interface->network_info.security = ssid->security;
+
+	if ((ssid->security == G_SUPPLICANT_SECURITY_WEP ||
+		ssid->security == G_SUPPLICANT_SECURITY_PSK ||
+		ssid->security == G_SUPPLICANT_SECURITY_NONE) &&
+		ssid->passphrase) {
+		interface->network_info.passphrase = g_strdup(ssid->passphrase);
+	}
+
+	if (ssid->security == G_SUPPLICANT_SECURITY_IEEE8021X &&
+			ssid->private_key_passphrase) {
+		interface->network_info.private_passphrase =
+			g_strdup(ssid->private_key_passphrase);
+	}
+
+	return 0;
+}
+
 static void callback_system_ready(void)
 {
 	if (system_ready)
@@ -457,6 +574,17 @@ static void callback_scan_started(GSupplicantInterface *interface)
 	callbacks_pointer->scan_started(interface);
 }
 
+static void callback_ap_create_fail(GSupplicantInterface *interface)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->ap_create_fail)
+		return;
+
+	callbacks_pointer->ap_create_fail(interface);
+}
+
 static void callback_scan_finished(GSupplicantInterface *interface)
 {
 	if (!callbacks_pointer)
@@ -524,6 +652,17 @@ static void callback_network_changed(GSupplicantNetwork *network,
 		return;
 
 	callbacks_pointer->network_changed(network, property);
+}
+
+static void callback_network_associated(GSupplicantNetwork *network)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->network_associated)
+		return;
+
+	callbacks_pointer->network_associated(network);
 }
 
 static void callback_peer_found(GSupplicantPeer *peer)
@@ -616,7 +755,6 @@ static void remove_interface(gpointer data)
 	GSupplicantInterface *interface = data;
 
 	g_hash_table_destroy(interface->bss_mapping);
-	g_hash_table_destroy(interface->net_mapping);
 	g_hash_table_destroy(interface->network_table);
 	g_hash_table_destroy(interface->peer_table);
 	g_hash_table_destroy(interface->group_table);
@@ -647,6 +785,7 @@ static void remove_interface(gpointer data)
 	g_free(interface->ifname);
 	g_free(interface->driver);
 	g_free(interface->bridge);
+	remove_network_information(interface);
 	g_free(interface);
 }
 
@@ -669,7 +808,7 @@ static void remove_network(gpointer data)
 	g_free(network->phase2);
 #endif
 #if defined TIZEN_EXT
-	g_slist_free_full(network->vsie_list, g_free);
+	g_free(network->wifi_vsie);
 #endif
 
 	g_free(network);
@@ -681,7 +820,7 @@ static void remove_bss(gpointer data)
 
 	g_free(bss->path);
 #if defined TIZEN_EXT
-	g_slist_free_full(bss->vsie_list, g_free);
+	g_free(bss->wifi_vsie);
 #endif
 	g_free(bss);
 }
@@ -704,6 +843,7 @@ static void remove_peer(gpointer data)
 	g_free(peer->path);
 	g_free(peer->name);
 	g_free(peer->identifier);
+	g_free(peer->widi_ies);
 
 	g_free(peer);
 }
@@ -881,20 +1021,59 @@ static void interface_capability(const char *key, DBusMessageIter *iter,
 				key, dbus_message_iter_get_arg_type(iter));
 }
 
+struct set_apscan_data
+{
+	unsigned int ap_scan;
+	GSupplicantInterface *interface;
+};
+
 static void set_apscan(DBusMessageIter *iter, void *user_data)
 {
-	unsigned int ap_scan = *(unsigned int *)user_data;
+	struct set_apscan_data *data = user_data;
+	unsigned int ap_scan = data->ap_scan;
 
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_UINT32, &ap_scan);
+}
+
+static void set_apscan_complete(const char *error,
+		DBusMessageIter *iter, void *user_data)
+{
+	struct set_apscan_data *data = user_data;
+	GSupplicantInterface *interface = data->interface;
+
+	if (error) {
+		interface->ap_create_in_progress = false;
+		SUPPLICANT_DBG("Set AP scan error %s", error);
+		goto error;
+	}
+
+	interface->ap_create_in_progress = true;
+error:
+	dbus_free(data);
 }
 
 int g_supplicant_interface_set_apscan(GSupplicantInterface *interface,
 							unsigned int ap_scan)
 {
-	return supplicant_dbus_property_set(interface->path,
+	struct set_apscan_data *data;
+	int ret;
+
+	data = dbus_malloc0(sizeof(*data));
+
+	if (!data)
+		return -ENOMEM;
+
+	data->ap_scan = ap_scan;
+	data->interface = interface;
+
+	ret = supplicant_dbus_property_set(interface->path,
 			SUPPLICANT_INTERFACE ".Interface",
-				"ApScan", DBUS_TYPE_UINT32_AS_STRING,
-					set_apscan, NULL, &ap_scan, NULL);
+			"ApScan", DBUS_TYPE_UINT32_AS_STRING,
+			set_apscan, set_apscan_complete, data, NULL);
+	if (ret < 0)
+		dbus_free(data);
+
+	return ret;
 }
 
 void g_supplicant_interface_set_data(GSupplicantInterface *interface,
@@ -1379,29 +1558,16 @@ bool g_supplicant_network_get_rsn_mode(GSupplicantNetwork *network)
 		return false;
 }
 
-void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network)
+const void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network,
+						unsigned int *wifi_vsie_len)
 {
-	GSList *vsie_list = NULL;
-
-	if (!network)
+	if (!network) {
+		*wifi_vsie_len = 0;
 		return NULL;
-
-	if (g_slist_length(network->vsie_list) > 0) {
-		GSList *list = NULL;
-		unsigned char *vsie = NULL;
-		for (list = network->vsie_list; list; list = list->next) {
-			unsigned char *ie = (unsigned char *)list->data;
-			vsie = (unsigned char *)g_try_malloc0(ie[1]+2);	// tag number size(1), tag length size(1)
-
-			if (vsie) {
-				memcpy(vsie, ie, ie[1]+2);
-				vsie_list = g_slist_append(vsie_list, vsie);
-			} else
-				SUPPLICANT_DBG("Failed to allocate memory");
-		}
 	}
 
-	return vsie_list;
+	*wifi_vsie_len = network->wifi_vsie_len;
+	return network->wifi_vsie;
 }
 #endif
 
@@ -1544,10 +1710,6 @@ static void interface_network_added(DBusMessageIter *iter, void *user_data)
 	if (g_strcmp0(path, "/") == 0)
 		return;
 
-	network = g_hash_table_lookup(interface->net_mapping, path);
-	if (network)
-		return;
-
 	network = g_try_new0(GSupplicantNetwork, 1);
 	if (!network)
 		return;
@@ -1573,19 +1735,8 @@ static void interface_network_added(DBusMessageIter *iter, void *user_data)
 
 static void interface_network_removed(DBusMessageIter *iter, void *user_data)
 {
-	GSupplicantInterface *interface = user_data;
-	GSupplicantNetwork *network;
-	const char *path = NULL;
-
-	dbus_message_iter_get_basic(iter, &path);
-	if (!path)
-		return;
-
-	network = g_hash_table_lookup(interface->net_mapping, path);
-	if (!network)
-		return;
-
-	g_hash_table_remove(interface->net_mapping, path);
+	SUPPLICANT_DBG("");
+	return;
 }
 
 static char *create_name(unsigned char *ssid, int ssid_len)
@@ -1656,7 +1807,7 @@ static char *create_group(struct g_supplicant_bss *bss)
 	return g_string_free(str, FALSE);
 }
 
-static void add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
+static int add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 {
 	GSupplicantInterface *interface = bss->interface;
 	GSupplicantNetwork *network;
@@ -1666,7 +1817,7 @@ static void add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 	SUPPLICANT_DBG("New group created: %s", group);
 
 	if (!group)
-		return;
+		return -ENOMEM;
 
 	network = g_hash_table_lookup(interface->network_table, group);
 	if (network) {
@@ -1679,7 +1830,7 @@ static void add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 	network = g_try_new0(GSupplicantNetwork, 1);
 	if (!network) {
 		g_free(group);
-		return;
+		return -ENOMEM;
 	}
 
 	network->interface = interface;
@@ -1698,18 +1849,14 @@ static void add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 #if defined TIZEN_EXT
 	network->keymgmt = bss->keymgmt;
 
-	if (g_slist_length(bss->vsie_list) > 0) {
-		GSList *list = NULL;
-		unsigned char *vsie = NULL;
-		for (list = bss->vsie_list; list; list = list->next) {
-			unsigned char *ie = (unsigned char *)list->data;
-			vsie = (unsigned char *)g_try_malloc0(ie[1]+2);	// tag number size(1), tag length size(1)
-
-			if (vsie) {
-				memcpy(vsie, ie, ie[1]+2);
-				network->vsie_list = g_slist_append(network->vsie_list, vsie);
-			} else
-				SUPPLICANT_DBG("Failed to allocate memory.");
+	if (bss->wifi_vsie_len > 0) {
+		SUPPLICANT_DBG("vsie len: %d", bss->wifi_vsie_len);
+		network->wifi_vsie = (char *)g_try_malloc0(bss->wifi_vsie_len);
+		if(network->wifi_vsie) {
+			network->wifi_vsie_len = bss->wifi_vsie_len;
+			memcpy(network->wifi_vsie, bss->wifi_vsie, network->wifi_vsie_len);
+		} else {
+			SUPPLICANT_DBG("Failed to allocate memory for wifi_vsie");
 		}
 	}
 
@@ -1736,7 +1883,12 @@ done:
 		network->wps_capabilities |= bss->wps_capabilities;
 	}
 
-	if (bss->signal > network->signal) {
+	/*
+	 * Do not change best BSS if we are connected. It will be done through
+	 * CurrentBSS property in case of misalignment with wpa_s or roaming.
+	 */
+	if (network != interface->current_network &&
+				bss->signal > network->signal) {
 		network->signal = bss->signal;
 		network->best_bss = bss;
 		callback_network_changed(network, "Signal");
@@ -1746,6 +1898,8 @@ done:
 	g_hash_table_replace(network->bss_table, bss->path, bss);
 
 	g_hash_table_replace(bss_mapping, bss->path, interface);
+
+	return 0;
 }
 
 static void bss_rates(DBusMessageIter *iter, void *user_data)
@@ -1893,6 +2047,9 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 {
 	struct g_supplicant_bss *bss = user_data;
 	const unsigned char WPS_OUI[] = { 0x00, 0x50, 0xf2, 0x04 };
+#if defined TIZEN_EXT
+	const unsigned char WIFI_OUI[] = {0x00, 0x16, 0x32};
+#endif
 	unsigned char *ie, *ie_end;
 	DBusMessageIter array;
 	unsigned int value;
@@ -1924,20 +2081,16 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 	for (ie_end = ie + ie_len; ie < ie_end && ie + ie[1] + 1 <= ie_end;
 							ie += ie[1] + 2) {
 #if defined TIZEN_EXT
-		unsigned char *vsie;
-		int vsie_len = 0;
-		if(ie[0] == VENDOR_SPECIFIC_INFO && memcmp(ie+2, WPS_OUI, sizeof(WPS_OUI)) != 0) {
-			SUPPLICANT_DBG("IE: match vendor specific data");
-
-			vsie_len = ie[1]+2;	// tag number size(1), tag length size(1)
-			vsie = (unsigned char *)g_try_malloc0(vsie_len);
-
-			if (vsie) {
-				memcpy(vsie, ie, vsie_len);
-				bss->vsie_list = g_slist_append(bss->vsie_list, vsie);
-			} else
-				SUPPLICANT_DBG("Failed to allocate memory");
-			continue;
+		if((ie[0] == VENDOR_SPECIFIC_INFO) && (memcmp(ie+2, WIFI_OUI, sizeof(WIFI_OUI)) == 0)) {
+				SUPPLICANT_DBG("IE: match WIFI_OUI");
+				bss->wifi_vsie = (char *)g_try_malloc0(ie[1] + 2);   // tag number size(1), tag length size(1)
+				if (bss->wifi_vsie) {
+					bss->wifi_vsie_len = ie[1] + 2;
+					memcpy(bss->wifi_vsie, ie, bss->wifi_vsie_len);
+				} else {
+					SUPPLICANT_DBG("Failed to allocate memory for wifi_vsie");
+				}
+				continue;
 		}
 #endif
 		if (ie[0] != WMM_WPA1_WPS_INFO || ie[1] < WPS_INFO_MIN_LEN ||
@@ -2200,7 +2353,8 @@ static void interface_bss_added_with_keys(DBusMessageIter *iter,
 	supplicant_dbus_property_foreach(iter, bss_property, bss);
 
 	bss_compute_security(bss);
-	add_or_replace_bss_to_network(bss);
+	if (add_or_replace_bss_to_network(bss) < 0)
+		SUPPLICANT_DBG("add_or_replace_bss_to_network failed");
 }
 
 static void interface_bss_added_without_keys(DBusMessageIter *iter,
@@ -2219,7 +2373,8 @@ static void interface_bss_added_without_keys(DBusMessageIter *iter,
 					bss_property, bss, NULL);
 
 	bss_compute_security(bss);
-	add_or_replace_bss_to_network(bss);
+	if (add_or_replace_bss_to_network(bss) < 0)
+			SUPPLICANT_DBG("add_or_replace_bss_to_network failed");
 }
 
 static void update_signal(gpointer key, gpointer value,
@@ -2243,6 +2398,75 @@ static void update_network_signal(GSupplicantNetwork *network)
 				update_signal, network);
 
 	SUPPLICANT_DBG("New network signal %d", network->signal);
+}
+
+static void interface_current_bss(GSupplicantInterface *interface,
+						DBusMessageIter *iter)
+{
+	GSupplicantNetwork *network;
+	struct g_supplicant_bss *bss;
+	const char *path;
+
+	dbus_message_iter_get_basic(iter, &path);
+	if (g_strcmp0(path, "/") == 0) {
+		interface->current_network = NULL;
+		return;
+	}
+
+	interface_bss_added_without_keys(iter, interface);
+
+	network = g_hash_table_lookup(interface->bss_mapping, path);
+	if (!network)
+		return;
+
+	bss = g_hash_table_lookup(network->bss_table, path);
+	if (!bss)
+		return;
+
+	interface->current_network = network;
+
+	if (bss != network->best_bss) {
+		/*
+		 * This is the case where either wpa_s got associated
+		 * to a BSS different than the one ConnMan considers
+		 * the best, or we are roaming.
+		 */
+		SUPPLICANT_DBG("Update best BSS for %s", network->name);
+
+		network->best_bss = bss;
+
+		if (network->signal != bss->signal) {
+			SUPPLICANT_DBG("New network signal %d dBm",
+						bss->signal);
+
+			network->signal = bss->signal;
+			callback_network_changed(network, "Signal");
+		}
+	}
+
+	/*
+	 * wpa_s could notify about CurrentBSS in any state once
+	 * it got associated. It is not sure such notification will
+	 * arrive together with transition to ASSOCIATED state.
+	 * In fact, for networks with security WEP or OPEN, it
+	 * always arrives together with transition to COMPLETED.
+	 */
+	switch (interface->state) {
+	case G_SUPPLICANT_STATE_UNKNOWN:
+	case G_SUPPLICANT_STATE_DISABLED:
+	case G_SUPPLICANT_STATE_DISCONNECTED:
+	case G_SUPPLICANT_STATE_INACTIVE:
+	case G_SUPPLICANT_STATE_SCANNING:
+	case G_SUPPLICANT_STATE_AUTHENTICATING:
+	case G_SUPPLICANT_STATE_ASSOCIATING:
+		return;
+	case G_SUPPLICANT_STATE_ASSOCIATED:
+	case G_SUPPLICANT_STATE_4WAY_HANDSHAKE:
+	case G_SUPPLICANT_STATE_GROUP_HANDSHAKE:
+	case G_SUPPLICANT_STATE_COMPLETED:
+		callback_network_associated(network);
+		break;
+	}
 }
 
 static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
@@ -2279,10 +2503,37 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 
 static void set_config_methods(DBusMessageIter *iter, void *user_data)
 {
-	const char *config_methods = "push_button";
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, user_data);
+}
 
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING,
-							&config_methods);
+static void wps_property(const char *key, DBusMessageIter *iter,
+							void *user_data)
+{
+	GSupplicantInterface *interface = user_data;
+
+	if (!interface)
+		return;
+
+	SUPPLICANT_DBG("key: %s", key);
+
+	if (g_strcmp0(key, "ConfigMethods") == 0) {
+		const char *config_methods = "push_button", *str = NULL;
+
+		dbus_message_iter_get_basic(iter, &str);
+		if (str && strlen(str) > 0) {
+			/* It was already set at wpa_s level, don't modify it. */
+			SUPPLICANT_DBG("%s", str);
+			return;
+		}
+
+		supplicant_dbus_property_set(interface->path,
+			SUPPLICANT_INTERFACE ".Interface.WPS",
+			"ConfigMethods", DBUS_TYPE_STRING_AS_STRING,
+			set_config_methods, NULL, &config_methods, NULL);
+
+		SUPPLICANT_DBG("No value. Set %s", config_methods);
+	}
+
 }
 
 static void interface_property(const char *key, DBusMessageIter *iter,
@@ -2311,11 +2562,9 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 		debug_strvalmap("Mode capability", mode_capa_map,
 						interface->mode_capa);
 
-
-		supplicant_dbus_property_set(interface->path,
+		supplicant_dbus_property_get_all(interface->path,
 				SUPPLICANT_INTERFACE ".Interface.WPS",
-				"ConfigMethods", DBUS_TYPE_STRING_AS_STRING,
-				set_config_methods, NULL, NULL, NULL);
+				wps_property, interface, interface);
 
 		if (interface->ready)
 			callback_interface_added(interface);
@@ -2339,6 +2588,14 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 				interface->state = string2state(str);
 				callback_interface_state(interface);
 			}
+
+		if (interface->ap_create_in_progress) {
+			if (interface->state == G_SUPPLICANT_STATE_DISCONNECTED)
+				callback_ap_create_fail(interface);
+
+			interface->ap_create_in_progress = false;
+		}
+
 		if (interface->state == G_SUPPLICANT_STATE_DISABLED)
 			interface->ready = FALSE;
 		else
@@ -2386,8 +2643,17 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 			g_free(interface->bridge);
 			interface->bridge = g_strdup(str);
 		}
+	} else if (g_strcmp0(key, "ConfigFile") == 0) {
+		const char *str = NULL;
+
+		dbus_message_iter_get_basic(iter, &str);
+		if (str && strlen(str) > 0 && interface->ifname) {
+			SUPPLICANT_DBG("New {%s, %s}", interface->ifname, str);
+			g_hash_table_replace(config_file_table,
+				g_strdup(interface->ifname), g_strdup(str));
+		}
 	} else if (g_strcmp0(key, "CurrentBSS") == 0) {
-		interface_bss_added_without_keys(iter, interface);
+		interface_current_bss(interface, iter);
 	} else if (g_strcmp0(key, "CurrentNetwork") == 0) {
 #if defined TIZEN_EXT
 		if (interface->state != G_SUPPLICANT_STATE_COMPLETED)
@@ -2414,9 +2680,10 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 			dbus_message_iter_get_basic(iter, &status_code);
 			callback_assoc_status_code(interface, status_code);
 		}
-	} else
+	} else {
 		SUPPLICANT_DBG("key %s type %c",
 				key, dbus_message_iter_get_arg_type(iter));
+	}
 }
 
 static void scan_network_update(DBusMessageIter *iter, void *user_data)
@@ -2489,8 +2756,6 @@ static GSupplicantInterface *interface_alloc(const char *path)
 					g_str_equal, NULL, remove_peer);
 	interface->group_table = g_hash_table_new_full(g_str_hash,
 					g_str_equal, NULL, remove_group);
-	interface->net_mapping = g_hash_table_new_full(g_str_hash, g_str_equal,
-								NULL, NULL);
 	interface->bss_mapping = g_hash_table_new_full(g_str_hash, g_str_equal,
 								NULL, NULL);
 
@@ -2503,6 +2768,7 @@ static void interface_added(DBusMessageIter *iter, void *user_data)
 {
 	GSupplicantInterface *interface;
 	const char *path = NULL;
+	bool properties_appended = GPOINTER_TO_UINT(user_data);
 
 	SUPPLICANT_DBG("");
 
@@ -2521,18 +2787,20 @@ static void interface_added(DBusMessageIter *iter, void *user_data)
 	if (!interface)
 		return;
 
+	if (!properties_appended) {
+		supplicant_dbus_property_get_all(path,
+						SUPPLICANT_INTERFACE ".Interface",
+						interface_property, interface,
+						interface);
+		return;
+	}
+
 	dbus_message_iter_next(iter);
 	if (dbus_message_iter_get_arg_type(iter) != DBUS_TYPE_INVALID) {
 		supplicant_dbus_property_foreach(iter, interface_property,
 								interface);
 		interface_property(NULL, NULL, interface);
-		return;
 	}
-
-	supplicant_dbus_property_get_all(path,
-					SUPPLICANT_INTERFACE ".Interface",
-					interface_property, interface,
-					interface);
 }
 
 static void interface_removed(DBusMessageIter *iter, void *user_data)
@@ -2635,6 +2903,7 @@ static void signal_name_owner_changed(const char *path, DBusMessageIter *iter)
 		g_hash_table_remove_all(bss_mapping);
 		g_hash_table_remove_all(peer_mapping);
 		g_hash_table_remove_all(group_mapping);
+		g_hash_table_remove_all(config_file_table);
 		g_hash_table_remove_all(interface_table);
 		callback_system_killed();
 	}
@@ -2662,7 +2931,7 @@ static void signal_interface_added(const char *path, DBusMessageIter *iter)
 	SUPPLICANT_DBG("path %s %s", path, SUPPLICANT_PATH);
 
 	if (g_strcmp0(path, SUPPLICANT_PATH) == 0)
-		interface_added(iter, NULL);
+		interface_added(iter, GUINT_TO_POINTER(true));
 }
 
 static void signal_interface_removed(const char *path, DBusMessageIter *iter)
@@ -2828,7 +3097,14 @@ static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 
 		g_hash_table_remove(interface->network_table, network->group);
 
-		add_or_replace_bss_to_network(new_bss);
+		if (add_or_replace_bss_to_network(new_bss) < 0) {
+			/* Remove entries in hash tables to handle the
+			 * failure in add_or_replace_bss_to_network
+			 */
+			g_hash_table_remove(bss_mapping, path);
+			g_hash_table_remove(interface->bss_mapping, path);
+			g_hash_table_remove(network->bss_table, path);
+		}
 
 		return;
 	}
@@ -2840,6 +3116,10 @@ static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 	} else
 		network->wps = FALSE;
 #endif
+
+	/* Consider only property changes of the connected BSS */
+	if (network == interface->current_network && bss != network->best_bss)
+		return;
 
 	if (bss->signal == network->signal)
 #ifndef TIZEN_EXT
@@ -3097,7 +3377,7 @@ static void peer_groups_relation(DBusMessageIter *iter, void *user_data)
 	if (!group)
 		return;
 
-	elem = g_slist_find_custom(data->old_groups, str, g_str_equal);
+	elem = g_slist_find_custom(data->old_groups, str, (GCompareFunc)g_strcmp0);
 	if (elem) {
 		data->old_groups = g_slist_remove_link(data->old_groups, elem);
 		peer->groups = g_slist_concat(elem, peer->groups);
@@ -3717,6 +3997,7 @@ int g_supplicant_set_country(const char *alpha2,
 					const void *user_data)
 {
 	struct supplicant_regdom *regdom;
+	int ret;
 
 	SUPPLICANT_DBG("Country setting %s", alpha2);
 
@@ -3731,10 +4012,15 @@ int g_supplicant_set_country(const char *alpha2,
 	regdom->alpha2 = alpha2;
 	regdom->user_data = user_data;
 
-	return supplicant_dbus_property_set(SUPPLICANT_PATH, SUPPLICANT_INTERFACE,
+	ret =  supplicant_dbus_property_set(SUPPLICANT_PATH, SUPPLICANT_INTERFACE,
 					"Country", DBUS_TYPE_STRING_AS_STRING,
 					country_params, country_result,
 					regdom, NULL);
+	if (ret < 0) {
+		dbus_free(regdom);
+		SUPPLICANT_DBG("Unable to set Country configuration");
+	}
+	return ret;
 }
 
 int g_supplicant_interface_set_country(GSupplicantInterface *interface,
@@ -3743,6 +4029,7 @@ int g_supplicant_interface_set_country(GSupplicantInterface *interface,
 							void *user_data)
 {
 	struct supplicant_regdom *regdom;
+	int ret;
 
 	regdom = dbus_malloc0(sizeof(*regdom));
 	if (!regdom)
@@ -3752,11 +4039,17 @@ int g_supplicant_interface_set_country(GSupplicantInterface *interface,
 	regdom->alpha2 = alpha2;
 	regdom->user_data = user_data;
 
-	return supplicant_dbus_property_set(interface->path,
+	ret =  supplicant_dbus_property_set(interface->path,
 				SUPPLICANT_INTERFACE ".Interface",
 				"Country", DBUS_TYPE_STRING_AS_STRING,
 				country_params, country_result,
 					regdom, NULL);
+	if (ret < 0) {
+		dbus_free(regdom);
+		SUPPLICANT_DBG("Unable to set Country configuration");
+	}
+
+	return ret;
 }
 
 bool g_supplicant_interface_has_p2p(GSupplicantInterface *interface)
@@ -3896,43 +4189,6 @@ GSupplicantPeer *g_supplicant_interface_peer_lookup(GSupplicantInterface *interf
 	return peer;
 }
 
-struct interface_data {
-	GSupplicantInterface *interface;
-	char *path; /* Interface path cannot be taken from interface (above) as
-		     * it might have been freed already.
-		     */
-	GSupplicantInterfaceCallback callback;
-	void *user_data;
-};
-
-struct interface_create_data {
-	char *ifname;
-	char *driver;
-	char *bridge;
-	GSupplicantInterface *interface;
-	GSupplicantInterfaceCallback callback;
-	void *user_data;
-};
-
-struct interface_connect_data {
-	GSupplicantInterface *interface;
-	char *path;
-	GSupplicantInterfaceCallback callback;
-	union {
-		GSupplicantSSID *ssid;
-		GSupplicantPeerParams *peer;
-	};
-	void *user_data;
-};
-
-struct interface_scan_data {
-	GSupplicantInterface *interface;
-	char *path;
-	GSupplicantInterfaceCallback callback;
-	GSupplicantScanParams *scan_params;
-	void *user_data;
-};
-
 static void interface_create_data_free(struct interface_create_data *data)
 {
 	g_free(data->ifname);
@@ -4026,6 +4282,7 @@ static void interface_create_params(DBusMessageIter *iter, void *user_data)
 {
 	struct interface_create_data *data = user_data;
 	DBusMessageIter dict;
+	char *config_file = NULL;
 
 	SUPPLICANT_DBG("");
 
@@ -4041,6 +4298,14 @@ static void interface_create_params(DBusMessageIter *iter, void *user_data)
 	if (data->bridge)
 		supplicant_dbus_dict_append_basic(&dict, "BridgeIfname",
 					DBUS_TYPE_STRING, &data->bridge);
+
+	config_file = g_hash_table_lookup(config_file_table, data->ifname);
+	if (config_file) {
+		SUPPLICANT_DBG("[%s] ConfigFile %s", data->ifname, config_file);
+
+		supplicant_dbus_dict_append_basic(&dict, "ConfigFile",
+					DBUS_TYPE_STRING, &config_file);
+	}
 
 	supplicant_dbus_dict_close(iter, &dict);
 }
@@ -4162,6 +4427,7 @@ static void interface_remove_result(const char *error,
 
 	if (error) {
 		err = -EIO;
+		SUPPLICANT_DBG("error: %s", error);
 		goto done;
 	}
 
@@ -4470,7 +4736,7 @@ int g_supplicant_interface_scan(GSupplicantInterface *interface,
 
 static int parse_supplicant_error(DBusMessageIter *iter)
 {
-	int err = -ECANCELED;
+	int err = -ECONNABORTED;
 	char *key;
 
 	if (!iter)
@@ -4554,8 +4820,9 @@ static void interface_add_network_result(const char *error,
 
 	SUPPLICANT_DBG("PATH: %s", path);
 
-	g_free(interface->network_path);
 	interface->network_path = g_strdup(path);
+
+	store_network_information(interface, data->ssid);
 
 #if defined TIZEN_EXT
 	SUPPLICANT_DBG(".Interface.SelectNetworkFreq");
@@ -4888,6 +5155,30 @@ static void add_network_security_eap(DBusMessageIter *dict,
 						DBUS_TYPE_STRING,
 						&ssid->identity);
 #endif
+	if(ssid->anonymous_identity)
+		supplicant_dbus_dict_append_basic(dict, "anonymous_identity",
+						     DBUS_TYPE_STRING,
+						     &ssid->anonymous_identity);
+
+	if(ssid->subject_match)
+		supplicant_dbus_dict_append_basic(dict, "subject_match",
+						     DBUS_TYPE_STRING,
+						     &ssid->subject_match);
+
+	if(ssid->altsubject_match)
+		supplicant_dbus_dict_append_basic(dict, "altsubject_match",
+						     DBUS_TYPE_STRING,
+						     &ssid->altsubject_match);
+
+	if(ssid->domain_suffix_match)
+		supplicant_dbus_dict_append_basic(dict, "domain_suffix_match",
+						     DBUS_TYPE_STRING,
+						     &ssid->domain_suffix_match);
+
+	if(ssid->domain_match)
+		supplicant_dbus_dict_append_basic(dict, "domain_match",
+						     DBUS_TYPE_STRING,
+						     &ssid->domain_match);
 
 	g_free(eap_value);
 }
@@ -5200,6 +5491,7 @@ static void wps_process_credentials(DBusMessageIter *iter, void *user_data)
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_BOOLEAN, &credentials);
 }
 
+
 #if defined TIZEN_EXT
 #define NETCONFIG_SERVICE "net.netconfig"
 #define NETCONFIG_WIFI_PATH "/net/netconfig/wifi"
@@ -5248,13 +5540,11 @@ static void decryption_request_reply(DBusPendingCall *call,
 	if (dbus_set_error_from_message(&error, reply)) {
 		SUPPLICANT_DBG("decryption_request_reply() %s %s", error.name, error.message);
 		dbus_error_free(&error);
-		ret = -EINVAL;
 		goto done;
 	}
 
 	if (dbus_message_iter_init(reply, &args) == FALSE) {
 		SUPPLICANT_DBG("dbus_message_iter_init() failed");
-		ret = -EINVAL;
 		goto done;
 	}
 
@@ -5269,7 +5559,6 @@ static void decryption_request_reply(DBusPendingCall *call,
 		interface_add_network_result, data,
 		data->interface);
 
-done:
 	if (ret < 0) {
 		SUPPLICANT_DBG("AddNetwork failed %d", ret);
 		callback_assoc_failed(decrypt_request_data.data->user_data);
@@ -5278,6 +5567,7 @@ done:
 		dbus_free(data);
 	}
 
+done:
 	dbus_message_unref(reply);
 	dbus_pending_call_unref(call);
 
@@ -5338,7 +5628,10 @@ int g_supplicant_interface_connect(GSupplicantInterface *interface,
 							void *user_data)
 {
 	struct interface_connect_data *data;
-	int ret;
+	struct interface_data *intf_data;
+	int ret = 0;
+
+	SUPPLICANT_DBG("");
 
 	if (!interface)
 		return -EINVAL;
@@ -5367,19 +5660,64 @@ int g_supplicant_interface_connect(GSupplicantInterface *interface,
 			SUPPLICANT_INTERFACE ".Interface.WPS",
 			"ProcessCredentials", DBUS_TYPE_BOOLEAN_AS_STRING,
 			wps_process_credentials, wps_start, data, interface);
-	} else
-#if defined TIZEN_EXT
-		if (ssid->passphrase && g_strcmp0(ssid->passphrase, "") != 0) {
-			ret = send_decryption_request(ssid->passphrase, data);
-			if (ret < 0)
-				SUPPLICANT_DBG("Decryption request failed %d", ret);
+	} else {
+		/* By the time there is a request for connect and the network
+		 * path is not NULL it means that connman has not removed the
+		 * previous network pointer. This can happen in the case AP
+		 * deauthenticated client and connman does not remove the
+		 * previously connected network pointer. This causes supplicant
+		 * to reallocate the memory for struct wpa_ssid again even if it
+		 * is the same SSID. This causes memory usage of wpa_supplicnat
+		 * to go high. The idea here is that if the previously connected
+		 * network is not removed at the time of next connection attempt
+		 * check if the network path is not NULL. In case it is non-NULL
+		 * first remove the network and then once removal is successful, add
+		 * the network.
+		 */
+
+		if (interface->network_path != NULL) {
+			g_free(data->path);
+			dbus_free(data);
+
+			/*
+			 * If this add network is for the same network for
+			 * which wpa_supplicant already has a profile then do
+			 * not need to add another profile. Only if the
+			 * profile that needs to get added is different from
+			 * what is there in wpa_s delete the current one. A
+			 * network is identified by its SSID, security_type
+			 * and passphrase (private passphrase in case security
+			 * type is 802.11x).
+			 */
+			if (compare_network_parameters(interface, ssid)) {
+				return -EALREADY;
+			}
+
+			intf_data = dbus_malloc0(sizeof(*intf_data));
+			if (!intf_data)
+				return -ENOMEM;
+
+			intf_data->interface = interface;
+			intf_data->path = g_strdup(interface->path);
+			intf_data->callback = callback;
+			intf_data->ssid = ssid;
+			intf_data->user_data = user_data;
+			intf_data->network_remove_in_progress = TRUE;
+			network_remove(intf_data);
 		} else
+#if defined TIZEN_EXT
+			if (ssid->passphrase && g_strcmp0(ssid->passphrase, "") != 0) {
+				ret = send_decryption_request(ssid->passphrase, data);
+				if (ret < 0)
+					SUPPLICANT_DBG("Decryption request failed %d", ret);
+			} else
 #endif
-		ret = supplicant_dbus_method_call(interface->path,
-			SUPPLICANT_INTERFACE ".Interface", "AddNetwork",
-			interface_add_network_params,
-			interface_add_network_result, data,
-			interface);
+				ret = supplicant_dbus_method_call(interface->path,
+						SUPPLICANT_INTERFACE ".Interface", "AddNetwork",
+						interface_add_network_params,
+						interface_add_network_result, data,
+						interface);
+	}
 
 	if (ret < 0) {
 		g_free(data->path);
@@ -5394,22 +5732,47 @@ static void network_remove_result(const char *error,
 				DBusMessageIter *iter, void *user_data)
 {
 	struct interface_data *data = user_data;
+	struct interface_connect_data *connect_data;
 	int result = 0;
 
 	SUPPLICANT_DBG("");
 
 	if (error) {
 		result = -EIO;
+		SUPPLICANT_DBG("error: %s", error);
+
 		if (g_strcmp0("org.freedesktop.DBus.Error.UnknownMethod",
 						error) == 0)
 			result = -ECONNABORTED;
 	}
 
+	g_free(data->interface->network_path);
+	data->interface->network_path = NULL;
+
+	remove_network_information(data->interface);
+
+	if (data->network_remove_in_progress == TRUE) {
+		data->network_remove_in_progress = FALSE;
+		connect_data = dbus_malloc0(sizeof(*connect_data));
+		if (!connect_data)
+			return;
+
+		connect_data->interface = data->interface;
+		connect_data->path = g_strdup(data->path);
+		connect_data->callback = data->callback;
+		connect_data->ssid = data->ssid;
+		connect_data->user_data = data->user_data;
+
+		supplicant_dbus_method_call(data->interface->path,
+			SUPPLICANT_INTERFACE ".Interface", "AddNetwork",
+			interface_add_network_params,
+			interface_add_network_result, connect_data,
+			connect_data->interface);
+	} else {
+		if (data->callback)
+			data->callback(result, data->interface, data->user_data);
+	}
 	g_free(data->path);
-
-	if (data->callback)
-		data->callback(result, data->interface, data->user_data);
-
 	dbus_free(data);
 }
 
@@ -5455,23 +5818,29 @@ static void interface_disconnect_result(const char *error,
 
 	if (error) {
 		result = -EIO;
+		SUPPLICANT_DBG("error: %s", error);
+
 		if (g_strcmp0("org.freedesktop.DBus.Error.UnknownMethod",
 						error) == 0)
 			result = -ECONNABORTED;
-	}
-
-	if (result < 0 && data->callback) {
-		data->callback(result, data->interface, data->user_data);
-		data->callback = NULL;
 	}
 
 	/* If we are disconnecting from previous WPS successful
 	 * association. i.e.: it did not went through AddNetwork,
 	 * and interface->network_path was never set. */
 	if (!data->interface->network_path) {
+		if (data->callback)
+			data->callback(result, data->interface,
+							data->user_data);
+
 		g_free(data->path);
 		dbus_free(data);
 		return;
+	}
+
+	if (result < 0 && data->callback) {
+		data->callback(result, data->interface, data->user_data);
+		data->callback = NULL;
 	}
 
 	if (result != -ECONNABORTED) {
@@ -5630,8 +5999,10 @@ static void interface_p2p_connect_result(const char *error,
 
 	SUPPLICANT_DBG("");
 
-	if (error)
+	if (error) {
+		SUPPLICANT_DBG("error: %s", error);
 		err = parse_supplicant_error(iter);
+	}
 
 	if (data->callback)
 		data->callback(err, data->interface, data->user_data);
@@ -5689,6 +6060,9 @@ int g_supplicant_interface_p2p_connect(GSupplicantInterface *interface,
 		return -ENOTSUP;
 
 	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
+
 	data->interface = interface;
 	data->path = g_strdup(interface->path);
 	data->peer = peer_params;
@@ -5833,6 +6207,9 @@ int g_supplicant_interface_p2p_add_service(GSupplicantInterface *interface,
 		return -ENOTSUP;
 
 	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
+
 	data->registration = true;
 	data->interface = interface;
 	data->service = p2p_service_params;
@@ -5863,6 +6240,9 @@ int g_supplicant_interface_p2p_del_service(GSupplicantInterface *interface,
 		return -ENOTSUP;
 
 	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
+
 	data->interface = interface;
 	data->service = p2p_service_params;
 
@@ -5948,6 +6328,9 @@ int g_supplicant_set_widi_ies(GSupplicantP2PServiceParams *p2p_service_params,
 		return -EFAULT;
 
 	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
+
 	data->service = p2p_service_params;
 	data->callback = callback;
 	data->user_data = user_data;
@@ -6062,6 +6445,8 @@ int g_supplicant_register(const GSupplicantCallbacks *callbacks)
 								NULL, NULL);
 	pending_peer_connection = g_hash_table_new_full(g_str_hash, g_str_equal,
 								NULL, NULL);
+	config_file_table = g_hash_table_new_full(g_str_hash, g_str_equal,
+								g_free, g_free);
 
 	supplicant_dbus_setup(connection);
 
@@ -6137,6 +6522,11 @@ void g_supplicant_unregister(const GSupplicantCallbacks *callbacks)
 
 		dbus_connection_remove_filter(connection,
 						g_supplicant_filter, NULL);
+	}
+
+	if (config_file_table) {
+		g_hash_table_destroy(config_file_table);
+		config_file_table = NULL;
 	}
 
 	if (bss_mapping) {

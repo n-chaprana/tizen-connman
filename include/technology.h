@@ -40,7 +40,7 @@ int connman_technology_tethering_add_station(enum connman_service_type type,
 					      const char *mac);
 int connman_technology_tethering_remove_station(const char *mac);
 
-void connman_technology_tethering_notify(struct connman_technology *technology,
+int connman_technology_tethering_notify(struct connman_technology *technology,
 							bool enabled);
 int connman_technology_set_regdom(const char *alpha2);
 void connman_technology_regdom_notify(struct connman_technology *technology,
@@ -63,7 +63,7 @@ struct connman_technology_driver {
 								int index);
 	int (*set_tethering) (struct connman_technology *technology,
 				const char *identifier, const char *passphrase,
-				const char *bridge, bool enabled, bool hidden);
+				const char *bridge, bool enabled);
 	int (*set_regdom) (struct connman_technology *technology,
 						const char *alpha2);
 };

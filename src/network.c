@@ -90,8 +90,13 @@ struct connman_network {
 		char *passphrase;
 		char *eap;
 		char *identity;
+		char *anonymous_identity;
 		char *agent_identity;
 		char *ca_cert_path;
+		char *subject_match;
+		char *altsubject_match;
+		char *domain_suffix_match;
+		char *domain_match;
 		char *client_cert_path;
 		char *private_key_path;
 		char *private_key_passphrase;
@@ -109,7 +114,8 @@ struct connman_network {
 		bool rsn_mode;
 		int disconnect_reason;
 		int assoc_status_code;
-		GSList *vsie_list;
+		void *wifi_vsie;
+		unsigned int wifi_vsie_len;
 #endif
 	} wifi;
 
@@ -164,8 +170,6 @@ static void set_configuration(struct connman_network *network,
 
 	__connman_device_set_network(network->device, network);
 
-	connman_device_set_disconnected(network->device, false);
-
 	service = connman_service_lookup_from_network(network);
 	__connman_service_ipconfig_indicate_state(service,
 					CONNMAN_SERVICE_STATE_CONFIGURATION,
@@ -200,6 +204,8 @@ static void dhcp_success(struct connman_network *network)
 #endif
 	if (err < 0)
 		goto err;
+
+	__connman_service_save(service);
 
 	return;
 
@@ -251,8 +257,8 @@ static int set_connected_manual(struct connman_network *network)
 	network->connecting = false;
 
 	service = connman_service_lookup_from_network(network);
-
 	ipconfig = __connman_service_get_ip4config(service);
+	__connman_ipconfig_enable(ipconfig);
 
 	if (!__connman_ipconfig_get_local(ipconfig))
 		__connman_service_read_ip4config(service);
@@ -283,6 +289,7 @@ static int set_connected_dhcp(struct connman_network *network)
 
 	service = connman_service_lookup_from_network(network);
 	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	__connman_ipconfig_enable(ipconfig_ipv4);
 
 	err = __connman_dhcp_start(ipconfig_ipv4, network,
 							dhcp_callback, NULL);
@@ -326,12 +333,7 @@ static int manual_ipv6_set(struct connman_network *network,
 	if (err < 0)
 		return err;
 
-	__connman_connection_gateway_activate(service,
-						CONNMAN_IPCONFIG_TYPE_IPV6);
-
 	__connman_device_set_network(network->device, network);
-
-	connman_device_set_disconnected(network->device, false);
 
 	connman_network_set_associating(network, false);
 
@@ -613,8 +615,6 @@ static void autoconf_ipv6_set(struct connman_network *network)
 
 	__connman_device_set_network(network->device, network);
 
-	connman_device_set_disconnected(network->device, false);
-
 #if defined TIZEN_EXT
 	if(network->type == CONNMAN_NETWORK_TYPE_CELLULAR)
 		return;
@@ -627,6 +627,8 @@ static void autoconf_ipv6_set(struct connman_network *network)
 	ipconfig = __connman_service_get_ip6config(service);
 	if (!ipconfig)
 		return;
+
+	__connman_ipconfig_enable(ipconfig);
 
 	__connman_ipconfig_enable_ipv6(ipconfig);
 
@@ -710,10 +712,20 @@ static void set_disconnected(struct connman_network *network)
 		switch (ipv4_method) {
 		case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
 		case CONNMAN_IPCONFIG_METHOD_OFF:
-		case CONNMAN_IPCONFIG_METHOD_AUTO:
 		case CONNMAN_IPCONFIG_METHOD_FIXED:
 		case CONNMAN_IPCONFIG_METHOD_MANUAL:
 			break;
+		case CONNMAN_IPCONFIG_METHOD_AUTO:
+			/*
+			 * If the current method is AUTO then next time we
+			 * try first DHCP. DHCP also needs to be stopped
+			 * in this case because if we fell in AUTO means
+			 * that DHCP  was launched for IPv4 but it failed.
+			 */
+			__connman_ipconfig_set_method(ipconfig_ipv4,
+						CONNMAN_IPCONFIG_METHOD_DHCP);
+			__connman_service_notify_ipv4_configuration(service);
+			/* fall through */
 		case CONNMAN_IPCONFIG_METHOD_DHCP:
 			__connman_dhcp_stop(ipconfig_ipv4);
 			break;
@@ -895,20 +907,6 @@ static void probe_driver(struct connman_network_driver *driver)
 	}
 }
 
-static void remove_driver(struct connman_network_driver *driver)
-{
-	GSList *list;
-
-	DBG("driver %p name %s", driver, driver->name);
-
-	for (list = network_list; list; list = list->next) {
-		struct connman_network *network = list->data;
-
-		if (network->driver == driver)
-			network_remove(network);
-	}
-}
-
 static gint compare_priority(gconstpointer a, gconstpointer b)
 {
 	const struct connman_network_driver *driver1 = a;
@@ -945,11 +943,18 @@ int connman_network_driver_register(struct connman_network_driver *driver)
  */
 void connman_network_driver_unregister(struct connman_network_driver *driver)
 {
+	GSList *list;
+
 	DBG("driver %p name %s", driver, driver->name);
 
 	driver_list = g_slist_remove(driver_list, driver);
 
-	remove_driver(driver);
+	for (list = network_list; list; list = list->next) {
+		struct connman_network *network = list->data;
+
+		if (network->driver == driver)
+			network_remove(network);
+	}
 }
 
 static void network_destruct(struct connman_network *network)
@@ -962,15 +967,20 @@ static void network_destruct(struct connman_network *network)
 	g_free(network->wifi.passphrase);
 	g_free(network->wifi.eap);
 	g_free(network->wifi.identity);
+	g_free(network->wifi.anonymous_identity);
 	g_free(network->wifi.agent_identity);
 	g_free(network->wifi.ca_cert_path);
+	g_free(network->wifi.subject_match);
+	g_free(network->wifi.altsubject_match);
+	g_free(network->wifi.domain_suffix_match);
+	g_free(network->wifi.domain_match);
 	g_free(network->wifi.client_cert_path);
 	g_free(network->wifi.private_key_path);
 	g_free(network->wifi.private_key_passphrase);
 	g_free(network->wifi.phase2_auth);
 	g_free(network->wifi.pin_wps);
 #if defined TIZEN_EXT
-	g_slist_free_full(network->wifi.vsie_list, g_free);
+	g_free(network->wifi.wifi_vsie);
 #endif
 	g_free(network->path);
 	g_free(network->group);
@@ -997,13 +1007,9 @@ struct connman_network *connman_network_create(const char *identifier,
 	struct connman_network *network;
 	char *ident;
 
-	DBG("identifier %s type %d", identifier, type);
-
 	network = g_try_new0(struct connman_network, 1);
 	if (!network)
 		return NULL;
-
-	DBG("network %p", network);
 
 	network->refcount = 1;
 
@@ -1019,6 +1025,8 @@ struct connman_network *connman_network_create(const char *identifier,
 
 	network_list = g_slist_prepend(network_list, network);
 
+	DBG("network %p identifier %s type %s", network, identifier,
+		type2string(type));
 	return network;
 }
 
@@ -2058,18 +2066,6 @@ int connman_network_get_disconnect_reason(struct connman_network *network)
 
 	return network->wifi.disconnect_reason;
 }
-
-int connman_network_set_assoc_status_code(struct connman_network *network,
-				int assoc_status_code)
-{
-
-	if (network == NULL)
-		return 0;
-
-	network->wifi.assoc_status_code = assoc_status_code;
-	return 0;
-}
-
 int connman_network_get_assoc_status_code(struct connman_network *network)
 {
 	if (network == NULL)
@@ -2077,7 +2073,6 @@ int connman_network_get_assoc_status_code(struct connman_network *network)
 
 	return network->wifi.assoc_status_code;
 }
-
 #endif
 
 int connman_network_set_nameservers(struct connman_network *network,
@@ -2161,10 +2156,6 @@ int connman_network_set_name(struct connman_network *network,
 int connman_network_set_strength(struct connman_network *network,
 						uint8_t strength)
 {
-#if !defined TIZEN_EXT
-	DBG("network %p strengh %d", network, strength);
-#endif
-
 	network->strength = strength;
 
 	return 0;
@@ -2178,10 +2169,6 @@ uint8_t connman_network_get_strength(struct connman_network *network)
 int connman_network_set_frequency(struct connman_network *network,
 						uint16_t frequency)
 {
-#if !defined TIZEN_EXT
-	DBG("network %p frequency %d", network, frequency);
-#endif
-
 	network->frequency = frequency;
 
 	return 0;
@@ -2195,8 +2182,6 @@ uint16_t connman_network_get_frequency(struct connman_network *network)
 int connman_network_set_wifi_channel(struct connman_network *network,
 						uint16_t channel)
 {
-	DBG("network %p wifi channel %d", network, channel);
-
 	network->wifi.channel = channel;
 
 	return 0;
@@ -2218,10 +2203,6 @@ uint16_t connman_network_get_wifi_channel(struct connman_network *network)
 int connman_network_set_string(struct connman_network *network,
 					const char *key, const char *value)
 {
-#if !defined TIZEN_EXT
-	DBG("network %p key %s value %s", network, key, value);
-#endif
-
 	if (g_strcmp0(key, "Name") == 0)
 		return connman_network_set_name(network, value);
 
@@ -2249,12 +2230,27 @@ int connman_network_set_string(struct connman_network *network,
 	} else if (g_str_equal(key, "WiFi.Identity")) {
 		g_free(network->wifi.identity);
 		network->wifi.identity = g_strdup(value);
+	} else if (g_str_equal(key, "WiFi.AnonymousIdentity")) {
+		g_free(network->wifi.anonymous_identity);
+		network->wifi.anonymous_identity = g_strdup(value);
 	} else if (g_str_equal(key, "WiFi.AgentIdentity")) {
 		g_free(network->wifi.agent_identity);
 		network->wifi.agent_identity = g_strdup(value);
 	} else if (g_str_equal(key, "WiFi.CACertFile")) {
 		g_free(network->wifi.ca_cert_path);
 		network->wifi.ca_cert_path = g_strdup(value);
+	} else if (g_str_equal(key, "WiFi.SubjectMatch")) {
+		g_free(network->wifi.subject_match);
+		network->wifi.subject_match = g_strdup(value);
+	} else if (g_str_equal(key, "WiFi.AltSubjectMatch")) {
+		g_free(network->wifi.altsubject_match);
+		network->wifi.altsubject_match = g_strdup(value);
+	} else if (g_str_equal(key, "WiFi.DomainSuffixMatch")) {
+		g_free(network->wifi.domain_suffix_match);
+		network->wifi.domain_suffix_match = g_strdup(value);
+	} else if (g_str_equal(key, "WiFi.DomainMatch")) {
+		g_free(network->wifi.domain_match);
+		network->wifi.domain_match = g_strdup(value);
 	} else if (g_str_equal(key, "WiFi.ClientCertFile")) {
 		g_free(network->wifi.client_cert_path);
 		network->wifi.client_cert_path = g_strdup(value);
@@ -2287,10 +2283,6 @@ int connman_network_set_string(struct connman_network *network,
 const char *connman_network_get_string(struct connman_network *network,
 							const char *key)
 {
-#if !defined TIZEN_EXT
-	DBG("network %p key %s", network, key);
-#endif
-
 	if (g_str_equal(key, "Path"))
 		return network->path;
 	else if (g_str_equal(key, "Name"))
@@ -2315,10 +2307,20 @@ const char *connman_network_get_string(struct connman_network *network,
 		return network->wifi.eap;
 	else if (g_str_equal(key, "WiFi.Identity"))
 		return network->wifi.identity;
+	else if (g_str_equal(key, "WiFi.AnonymousIdentity"))
+		return network->wifi.anonymous_identity;
 	else if (g_str_equal(key, "WiFi.AgentIdentity"))
 		return network->wifi.agent_identity;
 	else if (g_str_equal(key, "WiFi.CACertFile"))
 		return network->wifi.ca_cert_path;
+	else if (g_str_equal(key, "WiFi.SubjectMatch"))
+		return network->wifi.subject_match;
+	else if (g_str_equal(key, "WiFi.AltSubjectMatch"))
+		return network->wifi.altsubject_match;
+	else if (g_str_equal(key, "WiFi.DomainSuffixMatch"))
+		return network->wifi.domain_suffix_match;
+	else if (g_str_equal(key, "WiFi.DomainMatch"))
+		return network->wifi.domain_match;
 	else if (g_str_equal(key, "WiFi.ClientCertFile"))
 		return network->wifi.client_cert_path;
 	else if (g_str_equal(key, "WiFi.PrivateKeyFile"))
@@ -2344,10 +2346,6 @@ const char *connman_network_get_string(struct connman_network *network,
 int connman_network_set_bool(struct connman_network *network,
 					const char *key, bool value)
 {
-#if !defined TIZEN_EXT
-	DBG("network %p key %s value %d", network, key, value);
-#endif
-
 	if (g_strcmp0(key, "Roaming") == 0)
 		network->roaming = value;
 	else if (g_strcmp0(key, "WiFi.WPS") == 0)
@@ -2374,10 +2372,6 @@ int connman_network_set_bool(struct connman_network *network,
 bool connman_network_get_bool(struct connman_network *network,
 							const char *key)
 {
-#if !defined TIZEN_EXT
-	DBG("network %p key %s", network, key);
-#endif
-
 	if (g_str_equal(key, "Roaming"))
 		return network->roaming;
 	else if (g_str_equal(key, "WiFi.WPS"))
@@ -2394,31 +2388,6 @@ bool connman_network_get_bool(struct connman_network *network,
 	return false;
 }
 
-#if defined TIZEN_EXT
-/**
- * connman_network_set_vsie_list:
- * @network: network structure
- * @vsie_list: GSList pointer
- *
- * Set vendor specific list pointer
- */
-void connman_network_set_vsie_list(struct connman_network *network, GSList *vsie_list)
-{
-	network->wifi.vsie_list = vsie_list;
-}
-
-/**
- * connman_network_get_vsie_list:
- * @network: network structure
- *
- * Get vendor specific list pointer
- */
-void *connman_network_get_vsie_list(struct connman_network *network)
-{
-	return network->wifi.vsie_list;
-}
-#endif
-
 /**
  * connman_network_set_blob:
  * @network: network structure
@@ -2431,10 +2400,6 @@ void *connman_network_get_vsie_list(struct connman_network *network)
 int connman_network_set_blob(struct connman_network *network,
 			const char *key, const void *data, unsigned int size)
 {
-#if !defined TIZEN_EXT
-	DBG("network %p key %s size %d", network, key, size);
-#endif
-
 	if (g_str_equal(key, "WiFi.SSID")) {
 		g_free(network->wifi.ssid);
 		network->wifi.ssid = g_try_malloc(size);
@@ -2443,6 +2408,16 @@ int connman_network_set_blob(struct connman_network *network,
 			network->wifi.ssid_len = size;
 		} else
 			network->wifi.ssid_len = 0;
+#if defined TIZEN_EXT
+	} else if (g_str_equal(key, "WiFi.Vsie")){
+		g_free(network->wifi.wifi_vsie);
+		network->wifi.wifi_vsie = g_try_malloc(size);
+		if (network->wifi.wifi_vsie) {
+			memcpy(network->wifi.wifi_vsie, data, size);
+			network->wifi.wifi_vsie_len = size;
+		} else
+			network->wifi.wifi_vsie_len = 0;
+#endif
 	} else {
 		return -EINVAL;
 	}
@@ -2461,15 +2436,20 @@ int connman_network_set_blob(struct connman_network *network,
 const void *connman_network_get_blob(struct connman_network *network,
 					const char *key, unsigned int *size)
 {
-#if !defined TIZEN_EXT
-	DBG("network %p key %s", network, key);
-#endif
-
 	if (g_str_equal(key, "WiFi.SSID")) {
 		if (size)
 			*size = network->wifi.ssid_len;
 		return network->wifi.ssid;
 	}
+
+#if defined TIZEN_EXT
+	if (g_str_equal(key, "WiFi.Vsie")) {
+		if (size)
+			*size = network->wifi.wifi_vsie_len;
+
+		return network->wifi.wifi_vsie;
+	}
+#endif
 
 	return NULL;
 }

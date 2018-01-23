@@ -107,7 +107,7 @@ MANUAL_PAGES =
 if TIZEN_EXT
 sbin_PROGRAMS =
 else
-sbin_PROGRAMS = src/connmand
+sbin_PROGRAMS = src/connmand src/connmand-wait-online
 endif
 
 src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
@@ -124,17 +124,32 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			src/storage.c src/dbus.c src/config.c \
 			src/technology.c src/counter.c src/ntp.c \
 			src/session.c src/tethering.c src/wpad.c src/wispr.c \
-			src/stats.c src/iptables.c src/dnsproxy.c src/6to4.c \
+			src/stats.c src/dnsproxy.c src/6to4.c \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
-			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
+			src/inotify.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ @LIBSYSTEMD_LIBS@ \
+			@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ @LIBSYSTEMD_LIBS@ \
 			-lresolv -ldl -lrt
 
 src_connmand_LDFLAGS = -Wl,--export-dynamic -pie \
 				-Wl,--version-script=$(srcdir)/src/connman.ver
+
+src_connmand_wait_online_SOURCES = src/connmand-wait-online.c
+
+src_connmand_wait_online_LDADD = gdbus/libgdbus-internal.la \
+			@GLIB_LIBS@ @DBUS_LIBS@
+
+if XTABLES
+src_connmand_SOURCES += src/iptables.c src/firewall-iptables.c
+src_connmand_LDADD += @XTABLES_LIBS@
+endif
+
+if NFTABLES
+src_connmand_SOURCES += src/firewall-nftables.c
+src_connmand_LDADD +=  @NFTABLES_LIBS@
+endif
 
 if VPN
 vpn_plugin_LTLIBRARIES =
@@ -170,7 +185,7 @@ vpn_connman_vpnd_SOURCES = $(gdhcp_sources) $(builtin_vpn_sources) \
 			src/session.c src/tethering.c src/wpad.c src/wispr.c \
 			src/stats.c src/iptables.c src/dnsproxy.c src/6to4.c \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
-			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
+			src/inotify.c src/firewall-iptables.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
 			vpn/vpn-agent.c vpn/vpn-agent.h \
 			vpn/vpn-config.c
@@ -192,8 +207,8 @@ endif
 
 CLEANFILES = src/connman.conf $(BUILT_SOURCES) $(service_files)
 
-statedir = $(localstatedir)/run/connman
-vpn_statedir = $(localstatedir)/run/connman-vpn
+statedir = $(runstatedir)/connman
+vpn_statedir = $(runstatedir)/connman-vpn
 
 if VPN
 vpn_plugindir = $(libdir)/connman/plugins-vpn
@@ -222,7 +237,7 @@ build_vpn_plugindir = $(vpn_plugindir)
 endif
 endif
 
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ @LIBSYSTEMD_CFLAGS@\
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @LIBSYSTEMD_CFLAGS@\
 				@GNUTLS_CFLAGS@ $(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DSTATEDIR=\""$(statedir)"\" \
@@ -240,7 +255,7 @@ else
 AM_CPPFLAGS = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/gdbus
 endif
 
-src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
+src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ \
 				@GNUTLS_CFLAGS@ $(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DSTATEDIR=\""$(statedir)"\" \
@@ -269,6 +284,16 @@ vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 
 endif
 
+if XTABLES
+AM_CFLAGS += @XTABLES_CFLAGS@
+src_connmand_CFLAGS += @XTABLES_CFLAGS@
+endif
+
+if NFTABLES
+AM_CFLAGS += @NFTABLES_CFLAGS@
+src_connmand_CFLAGS += @NFTABLES_CFLAGS@
+endif
+
 EXTRA_DIST += vpn/vpn-dbus.conf vpn/vpn-polkit.conf
 
 script_DATA =
@@ -279,8 +304,6 @@ include Makefile.plugins
 
 if CLIENT
 bin_PROGRAMS += client/connmanctl
-
-#MANUAL_PAGES = doc/connmanctl.1
 
 client_connmanctl_SOURCES = client/dbus_helpers.h client/dbus_helpers.c \
 			client/services.h client/services.c \
@@ -316,9 +339,9 @@ noinst_PROGRAMS += tools/supplicant-test \
 			tools/dhcp-test tools/dhcp-server-test \
 			tools/addr-test tools/web-test tools/resolv-test \
 			tools/dbus-test tools/polkit-test \
-			tools/iptables-test tools/tap-test tools/wpad-test \
+			tools/tap-test tools/wpad-test \
 			tools/stats-tool tools/private-network-test \
-			tools/session-test tools/iptables-unit \
+			tools/session-test \
 			tools/dnsproxy-test tools/netlink-test
 
 tools_supplicant_test_SOURCES = tools/supplicant-test.c \
@@ -349,9 +372,6 @@ tools_dbus_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ @DBUS_LIBS@
 
 tools_polkit_test_LDADD = @DBUS_LIBS@
 
-tools_iptables_test_SOURCES = src/log.c src/iptables.c tools/iptables-test.c
-tools_iptables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ -ldl
-
 tools_private_network_test_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 
 tools_session_test_SOURCES = src/log.c src/dbus.c src/error.c \
@@ -360,17 +380,26 @@ tools_session_test_SOURCES = src/log.c src/dbus.c src/error.c \
 tools_session_test_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
+if XTABLES
+noinst_PROGRAMS += tools/iptables-test tools/iptables-unit
+
+tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c src/iptables.c \
+				tools/iptables-test.c
+tools_iptables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ -ldl
+
 tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 		-DIPTABLES_SAVE=\""${IPTABLES_SAVE}"\"
 tools_iptables_unit_SOURCES = src/log.c \
-		 src/iptables.c src/firewall.c src/nat.c tools/iptables-unit.c
+		src/iptables.c src/firewall-iptables.c src/nat.c \
+		tools/iptables-unit.c
 tools_iptables_unit_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ -ldl
+endif
 
 tools_dnsproxy_test_SOURCES = tools/dnsproxy-test.c
 tools_dnsproxy_test_LDADD = @GLIB_LIBS@
 
-tools_netlink_test_SOURCES =$(shared_sources) tools/netlink-test.c
+tools_netlink_test_SOURCES = $(shared_sources) tools/netlink-test.c
 tools_netlink_test_LDADD = @GLIB_LIBS@
 
 endif
@@ -412,14 +441,22 @@ EXTRA_DIST += doc/overview-api.txt doc/behavior-api.txt \
 				doc/vpn-config-format.txt \
 				doc/vpn-connection-api.txt \
 				doc/vpn-manager-api.txt doc/vpn-overview.txt \
-				doc/session-policy-format.txt
+				doc/session-policy-format.txt \
+				doc/connmanctl.1.in doc/connman.conf.5.in \
+				doc/connman-service.config.5.in \
+				doc/connman-vpn.conf.5.in \
+				doc/connman-vpn-provider.config.5.in \
+				doc/connman.8.in doc/connman-vpn.8.in
 
 EXTRA_DIST += src/main.conf \
 		src/eduroam.config
 
-#MANUAL_PAGES += doc/connman.8 doc/connman.conf.5
+#MANUAL_PAGES += doc/connmanctl.1 doc/connman.conf.5 \
+#		doc/connman-service.config.5 doc/connman-vpn.conf.5 \
+#		doc/connman-vpn-provider.config.5 \
+#		doc/connman.8 doc/connman-vpn.8
 
-dist_man_MANS = $(MANUAL_PAGES)
+nodist_man_MANS = $(MANUAL_PAGES)
 
 pkgconfigdir = $(libdir)/pkgconfig
 
@@ -443,9 +480,11 @@ MAINTAINERCLEANFILES = Makefile.in \
 
 
 src/builtin.h: src/genbuiltin $(builtin_sources)
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
 	$(AM_V_GEN)$(srcdir)/src/genbuiltin $(builtin_modules) > $@
 
 vpn/builtin.h: src/genbuiltin $(builtin_vpn_sources)
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
 	$(AM_V_GEN)$(srcdir)/src/genbuiltin $(builtin_vpn_modules) > $@
 
 src/connman.conf: src/connman-dbus.conf src/connman-polkit.conf
@@ -462,6 +501,7 @@ if POLKIT
 else
 	$(AM_V_GEN)cp $(srcdir)/vpn/vpn-dbus.conf $@
 endif
+CLEANFILES += vpn/connman-vpn-dbus.conf
 endif
 
 if SELINUX
@@ -479,12 +519,29 @@ EXTRA_DIST += vpn/connman-task.te
 do_subst = $(AM_V_GEN)$(SED) \
 		-e 's,[@]prefix[@],$(prefix),g' \
 		-e 's,[@]sbindir[@],$(sbindir),g' \
-		-e 's,[@]sysconfdir[@],$(sysconfdir),g'
+		-e 's,[@]sysconfdir[@],$(sysconfdir),g' \
+		-e 's,[@]storagedir[@],$(storagedir),g' \
+		-e 's,[@]vpn_storagedir[@],$(vpn_storagedir),g' \
+		-e 's,[@]localstatedir[@],$(localstatedir),g'
+
+%.1 : %.1.in
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
+	$(do_subst) < $< > $@
+
+%.5 : %.5.in
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
+	$(do_subst) < $< > $@
+
+%.8 : %.8.in
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
+	$(do_subst) < $< > $@
 
 %.service: %.service.in Makefile
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
 	$(do_subst) < $< > $@
 
 scripts/connman: scripts/connman.in Makefile
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
 	$(do_subst) < $< > $@
 
 include/connman/version.h: include/version.h
@@ -496,4 +553,4 @@ include/connman/%.h: $(abs_top_srcdir)/include/%.h
 	$(AM_V_GEN)$(LN_S) $< $@
 
 clean-local:
-	@$(RM) -rf include/connman
+	@$(RM) -rf include/connman $(MANUAL_PAGES)

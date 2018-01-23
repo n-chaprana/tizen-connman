@@ -105,20 +105,14 @@ static void clear_timer(struct connman_dhcpv6 *dhcp)
 	}
 }
 
-static inline guint get_random(void)
-{
-	uint64_t val;
-
-	__connman_util_get_random(&val);
-
-	/* Make sure the value is always positive so strip MSB */
-	return ((uint32_t)val) >> 1;
-}
-
 static guint compute_random(guint val)
 {
+	uint64_t rand;
+
+	__connman_util_get_random(&rand);
+
 	return val - val / 10 +
-		(get_random() % (2 * 1000)) * val / 10 / 1000;
+		((guint) rand % (2 * 1000)) * val / 10 / 1000;
 }
 
 /* Calculate a random delay, RFC 3315 chapter 14 */
@@ -253,6 +247,7 @@ static int set_duid(struct connman_service *service,
 
 		hex_duid = convert_to_hex(duid, duid_len);
 		if (!hex_duid) {
+			g_free(duid);
 			g_key_file_free(keyfile);
 			return -ENOMEM;
 		}
@@ -481,7 +476,6 @@ static int check_ipv6_addr_prefix(GSList *prefixes, char *address)
 		if (!slash)
 			continue;
 
-		prefix = g_strndup(prefix, slash - prefix);
 		len = strtol(slash + 1, NULL, 10);
 		if (len < 3 || len > 128)
 			break;
@@ -492,6 +486,7 @@ static int check_ipv6_addr_prefix(GSList *prefixes, char *address)
 		left = plen % 8;
 		i = 16 - count;
 
+		prefix = g_strndup(prefix, slash - prefix);
 		inet_pton(AF_INET6, prefix, &addr_prefix);
 		inet_pton(AF_INET6, address, &addr);
 

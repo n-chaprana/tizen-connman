@@ -256,6 +256,11 @@ unsigned int connman_timeout_browser_launch(void)
 	return connman_vpn_settings.timeout_browserlaunch;
 }
 
+const char *connman_option_get_string(const char *key)
+{
+	return NULL;
+}
+
 int main(int argc, char *argv[])
 {
 	GOptionContext *context;

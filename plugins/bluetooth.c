@@ -212,7 +212,7 @@ static void pan_connect_cb(DBusMessage *message, void *user_data)
 	DBusMessageIter iter;
 
 	pan = g_hash_table_lookup(networks, path);
-	if (!pan) {
+	if (!pan || !pan->network) {
 		DBG("network already removed");
 		return;
 	}
@@ -236,6 +236,7 @@ static void pan_connect_cb(DBusMessage *message, void *user_data)
 
 		if (strcmp(dbus_error,
 				"org.bluez.Error.AlreadyConnected") != 0) {
+			connman_network_set_associating(pan->network, false);
 			connman_network_set_error(pan->network,
 				CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
 			return;
@@ -293,7 +294,7 @@ static void pan_disconnect_cb(DBusMessage *message, void *user_data)
 	struct bluetooth_pan *pan;
 
 	pan = g_hash_table_lookup(networks, path);
-	if (!pan) {
+	if (!pan || !pan->network) {
 		DBG("network already removed");
 		return;
 	}
@@ -366,6 +367,7 @@ static void pan_create_nap(struct bluetooth_pan *pan)
 {
 	struct connman_device *device;
 	const char* role;
+	const char *adapter;
 
 	role = proxy_get_role(pan->btdevice_proxy);
 	if (!role) {
@@ -373,8 +375,12 @@ static void pan_create_nap(struct bluetooth_pan *pan)
 		return;
 	}
 
-	device = g_hash_table_lookup(devices,
-			proxy_get_string(pan->btdevice_proxy, "Adapter"));
+	adapter = proxy_get_string(pan->btdevice_proxy, "Adapter");
+
+	if (!adapter)
+		return;
+
+	device = g_hash_table_lookup(devices, adapter);
 
 	if (!device || !connman_device_get_powered(device))
 		return;
@@ -740,21 +746,23 @@ static bool tethering_create(const char *path,
 		struct connman_technology *technology, const char *bridge,
 		bool enabled)
 {
-	struct tethering_info *tethering;
+	struct tethering_info *tethering = g_new0(struct tethering_info, 1);
 	GDBusProxy *proxy;
 	const char *method;
 	bool result;
 
 	DBG("path %s bridge %s", path, bridge);
 
-	if (!bridge)
-		return -EINVAL;
+	if (!bridge) {
+		g_free(tethering);
+		return false;
+	}
 
 	proxy = g_dbus_proxy_new(client, path, "org.bluez.NetworkServer1");
-	if (!proxy)
+	if (!proxy) {
+		g_free(tethering);
 		return false;
-
-	tethering = g_new0(struct tethering_info, 1);
+	}
 
 	tethering->technology = technology;
 	tethering->bridge = g_strdup(bridge);

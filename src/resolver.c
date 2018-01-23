@@ -97,9 +97,9 @@ static int resolvfile_export(void)
 	 * MAXDNSRCH/MAXNS entries are used.
 	 */
 
-	for (count = 0, list = g_list_last(resolvfile_list);
+	for (count = 0, list = g_list_first(resolvfile_list);
 						list && (count < MAXDNSRCH);
-						list = g_list_previous(list)) {
+						list = g_list_next(list)) {
 		struct resolvfile_entry *entry = list->data;
 
 		if (!entry->domain)
@@ -115,9 +115,9 @@ static int resolvfile_export(void)
 	if (count)
 		g_string_append_printf(content, "\n");
 
-	for (count = 0, list = g_list_last(resolvfile_list);
+	for (count = 0, list = g_list_first(resolvfile_list);
 						list && (count < MAXNS);
-						list = g_list_previous(list)) {
+						list = g_list_next(list)) {
 		struct resolvfile_entry *entry = list->data;
 
 		if (!entry->server)
@@ -207,7 +207,7 @@ int __connman_resolvfile_remove(int index, const char *domain,
 	return resolvfile_export();
 }
 
-static void append_fallback_nameservers(void)
+void __connman_resolver_append_fallback_nameservers(void)
 {
 	GSList *list;
 
@@ -284,7 +284,7 @@ static void remove_entries(GSList *entries)
 
 	g_slist_free(entries);
 
-	append_fallback_nameservers();
+	__connman_resolver_append_fallback_nameservers();
 }
 
 static gboolean resolver_expire_cb(gpointer user_data)
@@ -389,24 +389,6 @@ static int append_resolver(int index, const char *domain,
 
 		entry->timeout = g_timeout_add_seconds(interval,
 				resolver_refresh_cb, entry);
-
-		/*
-		 * We update the service only for those nameservers
-		 * that are automagically added via netlink (lifetime > 0)
-		 */
-		if (server && entry->index >= 0) {
-			struct connman_service *service;
-			service = __connman_service_lookup_from_index(entry->index);
-			if (service)
-#if defined TIZEN_EXT
-				__connman_service_nameserver_append(service,
-						server, true,
-						CONNMAN_IPCONFIG_TYPE_ALL);
-#else
-				__connman_service_nameserver_append(service,
-								server, true);
-#endif
-		}
 	}
 
 	if (entry->index >= 0 && entry->server)
@@ -418,6 +400,24 @@ static int append_resolver(int index, const char *domain,
 		__connman_dnsproxy_append(entry->index, domain, server);
 	else
 		__connman_resolvfile_append(entry->index, domain, server);
+
+	/*
+	 * We update the service only for those nameservers
+	 * that are automagically added via netlink (lifetime > 0)
+	 */
+	if (server && entry->index >= 0 && lifetime) {
+		struct connman_service *service;
+		service = __connman_service_lookup_from_index(entry->index);
+		if (service)
+#if defined TIZEN_EXT
+			__connman_service_nameserver_append(service,
+					server, true,
+					CONNMAN_IPCONFIG_TYPE_ALL);
+#else
+			__connman_service_nameserver_append(service,
+							server, true);
+#endif
+	}
 
 	return 0;
 }
@@ -617,6 +617,28 @@ int __connman_resolver_redo_servers(int index)
 					entry->server);
 	}
 
+	/*
+	 * We want to re-add all search domains back to search
+	 * domain lists as they just got removed for RDNSS IPv6-servers
+	 * (above).
+	 * Removal of search domains is not necessary
+	 * as there can be only one instance of each search domain
+	 * in the each dns-servers search domain list.
+        */
+
+	for (list = entry_list; list; list = list->next) {
+		struct entry_data *entry = list->data;
+
+		if (entry->index != index)
+			continue;
+
+		if (entry->server)
+			continue;
+
+		__connman_dnsproxy_append(entry->index, entry->domain,
+					NULL);
+	}
+
 	return 0;
 }
 
@@ -642,6 +664,14 @@ int __connman_resolver_init(gboolean dnsproxy)
 	char **ns;
 
 	DBG("dnsproxy %d", dnsproxy);
+
+	/* get autoip nameservers */
+	ns = __connman_inet_get_pnp_nameservers(NULL);
+	for (i = 0; ns && ns[i]; i += 1) {
+		DBG("pnp server %s", ns[i]);
+		append_resolver(i, NULL, ns[i], 86400, 0);
+	}
+	g_strfreev(ns);
 
 	if (!dnsproxy)
 		return 0;
