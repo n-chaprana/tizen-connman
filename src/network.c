@@ -115,6 +115,10 @@ struct connman_network {
 		int disconnect_reason;
 		int assoc_status_code;
 		GSList *vsie_list;
+		/*
+		* Only for EAP-FAST
+		*/
+		char *phase1;
 #endif
 	} wifi;
 

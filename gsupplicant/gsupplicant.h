@@ -108,6 +108,15 @@ typedef enum {
 #endif
 } GSupplicantSecurity;
 
+#if defined TIZEN_EXT
+typedef enum {
+	G_SUPPLICANT_EAP_KEYMGMT_NONE,
+	G_SUPPLICANT_EAP_KEYMGMT_FT,
+	G_SUPPLICANT_EAP_KEYMGMT_CCKM,
+	G_SUPPLICANT_EAP_KEYMGMT_OKC,
+} GSupplicantEapKeymgmt;
+#endif
+
 typedef enum {
 	G_SUPPLICANT_STATE_UNKNOWN,
 	G_SUPPLICANT_STATE_DISABLED,
@@ -175,6 +184,9 @@ struct _GSupplicantSSID {
 	unsigned char *bssid;
 	unsigned int bssid_for_connect_len;
 	unsigned char bssid_for_connect[6];
+	GSupplicantEapKeymgmt eap_keymgmt;
+	const char *phase1;
+	const char *pac_file;
 #endif
 };
 

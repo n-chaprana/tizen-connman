@@ -5131,6 +5131,33 @@ static void add_network_security_aka_sim(DBusMessageIter *dict,
 			DBUS_TYPE_STRING,
 			&ssid->passphrase);
 }
+
+static void add_network_security_fast(DBusMessageIter *dict,
+		GSupplicantSSID *ssid)
+{
+	/*
+	 * For FAST, we at least need:
+	 *              id / password
+	 *              phase1 (provisiong information)
+	 *              pac_file
+	 */
+
+	/* Allow provisioing both authenticated and unauthenticated */
+	const char *phase1 = "fast_provisioning=2";
+	supplicant_dbus_dict_append_basic(dict, "phase1",
+			DBUS_TYPE_STRING,
+			&phase1);
+
+	SUPPLICANT_DBG("pac_file [%s]", ssid->pac_file);
+	if(ssid->pac_file)
+		supplicant_dbus_dict_append_basic(dict, "pac_file",
+				DBUS_TYPE_STRING,
+				&ssid->pac_file);
+
+	supplicant_dbus_dict_append_basic(dict, "password",
+			DBUS_TYPE_STRING,
+			&ssid->passphrase);
+}
 #endif
 
 static void add_network_security_eap(DBusMessageIter *dict,
@@ -5157,8 +5184,20 @@ static void add_network_security_eap(DBusMessageIter *dict,
 
 #if defined TIZEN_EXT
 	} else if (g_strcmp0(ssid->eap, "sim") == 0 ||
-			g_strcmp0(ssid->eap, "aka") == 0) {
+			g_strcmp0(ssid->eap, "aka") == 0 ||
+			g_strcmp0(ssid->eap, "aka'") == 0) {
 		add_network_security_aka_sim(dict, ssid);
+	} else if (g_strcmp0(ssid->eap, "pwd") == 0) {
+		if(!ssid->passphrase)
+			return;
+		supplicant_dbus_dict_append_basic(dict, "password",
+				DBUS_TYPE_STRING,
+				&ssid->passphrase);
+	} else if (g_strcmp0(ssid->eap, "fast") == 0){
+		if (!ssid->identity || !ssid->passphrase)
+			return;
+
+		add_network_security_fast(dict, ssid);
 #endif
 	} else
 		return;
@@ -5738,7 +5777,7 @@ int g_supplicant_interface_connect(GSupplicantInterface *interface,
 			network_remove(intf_data);
 		} else
 #if defined TIZEN_EXT
-			if (ssid->passphrase && g_strcmp0(ssid->passphrase, "") != 0) {
+			if (ssid->passphrase && g_strcmp0(ssid->passphrase, "") != 0 && !ssid->eap) {
 				ret = send_decryption_request(ssid->passphrase, data);
 				if (ret < 0)
 					SUPPLICANT_DBG("Decryption request failed %d", ret);

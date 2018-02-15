@@ -167,6 +167,10 @@ struct connman_service {
 	char *keymgmt_type;
 	int disconnect_reason;
 	int assoc_status_code;
+	/*
+	 * Only for EAP-FAST
+	 */
+	char *phase1;
 #endif
 #ifdef TIZEN_EXT
 	enum connman_dnsconfig_method dns_config_method_ipv4;
@@ -7945,6 +7949,17 @@ static void prepare_8021x(struct connman_service *service)
 	if (service->phase2)
 		connman_network_set_string(service->network, "WiFi.Phase2",
 							service->phase2);
+
+#if defined TIZEN_EXT
+	if (service->keymgmt_type)
+		connman_network_set_string(service->network, "WiFi.KeymgmtType",
+							service->keymgmt_type);
+
+	DBG("service->phase1 : %s", service->phase1);
+	if (service->phase1)
+		connman_network_set_string(service->network, "WiFi.Phase1",
+							service->phase1);
+#endif
 }
 
 static int service_connect(struct connman_service *service)
@@ -8032,7 +8047,10 @@ static int service_connect(struct connman_service *service)
 			DBG("service eap: %s", service->eap);
 			if (g_str_equal(service->eap, "tls") ||
 				g_str_equal(service->eap, "sim") ||
-				g_str_equal(service->eap, "aka"))
+				g_str_equal(service->eap, "aka") ||
+				g_str_equal(service->eap, "aka'") ||
+				g_str_equal(service->eap, "pwd") ||
+				g_str_equal(service->eap, "fast"))
 				break;
 #else
 			/*

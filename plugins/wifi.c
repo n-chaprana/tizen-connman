@@ -74,6 +74,10 @@
 #define ASSOC_STATUS_NO_CLIENT 17
 #define LOAD_SHAPING_MAX_RETRIES 3
 
+#if defined TIZEN_EXT
+#define WIFI_EAP_FAST_PAC_FILE		"/var/lib/wifi/wifi.pac"	/* path of Pac file for EAP-FAST */
+#endif
+
 static struct connman_technology *wifi_technology = NULL;
 static struct connman_technology *p2p_technology = NULL;
 
@@ -2442,6 +2446,21 @@ static GSupplicantSecurity network_security(const char *security)
 	return G_SUPPLICANT_SECURITY_UNKNOWN;
 }
 
+#if defined TIZEN_EXT
+static GSupplicantEapKeymgmt network_eap_keymgmt(const char *security)
+{
+	if (security == NULL)
+		return G_SUPPLICANT_EAP_KEYMGMT_NONE;
+
+	if (g_str_equal(security, "FT") == TRUE)
+		return G_SUPPLICANT_EAP_KEYMGMT_FT;
+	else if (g_str_equal(security, "CCKM") == TRUE)
+		return G_SUPPLICANT_EAP_KEYMGMT_CCKM;
+
+	return G_SUPPLICANT_EAP_KEYMGMT_NONE;
+}
+#endif
+
 static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 {
 	const char *security;
@@ -2500,8 +2519,14 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 
 #if defined TIZEN_EXT
 	ssid->bssid = connman_network_get_bssid(network);
-#endif
-#if defined TIZEN_EXT
+
+	ssid->eap_keymgmt = network_eap_keymgmt(
+			connman_network_get_string(network, "WiFi.KeymgmtType"));
+	ssid->phase1 = connman_network_get_string(network, "WiFi.Phase1");
+
+	if(g_strcmp0(ssid->eap, "fast") == 0)
+		ssid->pac_file = g_strdup(WIFI_EAP_FAST_PAC_FILE);
+
 	if (set_connman_bssid(CHECK_BSSID, NULL) == 6) {
 		ssid->bssid_for_connect_len = 6;
 		set_connman_bssid(GET_BSSID, (char *)ssid->bssid_for_connect);
