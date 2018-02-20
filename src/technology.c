@@ -25,6 +25,9 @@
 
 #include <errno.h>
 #include <string.h>
+#if defined TIZEN_EXT
+#include <stdio.h>
+#endif
 
 #include <gdbus.h>
 
@@ -876,6 +879,49 @@ make_reply:
 	return reply;
 }
 
+#if defined TIZEN_EXT
+int set_connman_bssid(enum bssid_type mode, char *bssid)
+{
+	static unsigned char bssid_for_connect[6];
+	static int bssid_len;
+
+	DBG("mode : %d", mode);
+
+	if (mode == CHECK_BSSID) {
+		return bssid_len;
+	}
+
+	if (mode == GET_BSSID && bssid) {
+		memcpy(bssid, bssid_for_connect, 6);
+		return bssid_len;
+	}
+
+	if (mode == RESET_BSSID) {
+		bssid_len = 0;
+		return bssid_len;
+	}
+
+	if (mode != SET_BSSID || !bssid) {
+		DBG("Invalid parameter");
+		return 0;
+	}
+
+	bssid_len = sscanf(bssid, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
+		&bssid_for_connect[0], &bssid_for_connect[1], &bssid_for_connect[2],
+		&bssid_for_connect[3], &bssid_for_connect[4], &bssid_for_connect[5]);
+	if (bssid_len != 6) {
+		DBG("Incorrect BSSID format. bssid_len = %d", bssid_len);
+		bssid_len = 0;
+	}
+
+	DBG("SET BSSID len : %d, BSSID : %02x:%02x:%02x:%02x:%02x:%02x", bssid_len,
+		bssid_for_connect[0], bssid_for_connect[1], bssid_for_connect[2],
+		bssid_for_connect[3], bssid_for_connect[4], bssid_for_connect[5]);
+
+	return bssid_len;
+}
+#endif
+
 static DBusMessage *set_property(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -1023,6 +1069,17 @@ static DBusMessage *set_property(DBusConnection *conn,
 		dbus_message_iter_get_basic(&value, &enable);
 
 		return set_powered(technology, msg, enable);
+#if defined TIZEN_EXT
+	} else if (g_str_equal(name, "SetBSSID")) {
+		char *key;
+
+		if (type != DBUS_TYPE_STRING)
+			return __connman_error_invalid_arguments(msg);
+
+		dbus_message_iter_get_basic(&value, &key);
+		DBG("BSSID %s", key);
+		set_connman_bssid(SET_BSSID, key);
+#endif
 	} else
 		return __connman_error_invalid_property(msg);
 

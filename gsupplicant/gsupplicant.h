@@ -173,6 +173,8 @@ struct _GSupplicantSSID {
 	int ignore_broadcast_ssid;
 #if defined TIZEN_EXT
 	unsigned char *bssid;
+	unsigned int bssid_for_connect_len;
+	unsigned char bssid_for_connect[6];
 #endif
 };
 

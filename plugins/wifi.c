@@ -2393,6 +2393,8 @@ static void connect_callback(int result, GSupplicantInterface *interface,
 	DBG("network %p result %d", network, result);
 
 #if defined TIZEN_EXT
+	set_connman_bssid(RESET_BSSID, NULL);
+
 	for (list = iface_list; list; list = list->next) {
 		wifi = list->data;
 
@@ -2500,7 +2502,16 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid->bssid = connman_network_get_bssid(network);
 #endif
 #if defined TIZEN_EXT
-	ssid->freq = connman_network_get_frequency(network);
+	if (set_connman_bssid(CHECK_BSSID, NULL) == 6) {
+		ssid->bssid_for_connect_len = 6;
+		set_connman_bssid(GET_BSSID, (char *)ssid->bssid_for_connect);
+		DBG("BSSID : %02x:%02x:%02x:%02x:%02x:%02x",
+			ssid->bssid_for_connect[0], ssid->bssid_for_connect[1],
+			ssid->bssid_for_connect[2], ssid->bssid_for_connect[3],
+			ssid->bssid_for_connect[4], ssid->bssid_for_connect[5]);
+	} else {
+		ssid->freq = connman_network_get_frequency(network);
+	}
 #endif
 
 	if (connman_setting_get_bool("BackgroundScanning"))
@@ -2803,7 +2814,7 @@ static bool handle_wps_completion(GSupplicantInterface *interface,
 			 return true;
 		 }
 
-		 ret = send_encryption_request(passphrase, passphrase);
+		 ret = send_encryption_request(passphrase, network);
 
 		 g_free(passphrase);
 

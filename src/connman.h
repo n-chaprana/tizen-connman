@@ -564,6 +564,17 @@ void __connman_technology_remove_interface(enum connman_service_type type,
 void __connman_technology_notify_regdom_by_device(struct connman_device *device,
 						int result, const char *alpha2);
 
+#if defined TIZEN_EXT
+enum bssid_type {
+	CHECK_BSSID = 0,
+	GET_BSSID   = 1,
+	SET_BSSID   = 2,
+	RESET_BSSID = 3,
+};
+
+int set_connman_bssid(enum bssid_type mode, char *bssid);
+#endif
+
 #include <connman/device.h>
 
 int __connman_device_init(const char *device, const char *nodevice);

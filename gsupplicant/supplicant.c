@@ -4815,7 +4815,8 @@ static void interface_select_network_params(DBusMessageIter *iter,
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_OBJECT_PATH,
 					&interface->network_path);
 #if defined TIZEN_EXT
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_INT32, &ssid->freq);
+	if (!ssid->bssid_for_connect_len)
+		dbus_message_iter_append_basic(iter, DBUS_TYPE_INT32, &ssid->freq);
 #endif
 }
 
@@ -4842,14 +4843,20 @@ static void interface_add_network_result(const char *error,
 
 #if defined TIZEN_EXT
 	SUPPLICANT_DBG(".Interface.SelectNetworkFreq");
-#endif
+	GSupplicantSSID *ssid = data->ssid;
 
-#if defined TIZEN_EXT
-	supplicant_dbus_method_call(data->interface->path,
-			SUPPLICANT_INTERFACE ".Interface", "SelectNetworkFreq",
-			interface_select_network_params,
-			interface_select_network_result, data,
-			interface);
+	if (!ssid->bssid_for_connect_len)
+		supplicant_dbus_method_call(data->interface->path,
+				SUPPLICANT_INTERFACE ".Interface", "SelectNetworkFreq",
+				interface_select_network_params,
+				interface_select_network_result, data,
+				interface);
+	else
+		supplicant_dbus_method_call(data->interface->path,
+				SUPPLICANT_INTERFACE ".Interface", "SelectNetwork",
+				interface_select_network_params,
+				interface_select_network_result, data,
+				interface);
 #else
 	supplicant_dbus_method_call(data->interface->path,
 			SUPPLICANT_INTERFACE ".Interface", "SelectNetwork",
@@ -5401,9 +5408,16 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 			supplicant_dbus_dict_close(iter, &dict);
 			return;
 		}
-		snprintf(bssid, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
+
+		if (ssid->bssid_for_connect_len)
+			snprintf(bssid, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
+					ssid->bssid_for_connect[0], ssid->bssid_for_connect[1], ssid->bssid_for_connect[2],
+					ssid->bssid_for_connect[3], ssid->bssid_for_connect[4], ssid->bssid_for_connect[5]);
+		else
+			snprintf(bssid, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
 					ssid->bssid[0], ssid->bssid[1], ssid->bssid[2],
 					ssid->bssid[3], ssid->bssid[4], ssid->bssid[5]);
+
 		supplicant_dbus_dict_append_basic(&dict, "bssid",
 					DBUS_TYPE_STRING, &bssid);
 		g_free(bssid);
