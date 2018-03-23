@@ -3729,11 +3729,6 @@ static void peer_changed(GSupplicantPeer *peer, GSupplicantPeerState state)
 	struct connman_peer *connman_peer;
 	const char *identifier;
 
-#if defined TIZEN_EXT
-	if (!wifi)
-		return;
-#endif
-
 	identifier = g_supplicant_peer_get_identifier(peer);
 
 	DBG("ident: %s", identifier);
