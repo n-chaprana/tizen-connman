@@ -159,6 +159,7 @@ static void read_uevent(struct interface_data *interface)
 	if (__connman_rtnl_is_cellular_device(name)) {
 		interface->service_type = CONNMAN_SERVICE_TYPE_CELLULAR;
 		interface->device_type = CONNMAN_DEVICE_TYPE_CELLULAR;
+		g_free(name);
 		return;
 	}
 #endif
