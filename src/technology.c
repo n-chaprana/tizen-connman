@@ -27,6 +27,7 @@
 #include <string.h>
 #if defined TIZEN_EXT
 #include <stdio.h>
+#include <stdlib.h>
 #endif
 
 #include <gdbus.h>
@@ -1280,7 +1281,7 @@ static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *
 	GSList *specific_scan_list = NULL;
 	int scan_type = 0;
 	const char *name = NULL;
-	unsigned int freq = 0;
+	const char *freq = NULL;
 	DBusMessageIter iter, dict;
 	int err;
 
@@ -1321,20 +1322,53 @@ static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *
 				return __connman_error_invalid_arguments(msg);
 			}
 
-			scan_type = 1; /* SSID based scan */
+			scan_type = CONNMAN_MULTI_SCAN_SSID; /* SSID based scan */
 			dbus_message_iter_get_basic(&value2, &name);
 			DBG("name %s", name);
 			specific_scan_list = g_slist_append(specific_scan_list, g_strdup(name));
 		} else if (g_str_equal(key, "Frequency")) {
-			if (type != DBUS_TYPE_UINT16) {
+			if (type != DBUS_TYPE_STRING) {
 				g_slist_free_full(specific_scan_list, g_free);
 				return __connman_error_invalid_arguments(msg);
 			}
 
-			scan_type = 2; /* Frequency based scan */
+			scan_type = CONNMAN_MULTI_SCAN_FREQ; /* Frequency based scan */
 			dbus_message_iter_get_basic(&value2, &freq);
-			DBG("freq %d", freq);
-			specific_scan_list = g_slist_append(specific_scan_list, GINT_TO_POINTER(freq));
+			DBG("freq %s", freq);
+			specific_scan_list = g_slist_append(specific_scan_list, GINT_TO_POINTER(atoi(freq)));
+		} else if (g_str_equal(key, "SSID_Mixed")) {
+			if (type != DBUS_TYPE_STRING) {
+				g_slist_free_full(specific_scan_list, g_free);
+				return __connman_error_invalid_arguments(msg);
+			}
+
+			scan_type = CONNMAN_MULTI_SCAN_SSID_FREQ; /* SSID & Frequency mixed scan */
+			dbus_message_iter_get_basic(&value2, &name);
+
+			connman_multi_scan_ap_s *ap = (connman_multi_scan_ap_s*)g_try_malloc0(sizeof(connman_multi_scan_ap_s));
+			if (ap) {
+				g_strlcpy(ap->str, name, strlen(name) + 1);
+				ap->flag = true;
+				specific_scan_list = g_slist_append(specific_scan_list, ap);
+			} else
+				DBG("Failed to allocate memory");
+
+		} else if (g_str_equal(key, "Frequency_Mixed")) {
+			if (type != DBUS_TYPE_STRING) {
+				g_slist_free_full(specific_scan_list, g_free);
+				return __connman_error_invalid_arguments(msg);
+			}
+
+			scan_type = CONNMAN_MULTI_SCAN_SSID_FREQ; /* SSID & Frequency mixed scan */
+			dbus_message_iter_get_basic(&value2, &freq);
+
+			connman_multi_scan_ap_s *ap = (connman_multi_scan_ap_s*)g_try_malloc0(sizeof(connman_multi_scan_ap_s));
+			if (ap) {
+				g_strlcpy(ap->str, freq, strlen(freq) + 1);
+				ap->flag = false;
+				specific_scan_list = g_slist_append(specific_scan_list, ap);
+			} else
+				DBG("Failed to allocate memory");
 		}
 		dbus_message_iter_next(&dict);
 	}
@@ -1356,7 +1390,8 @@ static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *
 	technology->scan_pending =
 		g_slist_prepend(technology->scan_pending, msg);
 
-	if (scan_type == 1) {
+	if (scan_type == CONNMAN_MULTI_SCAN_SSID ||
+			scan_type == CONNMAN_MULTI_SCAN_SSID_FREQ) {
 		g_slist_free_full(specific_scan_list, g_free);
 		scan_type = 0;
 	}
