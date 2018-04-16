@@ -34,6 +34,19 @@ extern "C" {
  * @short_description: Functions for handling technology details
  */
 
+#if defined TIZEN_EXT
+typedef enum {
+	CONNMAN_MULTI_SCAN_SSID = 0x01,
+	CONNMAN_MULTI_SCAN_FREQ,
+	CONNMAN_MULTI_SCAN_SSID_FREQ,
+} connman_multi_scan_type_e;
+
+typedef struct {
+	char str[128];
+	gboolean flag;
+} connman_multi_scan_ap_s;
+#endif
+
 struct connman_technology;
 
 int connman_technology_tethering_add_station(enum connman_service_type type,
