@@ -157,6 +157,9 @@ int connman_network_get_disconnect_reason(struct connman_network *network);
 int connman_network_get_assoc_status_code(struct connman_network *network);
 int connman_network_set_assoc_status_code(struct connman_network *network,
 				int assoc_status_code);
+int connman_network_set_countrycode(struct connman_network *network, const
+				    unsigned char *country_code);
+unsigned char *connman_network_get_countrycode(struct connman_network *network);
 #endif
 
 int connman_network_set_name(struct connman_network *network,

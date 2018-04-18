@@ -3417,6 +3417,7 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 
 #if defined TIZEN_EXT
 	GSList *vsie_list = NULL;
+	const unsigned char *country_code;
 #endif
 
 	mode = g_supplicant_network_get_mode(supplicant_network);
@@ -3472,6 +3473,8 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 		connman_network_set_vsie_list(network, vsie_list);
 	else
 		DBG("vsie_list is NULL");
+	country_code = g_supplicant_network_get_countrycode(supplicant_network);
+	connman_network_set_countrycode(network, country_code);
 #endif
 	connman_network_set_string(network, "WiFi.Security", security);
 	connman_network_set_strength(network,
@@ -3593,6 +3596,7 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	unsigned int maxrate;
 	uint16_t frequency;
 	bool wps;
+	const unsigned char *country_code;
 #endif
 
 	interface = g_supplicant_network_get_interface(network);
@@ -3625,6 +3629,8 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	connman_network_set_maxrate(connman_network, maxrate);
 	connman_network_set_frequency(connman_network, frequency);
 	connman_network_set_bool(connman_network, "WiFi.WPS", wps);
+	country_code = g_supplicant_network_get_countrycode(network);
+	connman_network_set_countrycode(connman_network, country_code);
 #endif
 }
 

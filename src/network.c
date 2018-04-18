@@ -119,6 +119,7 @@ struct connman_network {
 		* Only for EAP-FAST
 		*/
 		char *phase1;
+		unsigned char country_code[WIFI_COUNTRY_CODE_LEN];
 #endif
 	} wifi;
 
@@ -2076,6 +2077,29 @@ int connman_network_get_assoc_status_code(struct connman_network *network)
 
 	return network->wifi.assoc_status_code;
 }
+
+int connman_network_set_countrycode(struct connman_network *network,
+				    const unsigned char *country_code)
+{
+	int i = 0;
+
+	if (country_code == NULL)
+		return -EINVAL;
+
+	DBG("network %p Country Code %02x:%02x",network,
+	    country_code[0],country_code[1]);
+
+	for (; i < WIFI_COUNTRY_CODE_LEN; i++)
+		network->wifi.country_code[i] = country_code[i];
+
+	return 0;
+}
+
+unsigned char *connman_network_get_countrycode(struct connman_network *network)
+{
+	return (unsigned char *)network->wifi.country_code;
+}
+
 #endif
 
 int connman_network_set_nameservers(struct connman_network *network,

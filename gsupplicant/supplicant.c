@@ -44,6 +44,10 @@
 #define IEEE80211_CAP_IBSS	0x0002
 #define IEEE80211_CAP_PRIVACY	0x0010
 
+#if defined TIZEN_EXT
+#define COUNTRY_CODE_LENGTH	2
+#endif
+
 #define BSS_UNKNOWN_STRENGTH    -90
 
 static DBusConnection *connection;
@@ -223,6 +227,7 @@ struct g_supplicant_bss {
 	dbus_bool_t ft_ieee8021x;
 	GSList *vsie_list;
 	dbus_bool_t hs20;
+	unsigned char country_code[COUNTRY_CODE_LENGTH];
 #endif
 	unsigned int wps_capabilities;
 };
@@ -250,6 +255,7 @@ struct _GSupplicantNetwork {
 	char *phase2;
 	unsigned int keymgmt;
 	GSList *vsie_list;
+	unsigned char country_code[COUNTRY_CODE_LENGTH];
 #endif
 };
 
@@ -1408,6 +1414,15 @@ unsigned int g_supplicant_network_get_keymgmt(GSupplicantNetwork *network)
 
 	return network->keymgmt;
 }
+
+const unsigned char *g_supplicant_network_get_countrycode(GSupplicantNetwork
+							  *network)
+{
+	if (!network)
+		return NULL;
+
+	return network->country_code;
+}
 #endif
 
 const unsigned char *g_supplicant_peer_get_widi_ies(GSupplicantPeer *peer,
@@ -1876,6 +1891,7 @@ static int add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 	}
 
 	network->isHS20AP = bss->hs20;
+	memcpy(network->country_code, bss->country_code, COUNTRY_CODE_LENGTH);
 #endif
 
 	SUPPLICANT_DBG("New network %s created", network->name);
@@ -2079,6 +2095,7 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 #define WPS_CONFIGURED    0x02
 #if defined TIZEN_EXT
 #define VENDOR_SPECIFIC_INFO 0xDD
+#define WLAN_EID_COUNTRY 7
 #endif
 
 	dbus_message_iter_recurse(iter, &array);
@@ -2089,6 +2106,7 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 
 	bss->wps_capabilities = 0;
 	bss->keymgmt = 0;
+	memset(bss->country_code, 0, COUNTRY_CODE_LENGTH);
 
 	for (ie_end = ie + ie_len; ie < ie_end && ie + ie[1] + 1 <= ie_end;
 							ie += ie[1] + 2) {
@@ -2106,6 +2124,11 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 				bss->vsie_list = g_slist_append(bss->vsie_list, vsie);
 			} else
 				SUPPLICANT_DBG("Failed to allocate memory");
+			continue;
+		}
+
+		if(ie[0] == WLAN_EID_COUNTRY && ie[1] >= 2) {
+			memcpy(bss->country_code, ie+2, COUNTRY_CODE_LENGTH);
 			continue;
 		}
 #endif

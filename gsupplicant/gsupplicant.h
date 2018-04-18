@@ -397,6 +397,8 @@ const char *g_supplicant_network_get_identity(GSupplicantNetwork *network);
 const char *g_supplicant_network_get_phase2(GSupplicantNetwork *network);
 unsigned int g_supplicant_network_get_keymgmt(GSupplicantNetwork *network);
 void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network);
+const unsigned char *g_supplicant_network_get_countrycode(GSupplicantNetwork
+							  *network);
 #endif
 
 struct _GSupplicantCallbacks {
