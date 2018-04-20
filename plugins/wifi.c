@@ -3509,6 +3509,8 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 			g_supplicant_network_get_keymgmt(supplicant_network));
 	connman_network_set_bool(network, "WiFi.HS20AP",
 			g_supplicant_network_is_hs20AP(supplicant_network));
+	connman_network_set_bssid_list(network,
+			(GSList *)g_supplicant_network_get_bssid_list(supplicant_network));
 #endif
 	connman_network_set_available(network, true);
 	connman_network_set_string(network, "WiFi.Mode", mode);
@@ -3597,6 +3599,7 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	uint16_t frequency;
 	bool wps;
 	const unsigned char *country_code;
+	GSList *bssid_list;
 #endif
 
 	interface = g_supplicant_network_get_interface(network);
@@ -3631,6 +3634,8 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	connman_network_set_bool(connman_network, "WiFi.WPS", wps);
 	country_code = g_supplicant_network_get_countrycode(network);
 	connman_network_set_countrycode(connman_network, country_code);
+	bssid_list = (GSList *)g_supplicant_network_get_bssid_list(network);
+	connman_network_set_bssid_list(connman_network, bssid_list);
 #endif
 }
 

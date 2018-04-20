@@ -399,6 +399,7 @@ unsigned int g_supplicant_network_get_keymgmt(GSupplicantNetwork *network);
 void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network);
 const unsigned char *g_supplicant_network_get_countrycode(GSupplicantNetwork
 							  *network);
+void *g_supplicant_network_get_bssid_list(GSupplicantNetwork *network);
 #endif
 
 struct _GSupplicantCallbacks {

@@ -321,6 +321,14 @@ struct interface_scan_data {
 	void *user_data;
 };
 
+#if defined TIZEN_EXT
+struct g_connman_bssids {
+	char bssid[18];
+	uint16_t strength;
+	uint16_t frequency;
+};
+#endif
+
 static int network_remove(struct interface_data *data);
 
 static inline void debug(const char *format, ...)
@@ -1594,6 +1602,46 @@ void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network)
 	}
 
 	return vsie_list;
+}
+
+static void update_bssid_list(gpointer key, gpointer value, gpointer user_data)
+{
+	struct g_supplicant_bss *bss = value;
+	struct g_connman_bssids *bssids = NULL;
+	char buff[18];
+	GSList **list = (GSList **)user_data;
+
+	bssids = (struct g_connman_bssids *)g_try_malloc0(sizeof(struct g_connman_bssids));
+
+	if (bssids) {
+		g_snprintf(buff, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
+				bss->bssid[0], bss->bssid[1], bss->bssid[2], bss->bssid[3],
+				bss->bssid[4], bss->bssid[5]);
+
+		memcpy(bssids->bssid, buff, 18);
+		bssids->bssid[17] = '\0';
+		bssids->strength = bss->signal;
+		bssids->strength += 120;
+
+		if (bssids->strength > 100)
+			bssids->strength = 100;
+
+		bssids->frequency = bss->frequency;
+		*list = g_slist_append(*list, bssids);
+	} else
+		SUPPLICANT_DBG("Failed to allocate memory");
+}
+
+void *g_supplicant_network_get_bssid_list(GSupplicantNetwork *network)
+{
+	GSList *bssid_list = NULL;
+
+	if (g_hash_table_size(network->bss_table) < 1)
+		return NULL;
+
+	g_hash_table_foreach(network->bss_table, update_bssid_list, &bssid_list);
+
+	return bssid_list;
 }
 #endif
 

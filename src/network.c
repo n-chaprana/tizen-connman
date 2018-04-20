@@ -120,6 +120,7 @@ struct connman_network {
 		*/
 		char *phase1;
 		unsigned char country_code[WIFI_COUNTRY_CODE_LEN];
+		GSList *bssid_list;
 #endif
 	} wifi;
 
@@ -985,6 +986,7 @@ static void network_destruct(struct connman_network *network)
 	g_free(network->wifi.pin_wps);
 #if defined TIZEN_EXT
 	g_slist_free_full(network->wifi.vsie_list, g_free);
+	g_slist_free_full(network->wifi.bssid_list, g_free);
 #endif
 	g_free(network->path);
 	g_free(network->group);
@@ -2100,6 +2102,18 @@ unsigned char *connman_network_get_countrycode(struct connman_network *network)
 	return (unsigned char *)network->wifi.country_code;
 }
 
+int connman_network_set_bssid_list(struct connman_network *network,
+					GSList *bssids)
+{
+	network->wifi.bssid_list = bssids;
+
+	return 0;
+}
+
+void *connman_network_get_bssid_list(struct connman_network *network)
+{
+	return network->wifi.bssid_list;
+}
 #endif
 
 int connman_network_set_nameservers(struct connman_network *network,

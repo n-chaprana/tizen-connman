@@ -3303,6 +3303,33 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 					DBUS_TYPE_STRING, &str);
 	}
 }
+
+static void append_bssid_info(DBusMessageIter *iter, void *user_data)
+{
+        GSList *bssid_list = NULL;
+	struct connman_network *network = user_data;
+        struct connman_bssids *bssids;
+        char bssid_buf[18] = {0,};
+        char *bssid_str = bssid_buf;
+
+        bssid_list = (GSList *)connman_network_get_bssid_list(network);
+        if(bssid_list) {
+                GSList *list;
+                for (list = bssid_list; list; list = list->next) {
+                        bssids = (struct connman_bssids *)list->data;
+                        memcpy(bssid_str, bssids->bssid, 18);
+
+			connman_dbus_dict_append_basic(iter, "BSSID",
+                                        DBUS_TYPE_STRING, &bssid_str);
+
+                        connman_dbus_dict_append_basic(iter, "Strength",
+                                        DBUS_TYPE_UINT16, &bssids->strength);
+
+                        connman_dbus_dict_append_basic(iter, "Frequency",
+                                        DBUS_TYPE_UINT16, &bssids->frequency);
+                }
+        }
+}
 #endif
 
 static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
@@ -3406,8 +3433,11 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		break;
 	case CONNMAN_SERVICE_TYPE_WIFI:
 #if defined TIZEN_EXT
-		if (service->network != NULL)
+		if (service->network != NULL) {
 			append_wifi_ext_info(dict, service->network);
+			connman_dbus_dict_append_dict(dict, "BSSID.List",
+					append_bssid_info, service->network);
+		}
 
 		connman_dbus_dict_append_dict(dict, "Ethernet",
 						append_ethernet, service);

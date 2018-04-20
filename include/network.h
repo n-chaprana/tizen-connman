@@ -62,6 +62,14 @@ enum connman_network_error {
 
 };
 
+#if defined TIZEN_EXT
+struct connman_bssids {
+	char bssid[18];
+	uint16_t strength;
+	uint16_t frequency;
+};
+#endif
+
 #define CONNMAN_NETWORK_PRIORITY_LOW      -100
 #define CONNMAN_NETWORK_PRIORITY_DEFAULT     0
 #define CONNMAN_NETWORK_PRIORITY_HIGH      100
@@ -160,6 +168,9 @@ int connman_network_set_assoc_status_code(struct connman_network *network,
 int connman_network_set_countrycode(struct connman_network *network, const
 				    unsigned char *country_code);
 unsigned char *connman_network_get_countrycode(struct connman_network *network);
+int connman_network_set_bssid_list(struct connman_network *network,
+					GSList *bssids);
+void *connman_network_get_bssid_list(struct connman_network *network);
 #endif
 
 int connman_network_set_name(struct connman_network *network,
