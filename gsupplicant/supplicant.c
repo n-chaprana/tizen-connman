@@ -437,6 +437,11 @@ static GSupplicantState string2state(const char *state)
 static bool compare_network_parameters(GSupplicantInterface *interface,
 				GSupplicantSSID *ssid)
 {
+#if defined TIZEN_EXT
+	if (!interface->network_info.ssid)
+		return FALSE;
+#endif
+
 	if (memcmp(interface->network_info.ssid, ssid->ssid, ssid->ssid_len))
 		return FALSE;
 
@@ -5905,6 +5910,15 @@ static void network_remove_result(const char *error,
 		connect_data->ssid = data->ssid;
 		connect_data->user_data = data->user_data;
 
+#if defined TIZEN_EXT
+		int ret;
+		if (data->ssid->passphrase && g_strcmp0(data->ssid->passphrase, "") != 0
+			&& !data->ssid->eap) {
+			ret = send_decryption_request(data->ssid->passphrase, connect_data);
+			if (ret < 0)
+				SUPPLICANT_DBG("Decryption request failed %d", ret);
+		} else
+#endif
 		supplicant_dbus_method_call(data->interface->path,
 			SUPPLICANT_INTERFACE ".Interface", "AddNetwork",
 			interface_add_network_params,
