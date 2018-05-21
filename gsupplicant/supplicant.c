@@ -6509,29 +6509,6 @@ int g_supplicant_set_widi_ies(GSupplicantP2PServiceParams *p2p_service_params,
 	return -EINPROGRESS;
 }
 
-#if defined TIZEN_EXT
-int g_supplicant_interface_remove_network(GSupplicantInterface *interface)
-{
-	struct interface_data *data;
-
-	SUPPLICANT_DBG("");
-
-	if (interface == NULL)
-		return -EINVAL;
-
-	if (system_available == FALSE)
-		return -EFAULT;
-
-	data = dbus_malloc0(sizeof(*data));
-	if (data == NULL)
-		return -ENOMEM;
-
-	data->interface = interface;
-
-	return network_remove(data);
-}
-#endif
-
 static const char *g_supplicant_rule0 = "type=signal,"
 					"path=" DBUS_PATH_DBUS ","
 					"sender=" DBUS_SERVICE_DBUS ","
