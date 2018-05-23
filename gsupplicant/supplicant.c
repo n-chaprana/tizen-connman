@@ -5920,8 +5920,12 @@ static void network_remove_result(const char *error,
 		if (data->ssid->passphrase && g_strcmp0(data->ssid->passphrase, "") != 0
 			&& !data->ssid->eap) {
 			ret = send_decryption_request(data->ssid->passphrase, connect_data);
-			if (ret < 0)
+			if (ret < 0) {
 				SUPPLICANT_DBG("Decryption request failed %d", ret);
+				g_free(connect_data->ssid);
+				g_free(connect_data->path);
+				dbus_free(connect_data);
+			}
 		} else
 #endif
 		supplicant_dbus_method_call(data->interface->path,
