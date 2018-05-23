@@ -1596,6 +1596,8 @@ void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network)
 		unsigned char *vsie = NULL;
 		for (list = network->vsie_list; list; list = list->next) {
 			unsigned char *ie = (unsigned char *)list->data;
+			if (ie == NULL)
+				continue;
 			vsie = (unsigned char *)g_try_malloc0(ie[1]+2);	// tag number size(1), tag length size(1)
 
 			if (vsie) {
@@ -2181,8 +2183,11 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 		}
 
 		if(ie[0] == WLAN_EID_COUNTRY && ie[1] >= 2) {
-			memcpy(bss->country_code, ie+2, COUNTRY_CODE_LENGTH);
-			continue;
+			/* Add country code only if it is a valid alphabet */
+			if (ie[2] >= 65 && ie[2] <= 90 && ie[3] >= 65 && ie[3] <= 90) {
+				memcpy(bss->country_code, ie+2, COUNTRY_CODE_LENGTH);
+				continue;
+			}
 		}
 #endif
 		if (ie[0] != WMM_WPA1_WPS_INFO || ie[1] < WPS_INFO_MIN_LEN ||
