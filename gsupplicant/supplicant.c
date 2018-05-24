@@ -1657,7 +1657,6 @@ static void merge_network(GSupplicantNetwork *network)
 	GString *str;
 	const char *ssid, *mode, *key_mgmt;
 #if defined TIZEN_EXT
-	GSupplicantInterface *interface;
 	const char *isHS20AP;
 	const char *eap, *identity, *phase2;
 #endif
@@ -1672,7 +1671,6 @@ static void merge_network(GSupplicantNetwork *network)
 	eap = g_hash_table_lookup(network->config_table, "eap");
 	identity = g_hash_table_lookup(network->config_table, "identity");
 	phase2 = g_hash_table_lookup(network->config_table, "phase2");
-	interface = network->interface;
 #endif
 
 	SUPPLICANT_DBG("ssid %s mode %s", ssid, mode);
@@ -1731,11 +1729,9 @@ static void merge_network(GSupplicantNetwork *network)
 	} else
 		network->isHS20AP = 0;
 
-	if (interface)
-		interface->network_path = g_strdup(network->path);
-
 	network->group = g_strdup(group);
 	callback_network_merged(network);
+	g_free(network->group);
 #endif
 
 	g_free(group);
@@ -4918,6 +4914,10 @@ static void interface_add_network_result(const char *error,
 
 	SUPPLICANT_DBG("PATH: %s", path);
 
+#if defined TIZEN_EXT
+	if (interface->network_path)
+		g_free(interface->network_path);
+#endif
 	interface->network_path = g_strdup(path);
 
 	store_network_information(interface, data->ssid);

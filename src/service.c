@@ -786,11 +786,17 @@ static int service_load(struct connman_service *service)
 
 	dns_method = g_key_file_get_string(keyfile, service->identifier,
 			"Nameservers.IPv4method", NULL);
-	service->dns_config_method_ipv4 = __connman_dnsconfig_string2method(dns_method);
+	if (dns_method) {
+		service->dns_config_method_ipv4 = __connman_dnsconfig_string2method(dns_method);
+		g_free(dns_method);
+	}
 
 	dns_method = g_key_file_get_string(keyfile, service->identifier,
 			"Nameservers.IPv6method", NULL);
-	service->dns_config_method_ipv6 = __connman_dnsconfig_string2method(dns_method);
+	if (dns_method) {
+		service->dns_config_method_ipv6 = __connman_dnsconfig_string2method(dns_method);
+		g_free(dns_method);
+	}
 #endif
 
 	service->timeservers_config = g_key_file_get_string_list(keyfile,

@@ -2105,6 +2105,7 @@ unsigned char *connman_network_get_countrycode(struct connman_network *network)
 int connman_network_set_bssid_list(struct connman_network *network,
 					GSList *bssids)
 {
+	g_slist_free_full(network->wifi.bssid_list, g_free);
 	network->wifi.bssid_list = bssids;
 
 	return 0;
@@ -2439,6 +2440,7 @@ bool connman_network_get_bool(struct connman_network *network,
  */
 void connman_network_set_vsie_list(struct connman_network *network, GSList *vsie_list)
 {
+	g_slist_free_full(network->wifi.vsie_list, g_free);
 	network->wifi.vsie_list = vsie_list;
 }
 
