@@ -2509,11 +2509,21 @@ static GSupplicantEapKeymgmt network_eap_keymgmt(const char *security)
 static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 {
 	const char *security;
+#if defined TIZEN_EXT
+	const void *ssid_data;
+#endif
 
 	memset(ssid, 0, sizeof(*ssid));
 	ssid->mode = G_SUPPLICANT_MODE_INFRA;
+#if defined TIZEN_EXT
+	ssid_data = connman_network_get_blob(network, "WiFi.SSID",
+						&ssid->ssid_len);
+	ssid->ssid = g_try_malloc0(ssid->ssid_len);
+	memcpy(ssid->ssid, ssid_data, ssid->ssid_len);
+#else
 	ssid->ssid = connman_network_get_blob(network, "WiFi.SSID",
 						&ssid->ssid_len);
+#endif
 	ssid->scan_ssid = 1;
 	security = connman_network_get_string(network, "WiFi.Security");
 	ssid->security = network_security(security);
@@ -2614,6 +2624,9 @@ static int network_connect(struct connman_network *network)
 
 	if (wifi->disconnecting) {
 		wifi->pending_network = network;
+#if defined TIZEN_EXT
+		g_free(ssid->ssid);
+#endif
 		g_free(ssid);
 	} else {
 		wifi->network = connman_network_ref(network);
@@ -4038,7 +4051,11 @@ static GSupplicantSSID *ssid_ap_init(const char *ssid,
 		return NULL;
 
 	ap->mode = G_SUPPLICANT_MODE_MASTER;
+#if defined TIZEN_EXT
+	ap->ssid = (void *) ssid;
+#else
 	ap->ssid = ssid;
+#endif
 	ap->ssid_len = strlen(ssid);
 	ap->scan_ssid = 0;
 	ap->freq = 2412;

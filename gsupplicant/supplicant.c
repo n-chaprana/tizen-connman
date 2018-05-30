@@ -3187,6 +3187,9 @@ static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 
 		memcpy(new_bss, bss, sizeof(struct g_supplicant_bss));
 		new_bss->path = g_strdup(bss->path);
+#if defined TIZEN_EXT
+		new_bss->vsie_list = NULL;
+#endif
 
 		g_hash_table_remove(interface->network_table, network->group);
 
@@ -4876,6 +4879,9 @@ static void interface_select_network_result(const char *error,
 	if (data->callback)
 		data->callback(err, data->interface, data->user_data);
 
+#if defined TIZEN_EXT
+	g_free(data->ssid->ssid);
+#endif
 	g_free(data->ssid);
 	dbus_free(data);
 }
@@ -4961,6 +4967,9 @@ error:
 	}
 
 	g_free(data->path);
+#if defined TIZEN_EXT
+	g_free(data->ssid->ssid);
+#endif
 	g_free(data->ssid);
 	g_free(data);
 }
@@ -5716,6 +5725,9 @@ done:
 		SUPPLICANT_DBG("AddNetwork failed %d", ret);
 		callback_assoc_failed(decrypt_request_data.data->user_data);
 		g_free(data->path);
+#if defined TIZEN_EXT
+		g_free(data->ssid->ssid);
+#endif
 		g_free(data->ssid);
 		dbus_free(data);
 	}

@@ -154,7 +154,11 @@ enum GSupplicantAPHiddenSSID {
 };
 
 struct _GSupplicantSSID {
+#if defined TIZEN_EXT
+	void *ssid;
+#else
 	const void *ssid;
+#endif
 	unsigned int ssid_len;
 	unsigned int scan_ssid;
 	GSupplicantMode mode;
