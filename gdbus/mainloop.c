@@ -30,8 +30,6 @@
 
 #include "gdbus.h"
 
-#define DISPATCH_TIMEOUT  0
-
 #define info(fmt...)
 #define error(fmt...)
 #define debug(fmt...)
@@ -69,8 +67,6 @@ static gboolean disconnected_signal(DBusConnection *conn,
 static gboolean message_dispatch(void *data)
 {
 	DBusConnection *conn = data;
-
-	dbus_connection_ref(conn);
 
 	/* Dispatch messages */
 	while (dbus_connection_dispatch(conn) == DBUS_DISPATCH_DATA_REMAINS);
