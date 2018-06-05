@@ -390,8 +390,10 @@ static int __dbus_request(const char *path, const char *interface,
 	ok = dbus_message_append_args_valist(message, type, va);
 	va_end(va);
 
-	if (!ok)
+	if (!ok) {
+		dbus_message_unref(message);
 		return -ENOMEM;
+	}
 
 	if (dbus_connection_send_with_reply(connection, message,
 						&call, TIMEOUT) == FALSE) {
@@ -489,10 +491,6 @@ static void __response_get_services(DBusPendingCall *call, void *user_data)
 	struct telephony_modem *modem;
 
 	modem = g_hash_table_lookup(modem_hash, path);
-	if (modem == NULL)
-		return;
-	if (modem->device == NULL)
-		return;
 
 	DBG("");
 
@@ -505,6 +503,9 @@ static void __response_get_services(DBusPendingCall *call, void *user_data)
 		dbus_error_free(&error);
 		goto done;
 	}
+
+	if (modem == NULL || modem->device == NULL)
+		goto done;
 
 	DBG("message signature (%s)", dbus_message_get_signature(reply));
 
