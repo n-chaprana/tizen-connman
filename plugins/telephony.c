@@ -39,6 +39,7 @@
 #include <connman.h>
 
 #define PS_DBUS_SERVICE				"com.tcore.ps"
+#define TELEPHONY_DBUS_SERVICE			"org.tizen.telephony"
 
 #define PS_MASTER_INTERFACE			PS_DBUS_SERVICE ".master"
 #define PS_MODEM_INTERFACE			PS_DBUS_SERVICE ".modem"
@@ -131,7 +132,7 @@ static int __network_disconnect(struct connman_network *network);
 
 
 /* dbus request and reply */
-static int __dbus_request(const char *path, const char *interface,
+static int __dbus_request(const char *service, const char *path, const char *interface,
 			const char *method,
 			DBusPendingCallNotifyFunction notify, void *user_data,
 			DBusFreeFunction free_function, int type, ...);
@@ -365,7 +366,7 @@ static void __network_remove(struct connman_network *network)
 	g_hash_table_remove(network_hash, path);
 }
 
-static int __dbus_request(const char *path, const char *interface,
+static int __dbus_request(const char *service, const char *path, const char *interface,
 		const char *method,
 		DBusPendingCallNotifyFunction notify, void *user_data,
 		DBusFreeFunction free_function, int type, ...)
@@ -380,7 +381,7 @@ static int __dbus_request(const char *path, const char *interface,
 	if (path == NULL)
 		return -EINVAL;
 
-	message = dbus_message_new_method_call(PS_DBUS_SERVICE, path, interface, method);
+	message = dbus_message_new_method_call(service, path, interface, method);
 	if (message == NULL)
 		return -ENOMEM;
 
@@ -419,7 +420,7 @@ static int __request_get_modems(void)
 {
 	DBG("request get modem");
 	/* call connect master */
-	return __dbus_request("/", PS_MASTER_INTERFACE, GET_MODEMS,
+	return __dbus_request(PS_DBUS_SERVICE, "/", PS_MASTER_INTERFACE, GET_MODEMS,
 			__response_get_modems, NULL, NULL, DBUS_TYPE_INVALID);
 }
 
@@ -476,7 +477,7 @@ done:
 static int __request_get_services(const char *path)
 {
 	DBG("request get service");
-	return __dbus_request(path, PS_MODEM_INTERFACE, GET_SERVICES,
+	return __dbus_request(PS_DBUS_SERVICE, path, PS_MODEM_INTERFACE, GET_SERVICES,
 			__response_get_services, g_strdup(path),
 			g_free, DBUS_TYPE_INVALID);
 }
@@ -542,7 +543,7 @@ done:
 static int __request_get_contexts(struct telephony_modem *modem)
 {
 	DBG("request get contexts");
-	return __dbus_request(modem->s_service->path,
+	return __dbus_request(PS_DBUS_SERVICE, modem->s_service->path,
 			PS_SERVICE_INTERFACE, GET_CONTEXTS,
 			__response_get_contexts, g_strdup(modem->path),
 			g_free, DBUS_TYPE_INVALID);
@@ -627,7 +628,7 @@ static int __request_network_activate(struct connman_network *network)
 		g_free(subscribe_id);
 	}
 
-	return __dbus_request(path, PS_CONTEXT_INTERFACE, ACTIVATE_CONTEXT,
+	return __dbus_request(PS_DBUS_SERVICE, path, PS_CONTEXT_INTERFACE, ACTIVATE_CONTEXT,
 			__response_network_activate,
 			g_strdup(path), NULL, DBUS_TYPE_INVALID);
 }
@@ -692,7 +693,7 @@ static int __request_network_deactivate(struct connman_network *network)
 	const char *path = connman_network_get_string(network, "Path");
 	DBG("network %p, path %s", network, path);
 
-	return __dbus_request(path, PS_CONTEXT_INTERFACE, DEACTIVATE_CONTEXT,
+	return __dbus_request(PS_DBUS_SERVICE, path, PS_CONTEXT_INTERFACE, DEACTIVATE_CONTEXT,
 			NULL, NULL, NULL, DBUS_TYPE_INVALID);
 }
 
@@ -735,7 +736,7 @@ static int __request_get_default_subscription_id(const char *path)
 	telephony_modem_path = g_strdup_printf("/org/tizen/telephony%s", path);
 	DBG("request get default subscription id %s", telephony_modem_path);
 
-	ret = __dbus_request(telephony_modem_path,
+	ret = __dbus_request(TELEPHONY_DBUS_SERVICE, telephony_modem_path,
 			"org.tizen.telephony.Network", "GetDefaultDataSubscription",
 			__response_get_default_subscription_id, NULL, NULL, DBUS_TYPE_INVALID);
 
