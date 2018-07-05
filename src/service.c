@@ -3361,7 +3361,6 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		vsie_list = (GSList *)connman_network_get_vsie_list(service->network);
 
 	if (vsie_list) {
-		DBG("ConnMan, service->path=%s No.of elements in list: %d", service->path, g_slist_length(vsie_list));
 		GSList *list;
 		for (list = vsie_list; list; list = list->next) {
 			wifi_vsie = (unsigned char *)list->data;
@@ -4854,6 +4853,19 @@ static DBusMessage *set_property(DBusConnection *conn,
 		}
 
 		service_save(service);
+#if defined TIZEN_EXT
+		/* When AP is connected using WPS without SSID then its password needs
+		 * to be saved for autoconnection */
+	} else if (g_str_equal(name, "Passphrase")) {
+		char *passphrase;
+
+		if (type != DBUS_TYPE_STRING)
+			return __connman_error_invalid_arguments(msg);
+
+		dbus_message_iter_get_basic(&value, &passphrase);
+
+		__connman_service_set_passphrase(service, passphrase);
+#endif
 	} else
 		return __connman_error_invalid_property(msg);
 
