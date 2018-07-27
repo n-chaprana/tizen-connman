@@ -4881,6 +4881,7 @@ static void interface_select_network_result(const char *error,
 
 #if defined TIZEN_EXT
 	g_free(data->ssid->ssid);
+	g_free(data->ssid->passphrase);
 #endif
 	g_free(data->ssid);
 	dbus_free(data);
@@ -4969,6 +4970,7 @@ error:
 	g_free(data->path);
 #if defined TIZEN_EXT
 	g_free(data->ssid->ssid);
+	g_free(data->ssid->passphrase);
 #endif
 	g_free(data->ssid);
 	g_free(data);
@@ -5685,11 +5687,7 @@ static void decryption_request_reply(DBusPendingCall *call,
 	DBusMessageIter args;
 	char *out_data;
 	int ret;
-	static gchar* origin_value = NULL;
 	struct interface_connect_data *data = user_data;
-
-	g_free(origin_value);
-	origin_value = NULL;
 
 	SUPPLICANT_DBG("");
 
@@ -5710,9 +5708,7 @@ static void decryption_request_reply(DBusPendingCall *call,
 	}
 
 	dbus_message_iter_get_basic(&args, &out_data);
-
-	origin_value = g_strdup((const gchar *)out_data);
-	data->ssid->passphrase = origin_value;
+	data->ssid->passphrase = g_strdup((const gchar *)out_data);
 
 	ret = supplicant_dbus_method_call(data->interface->path,
 		SUPPLICANT_INTERFACE ".Interface", "AddNetwork",
@@ -5725,9 +5721,8 @@ done:
 		SUPPLICANT_DBG("AddNetwork failed %d", ret);
 		callback_assoc_failed(decrypt_request_data.data->user_data);
 		g_free(data->path);
-#if defined TIZEN_EXT
 		g_free(data->ssid->ssid);
-#endif
+		g_free(data->ssid->passphrase);
 		g_free(data->ssid);
 		dbus_free(data);
 	}
