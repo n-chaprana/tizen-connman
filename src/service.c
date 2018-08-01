@@ -5663,6 +5663,7 @@ static void __connman_service_cleanup_network_8021x(struct connman_service *serv
 	connman_network_set_string(service->network, "WiFi.PrivateKeyFile", NULL);
 	connman_network_set_string(service->network, "WiFi.PrivateKeyPassphrase", NULL);
 	connman_network_set_string(service->network, "WiFi.Phase2", NULL);
+	connman_network_set_string(service->network, "WiFi.AnonymousIdentity", NULL);
 }
 #endif
 
