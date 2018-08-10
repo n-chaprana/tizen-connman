@@ -50,6 +50,9 @@ extern "C" {
 #define G_SUPPLICANT_CAPABILITY_MODE_IBSS		(1 << 1)
 #define G_SUPPLICANT_CAPABILITY_MODE_AP		(1 << 2)
 #define G_SUPPLICANT_CAPABILITY_MODE_P2P	(1 << 3)
+#if defined TIZEN_EXT_WIFI_MESH
+#define G_SUPPLICANT_CAPABILITY_MODE_MESH      (1 << 4)
+#endif
 
 #define G_SUPPLICANT_KEYMGMT_NONE		(1 << 0)
 #define G_SUPPLICANT_KEYMGMT_IEEE8021X	(1 << 1)
@@ -66,6 +69,9 @@ extern "C" {
 #define G_SUPPLICANT_KEYMGMT_WPA_EAP	(1 << 7)
 #define G_SUPPLICANT_KEYMGMT_WPA_EAP_256	(1 << 8)
 #define G_SUPPLICANT_KEYMGMT_WPS		(1 << 9)
+#if defined TIZEN_EXT_WIFI_MESH
+#define G_SUPPLICANT_KEYMGMT_SAE		(1 << 10)
+#endif
 
 #define G_SUPPLICANT_PROTO_WPA		(1 << 0)
 #define G_SUPPLICANT_PROTO_RSN		(1 << 1)
@@ -94,7 +100,18 @@ typedef enum {
 	G_SUPPLICANT_MODE_INFRA,
 	G_SUPPLICANT_MODE_IBSS,
 	G_SUPPLICANT_MODE_MASTER,
+#if defined TIZEN_EXT_WIFI_MESH
+	G_SUPPLICANT_MODE_MESH,
+#endif
 } GSupplicantMode;
+
+#if defined TIZEN_EXT_WIFI_MESH
+typedef enum {
+	G_SUPPLICANT_IEEE80211W_UNKNOWN,
+	G_SUPPLICANT_IEEE80211W_OPTIONAL,
+	G_SUPPLICANT_IEEE80211W_REQUIRED,
+} GSupplicantPmf;
+#endif
 
 typedef enum {
 	G_SUPPLICANT_SECURITY_UNKNOWN,
@@ -105,6 +122,9 @@ typedef enum {
 #if defined TIZEN_EXT
 	G_SUPPLICANT_SECURITY_FT_PSK,
 	G_SUPPLICANT_SECURITY_FT_IEEE8021X,
+#endif
+#if defined TIZEN_EXT_WIFI_MESH
+	G_SUPPLICANT_SECURITY_SAE,
 #endif
 } GSupplicantSecurity;
 
@@ -192,6 +212,9 @@ struct _GSupplicantSSID {
 	const char *phase1;
 	const char *pac_file;
 #endif
+#if defined TIZEN_EXT_WIFI_MESH
+	uint16_t ieee80211w;
+#endif
 };
 
 typedef struct _GSupplicantSSID GSupplicantSSID;
@@ -257,6 +280,9 @@ struct _GSupplicantPeer;
 
 typedef struct _GSupplicantInterface GSupplicantInterface;
 typedef struct _GSupplicantPeer GSupplicantPeer;
+#if defined TIZEN_EXT_WIFI_MESH
+typedef struct _GSupplicantMeshPeer GSupplicantMeshPeer;
+#endif
 
 typedef void (*GSupplicantInterfaceCallback) (int result,
 					GSupplicantInterface *interface,
@@ -345,6 +371,26 @@ int g_supplicant_interface_set_p2p_device_config(GSupplicantInterface *interface
 GSupplicantPeer *g_supplicant_interface_peer_lookup(GSupplicantInterface *interface,
 						const char *identifier);
 bool g_supplicant_interface_is_p2p_finding(GSupplicantInterface *interface);
+
+#if defined TIZEN_EXT_WIFI_MESH
+bool g_supplicant_interface_has_mesh(GSupplicantInterface *interface);
+int g_supplicant_mesh_interface_create(const char *ifname, const char *driver,
+						const char *bridge, const char *parent_ifname,
+						GSupplicantInterfaceCallback callback, void *user_data);
+const void *g_supplicant_interface_get_mesh_group_ssid(
+							GSupplicantInterface *interface,
+							unsigned int *ssid_len);
+int g_supplicant_mesh_get_disconnect_reason(GSupplicantInterface *interface);
+const char *g_supplicant_mesh_peer_get_address(GSupplicantMeshPeer *mesh_peer);
+int g_supplicant_mesh_peer_get_disconnect_reason(
+							GSupplicantMeshPeer *mesh_peer);
+int g_supplicant_interface_abort_scan(GSupplicantInterface *interface,
+				GSupplicantInterfaceCallback callback, void *user_data);
+int g_supplicant_interface_mesh_peer_change_status(
+				GSupplicantInterface *interface,
+				GSupplicantInterfaceCallback callback, const char *peer_address,
+				const char *method, void *user_data);
+#endif
 
 /* Network and Peer API */
 struct _GSupplicantNetwork;
@@ -437,6 +483,13 @@ struct _GSupplicantCallbacks {
 				int reasoncode);
 	void (*assoc_status_code)(GSupplicantInterface *interface,
 				int reasoncode);
+#if defined TIZEN_EXT_WIFI_MESH
+	void (*mesh_support) (GSupplicantInterface *interface);
+	void (*mesh_group_started) (GSupplicantInterface *interface);
+	void (*mesh_group_removed) (GSupplicantInterface *interface);
+	void (*mesh_peer_connected) (GSupplicantMeshPeer *mesh_peer);
+	void (*mesh_peer_disconnected) (GSupplicantMeshPeer *mesh_peer);
+#endif
 };
 
 typedef struct _GSupplicantCallbacks GSupplicantCallbacks;

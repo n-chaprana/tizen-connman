@@ -185,3 +185,17 @@ DBusMessage *__connman_error_invalid_property(DBusMessage *msg)
 	return g_dbus_create_error(msg, CONNMAN_ERROR_INTERFACE
 				".InvalidProperty", "Invalid property");
 }
+
+#if defined TIZEN_EXT_WIFI_MESH
+DBusMessage *__connman_error_invalid_command(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, CONNMAN_ERROR_INTERFACE
+				".InvalidCommand", "Invalid Mesh Command");
+}
+
+DBusMessage *__connman_error_scan_abort_failed(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, CONNMAN_ERROR_INTERFACE
+				".ScanAbortFailed", "Scan Abort Failed");
+}
+#endif

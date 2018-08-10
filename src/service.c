@@ -298,6 +298,10 @@ const char *__connman_service_type2string(enum connman_service_type type)
 		return "gadget";
 	case CONNMAN_SERVICE_TYPE_P2P:
 		return "p2p";
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+		return "mesh";
+#endif
 	}
 
 	return NULL;
@@ -596,6 +600,9 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	case CONNMAN_SERVICE_TYPE_SYSTEM:
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	case CONNMAN_SERVICE_TYPE_VPN:
 		set_split_routing(service, g_key_file_get_boolean(keyfile,
@@ -671,6 +678,9 @@ static int service_load(struct connman_service *service)
 	case CONNMAN_SERVICE_TYPE_SYSTEM:
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	case CONNMAN_SERVICE_TYPE_VPN:
 		set_split_routing(service, g_key_file_get_boolean(keyfile,
@@ -933,6 +943,9 @@ static int service_save(struct connman_service *service)
 	case CONNMAN_SERVICE_TYPE_SYSTEM:
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	case CONNMAN_SERVICE_TYPE_VPN:
 		g_key_file_set_boolean(keyfile, service->identifier,
@@ -3427,6 +3440,9 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 		val = service->roaming;
@@ -5046,6 +5062,9 @@ void __connman_service_set_active_session(bool enable, GSList *list)
 		case CONNMAN_SERVICE_TYPE_GPS:
 		case CONNMAN_SERVICE_TYPE_VPN:
 		case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+		case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 			break;
 		}
 
@@ -5180,6 +5199,12 @@ static bool auto_connect_service(GList *services,
 		reason2string(reason));
 
 	ignore[CONNMAN_SERVICE_TYPE_VPN] = true;
+
+#if defined TIZEN_EXT_WIFI_MESH
+	/* Don't auto connect wifi if mesh interface is created */
+	if (connman_mesh_is_interface_created())
+		ignore[CONNMAN_SERVICE_TYPE_WIFI] = true;
+#endif
 
 	for (list = services; list; list = list->next) {
 		service = list->data;
@@ -8060,6 +8085,9 @@ static int service_connect(struct connman_service *service)
 	case CONNMAN_SERVICE_TYPE_SYSTEM:
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		return -EINVAL;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_GADGET:
@@ -8203,6 +8231,9 @@ int __connman_service_connect(struct connman_service *service,
 	case CONNMAN_SERVICE_TYPE_SYSTEM:
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		return -EINVAL;
 
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
@@ -9025,6 +9056,9 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 	case CONNMAN_SERVICE_TYPE_WIFI:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 		service->favorite = true;
@@ -9056,6 +9090,9 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 			case CONNMAN_SERVICE_TYPE_UNKNOWN:
 			case CONNMAN_SERVICE_TYPE_SYSTEM:
 			case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+			case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 				break;
 
 			case CONNMAN_SERVICE_TYPE_GADGET:

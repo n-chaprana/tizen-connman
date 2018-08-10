@@ -849,6 +849,9 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		return -EOPNOTSUPP;
 	}
 

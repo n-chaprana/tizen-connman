@@ -153,6 +153,9 @@ void __connman_notifier_connect(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	}
 
@@ -200,6 +203,9 @@ void __connman_notifier_disconnect(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	}
 

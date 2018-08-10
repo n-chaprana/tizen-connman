@@ -43,6 +43,9 @@
 #include "commands.h"
 #include "agent.h"
 #include "vpnconnections.h"
+#if defined TIZEN_EXT_WIFI_MESH
+#include "mesh.h"
+#endif
 
 static DBusConnection *connection;
 static GHashTable *service_hash;
@@ -598,6 +601,578 @@ static int tether_set_ssid(char *ssid, char *passphrase, int set_tethering)
 
 	return -EINPROGRESS;
 }
+
+#if defined TIZEN_EXT_WIFI_MESH
+struct mesh_if_prop {
+	char *ifname;
+	char *parent_ifname;
+	char *bridge_ifname;
+};
+
+struct mesh_create_network {
+	char *name;
+	unsigned int freq;
+	char *sec_type;
+};
+
+struct mesh_specific_scan_params {
+	char *name;
+	unsigned int freq;
+};
+
+struct mesh_gate_params {
+	bool gate_announce;
+	int hwmp_rootmode;
+	int stp;
+};
+
+static int mesh_return(DBusMessageIter *iter, const char *error,
+		void *user_data)
+{
+	char *method = user_data;
+
+	if (error)
+		fprintf(stderr, "Error %s: %s\n", method, error);
+	else
+		fprintf(stderr, "Success %s\n", method);
+
+	g_free(method);
+
+	return 0;
+}
+
+static void mesh_interface_add_append(DBusMessageIter *iter, void *user_data)
+{
+	struct mesh_if_prop *append = user_data;
+
+	/* Append Virtual Interface Name */
+		__connmanctl_dbus_append_dict_entry(iter, "Ifname",
+				DBUS_TYPE_STRING, &append->ifname);
+
+	/* Append Parent WiFi Interface Name */
+		__connmanctl_dbus_append_dict_entry(iter, "ParentIfname",
+				DBUS_TYPE_STRING, &append->parent_ifname);
+
+	/* Append Bridge Interface Name */
+		if (append->bridge_ifname)
+			__connmanctl_dbus_append_dict_entry(iter, "BridgeIfname",
+						DBUS_TYPE_STRING, &append->bridge_ifname);
+}
+
+static void mesh_interface_remove_append(DBusMessageIter *iter, void *user_data)
+{
+	struct mesh_if_prop *append = user_data;
+
+	/* Append Virtual Interface Name */
+		__connmanctl_dbus_append_dict_entry(iter, "Ifname",
+				DBUS_TYPE_STRING, &append->ifname);
+}
+
+static void mesh_create_network_append(DBusMessageIter *iter, void *user_data)
+{
+	struct mesh_create_network *append = user_data;
+
+	/* Append Mesh Network Name */
+		__connmanctl_dbus_append_dict_entry(iter, "Name",
+				DBUS_TYPE_STRING, &append->name);
+
+	/* Append Mesh Network Frequency */
+		__connmanctl_dbus_append_dict_entry(iter, "Frequency",
+				DBUS_TYPE_UINT16, &append->freq);
+
+	/* Append Mesh Network Security Type */
+		__connmanctl_dbus_append_dict_entry(iter, "Security",
+				DBUS_TYPE_STRING, &append->sec_type);
+}
+
+static void mesh_specific_scan_append(DBusMessageIter *iter, void *user_data)
+{
+	struct mesh_specific_scan_params *append = user_data;
+
+	/* Append Mesh Network Name */
+		__connmanctl_dbus_append_dict_entry(iter, "Name",
+				DBUS_TYPE_STRING, &append->name);
+
+	/* Append Mesh Network Frequency */
+		__connmanctl_dbus_append_dict_entry(iter, "Frequency",
+				DBUS_TYPE_UINT16, &append->freq);
+}
+
+static void mesh_set_gate_append(DBusMessageIter *iter, void *user_data)
+{
+	struct mesh_gate_params *append = user_data;
+
+	/* Append Gate Announce Protocol */
+		__connmanctl_dbus_append_dict_entry(iter, "GateAnnounce",
+				DBUS_TYPE_BOOLEAN, &append->gate_announce);
+
+	/* Append HWMP Root Mode */
+		__connmanctl_dbus_append_dict_entry(iter, "HWMPRootMode",
+				DBUS_TYPE_UINT16, &append->hwmp_rootmode);
+
+	/* Append STP */
+		__connmanctl_dbus_append_dict_entry(iter, "STP", DBUS_TYPE_UINT16,
+				&append->stp);
+}
+
+static void mesh_peer_append(DBusMessageIter *iter, void *user_data)
+{
+	char *peer_addr = user_data;
+
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &peer_addr);
+
+	g_free(peer_addr);
+}
+
+static int mesh_peers_list(DBusMessageIter *iter,
+					const char *error, void *user_data)
+{
+	if (!error) {
+		__connmanctl_mesh_peers_list(iter);
+		fprintf(stdout, "\n");
+	} else
+		fprintf(stderr, "Error: %s\n", error);
+
+	return 0;
+}
+
+static int connected_mesh_peers_list(DBusMessageIter *iter,
+					const char *error, void *user_data)
+{
+	if (!error) {
+		__connmanctl_mesh_connected_peers_list(iter);
+		fprintf(stdout, "\n");
+	} else
+		fprintf(stderr, "Error: %s\n", error);
+
+	return 0;
+}
+
+static int disconnected_mesh_peers_list(DBusMessageIter *iter,
+					const char *error, void *user_data)
+{
+	if (!error) {
+		__connmanctl_mesh_disconnected_peers_list(iter);
+		fprintf(stdout, "\n");
+	} else
+		fprintf(stderr, "Error: %s\n", error);
+
+	return 0;
+}
+
+static int mesh_connect_return(DBusMessageIter *iter, const char *error,
+		void *user_data)
+{
+	char *path = user_data;
+
+	if (!error) {
+		char *str = strrchr(path, '/');
+		str++;
+		fprintf(stdout, "Connected %s\n", str);
+	} else
+		fprintf(stderr, "Error %s: %s\n", path, error);
+
+	g_free(user_data);
+
+	return 0;
+}
+
+static int mesh_disconnect_return(DBusMessageIter *iter, const char *error,
+		void *user_data)
+{
+	char *path = user_data;
+
+	if (!error) {
+		char *str = strrchr(path, '/');
+		str++;
+		fprintf(stdout, "Disconnected %s\n", str);
+	} else
+		fprintf(stderr, "Error %s: %s\n", path, error);
+
+	g_free(user_data);
+
+	return 0;
+}
+
+static int mesh_remove_return(DBusMessageIter *iter, const char *error,
+		void *user_data)
+{
+	char *path = user_data;
+
+	if (!error) {
+		char *str = strrchr(path, '/');
+		str++;
+		fprintf(stdout, "Removed %s\n", str);
+	} else
+		fprintf(stderr, "Error %s: %s\n", path, error);
+
+	g_free(user_data);
+
+	return 0;
+}
+
+static int mesh_config_return(DBusMessageIter *iter, const char *error,
+		void *user_data)
+{
+	char *path = user_data;
+	char *str = strrchr(path, '/');
+	str++;
+
+	if (error)
+		fprintf(stderr, "Error %s: %s\n", path, error);
+	else
+		fprintf(stdout, "Success SetProperty %s\n", str);
+
+	g_free(user_data);
+
+	return 0;
+}
+
+static int cmd_mesh(char *args[], int num, struct connman_option *options)
+{
+	int result = 0;
+	int c;
+	char *path = NULL;
+	char *method = NULL;
+	char *mesh_peer_name = NULL;
+	char *mesh_peer_path = NULL;
+	char *property = NULL;
+	char *value = NULL;
+	struct mesh_if_prop *append;
+	struct mesh_create_network *network;
+	struct mesh_specific_scan_params *scan_params;
+	struct mesh_gate_params *gate_params;
+	char *mesh_peer_addr = NULL;
+
+	c = parse_args(args[1], options);
+
+	switch (c) {
+	case 'a':
+		if (num < 4 || num > 5) {
+			result = -EINVAL;
+			break;
+		}
+		path = g_strdup_printf("/net/connman/technology/mesh");
+
+		append = dbus_malloc0(sizeof(struct mesh_if_prop));
+		append->ifname = g_strdup(args[2]);
+		append->parent_ifname = g_strdup(args[3]);
+		if (num == 5)
+			append->bridge_ifname = g_strdup(args[4]);
+		method = g_strdup("MeshInterfaceAdd");
+		result = __connmanctl_dbus_mesh_dict(connection, path,
+							"net.connman.Technology", mesh_return, method,
+							"MeshInterfaceAdd", DBUS_TYPE_STRING,
+							mesh_interface_add_append, append);
+		g_free(append->ifname);
+		g_free(append->parent_ifname);
+		g_free(append->bridge_ifname);
+		g_free(append);
+		break;
+
+	case 'r':
+		if (num != 3) {
+			result = -EINVAL;
+			break;
+		}
+		path = g_strdup_printf("/net/connman/technology/mesh");
+
+		append = dbus_malloc0(sizeof(struct mesh_if_prop));
+		append->ifname = g_strdup(args[2]);
+		method = g_strdup("MeshInterfaceRemove");
+		result = __connmanctl_dbus_mesh_dict(connection, path,
+							"net.connman.Technology", mesh_return, method,
+							"MeshInterfaceRemove", DBUS_TYPE_STRING,
+							mesh_interface_remove_append, append);
+		g_free(append->ifname);
+		g_free(append);
+		break;
+
+	case 'p':
+		if (num > 3) {
+			result = -E2BIG;
+			break;
+		}
+
+		if (num == 3)
+			mesh_peer_name = args[2];
+
+		if (!mesh_peer_name) {
+			result = __connmanctl_dbus_method_call(connection,
+					CONNMAN_SERVICE, CONNMAN_PATH,
+					"net.connman.Manager", "GetMeshPeers",
+					mesh_peers_list, NULL, NULL, NULL);
+			break;
+		}
+
+		if (check_dbus_name(mesh_peer_name) == false) {
+			result = -EINVAL;
+			break;
+		}
+
+		mesh_peer_path = g_strdup_printf("/net/connman/mesh/%s",
+									mesh_peer_name);
+		result = __connmanctl_dbus_method_call(connection, CONNMAN_SERVICE,
+						mesh_peer_path, "net.connman.Mesh", "GetProperties",
+						object_properties, mesh_peer_path, NULL, NULL);
+		break;
+
+	case 'c':
+		if (num < 3) {
+			result = -EINVAL;
+			break;
+		}
+
+		if (num > 3) {
+			result = -E2BIG;
+			break;
+		}
+
+		mesh_peer_name = args[2];
+
+		if (check_dbus_name(mesh_peer_name) == false) {
+			result = -EINVAL;
+			break;
+		}
+
+		mesh_peer_path = g_strdup_printf("/net/connman/mesh/%s",
+									mesh_peer_name);
+		result = __connmanctl_dbus_method_call(connection, CONNMAN_SERVICE,
+						mesh_peer_path, "net.connman.Mesh", "Connect",
+						mesh_connect_return, mesh_peer_path, NULL, NULL);
+		break;
+
+	case 'd':
+		if (num < 3) {
+			result = -EINVAL;
+			break;
+		}
+
+		if (num > 3) {
+			result = -E2BIG;
+			break;
+		}
+
+		mesh_peer_name = args[2];
+
+		if (check_dbus_name(mesh_peer_name) == false) {
+			result = -EINVAL;
+			break;
+		}
+
+		mesh_peer_path = g_strdup_printf("/net/connman/mesh/%s",
+									mesh_peer_name);
+		result = __connmanctl_dbus_method_call(connection, CONNMAN_SERVICE,
+						mesh_peer_path, "net.connman.Mesh", "Disconnect",
+						mesh_disconnect_return, mesh_peer_path, NULL, NULL);
+		break;
+
+	case 'f':
+		if (num < 3) {
+			result = -EINVAL;
+			break;
+		}
+
+		if (num > 3) {
+			result = -E2BIG;
+			break;
+		}
+
+		mesh_peer_name = args[2];
+
+		if (check_dbus_name(mesh_peer_name) == false) {
+			result = -EINVAL;
+			break;
+		}
+
+		mesh_peer_path = g_strdup_printf("/net/connman/mesh/%s",
+									mesh_peer_name);
+		result = __connmanctl_dbus_method_call(connection, CONNMAN_SERVICE,
+						mesh_peer_path, "net.connman.Mesh", "Remove",
+						mesh_remove_return, mesh_peer_path, NULL, NULL);
+		break;
+
+	case 'C':
+		if (num > 2) {
+			result = -E2BIG;
+			break;
+		}
+
+		result = __connmanctl_dbus_method_call(connection,
+								CONNMAN_SERVICE, CONNMAN_PATH,
+								"net.connman.Manager", "GetConnectedMeshPeers",
+								connected_mesh_peers_list, NULL, NULL, NULL);
+		break;
+
+	case 'D':
+		if (num > 2) {
+			result = -E2BIG;
+			break;
+		}
+
+		result = __connmanctl_dbus_method_call(connection,
+								CONNMAN_SERVICE, CONNMAN_PATH,
+								"net.connman.Manager",
+								"GetDisconnectedMeshPeers",
+								disconnected_mesh_peers_list, NULL, NULL, NULL);
+		break;
+
+	case 'n':
+		if (num != 5) {
+			result = -EINVAL;
+			break;
+		}
+		path = g_strdup_printf("/net/connman/technology/mesh");
+
+		network = dbus_malloc0(sizeof(struct mesh_create_network));
+		network->name = g_strdup(args[2]);
+		network->freq = atoi(args[3]);
+		network->sec_type = g_strdup(args[4]);
+		method = g_strdup("MeshCreateNetwork");
+		result = __connmanctl_dbus_mesh_dict(connection, path,
+							"net.connman.Technology", mesh_return, method,
+							"MeshCreateNetwork", DBUS_TYPE_STRING,
+							mesh_create_network_append, network);
+		g_free(network->name);
+		g_free(network->sec_type);
+		g_free(network);
+		break;
+
+	case 'A':
+		if (num != 2) {
+			result = -EINVAL;
+			break;
+		}
+		path = g_strdup_printf("/net/connman/technology/mesh");
+
+		method = g_strdup("AbortScan");
+		result = __connmanctl_dbus_mesh_dict(connection, path,
+							"net.connman.Technology", mesh_return, method,
+							"AbortScan", DBUS_TYPE_STRING,
+							NULL, NULL);
+		break;
+
+	case 'S':
+		if (num != 4) {
+			result = -EINVAL;
+			break;
+		}
+		path = g_strdup_printf("/net/connman/technology/mesh");
+
+		scan_params = dbus_malloc0(sizeof(struct mesh_specific_scan_params));
+		scan_params->name = g_strdup(args[2]);
+		scan_params->freq = atoi(args[3]);
+		method = g_strdup("MeshSpecificScan");
+		result = __connmanctl_dbus_mesh_dict(connection, path,
+							"net.connman.Technology", mesh_return, method,
+							"MeshSpecificScan", DBUS_TYPE_STRING,
+							mesh_specific_scan_append, scan_params);
+		g_free(scan_params->name);
+		g_free(scan_params);
+		break;
+
+	case 'P':
+		if (num != 5) {
+			result = -EINVAL;
+			break;
+		}
+
+		mesh_peer_name = args[2];
+		property = args[3];
+		value = args[4];
+
+		if (check_dbus_name(mesh_peer_name) == false) {
+			result = -EINVAL;
+			break;
+		}
+
+		mesh_peer_path = g_strdup_printf("/net/connman/mesh/%s",
+									mesh_peer_name);
+
+		if (g_strcmp0(property, "Passphrase") == 0) {
+			result = __connmanctl_dbus_set_property(connection,
+								mesh_peer_path, "net.connman.Mesh",
+								mesh_config_return, mesh_peer_path, property,
+								DBUS_TYPE_STRING, &value);
+		} else {
+			printf("Invalid property %s\n", property);
+			result = -EINVAL;
+		}
+
+		break;
+
+	case 'G':
+		if (num != 5) {
+			result = -EINVAL;
+			break;
+		}
+
+		path = g_strdup_printf("/net/connman/technology/mesh");
+
+		gate_params = dbus_malloc0(sizeof(struct mesh_gate_params));
+		gate_params->gate_announce = atoi(args[2]);
+		gate_params->hwmp_rootmode = atoi(args[3]);
+		gate_params->stp = atoi(args[4]);
+
+		method = g_strdup("SetMeshGate");
+
+		result = __connmanctl_dbus_mesh_dict(connection, path,
+							"net.connman.Technology", mesh_return, method,
+							"SetMeshGate", DBUS_TYPE_STRING,
+							mesh_set_gate_append, gate_params);
+
+		break;
+
+	case 'z':
+		if (num != 3) {
+			result = -EINVAL;
+			break;
+		}
+
+		mesh_peer_addr = g_strdup(args[2]);
+		method = g_strdup("MeshAddPeer");
+
+		result = __connmanctl_dbus_method_call(connection,
+								CONNMAN_SERVICE, CONNMAN_PATH,
+								"net.connman.Manager", "MeshAddPeer",
+								mesh_return, method, mesh_peer_append,
+								mesh_peer_addr);
+
+		break;
+
+	case 'y':
+		if (num != 3) {
+			result = -EINVAL;
+			break;
+		}
+
+		mesh_peer_addr = g_strdup(args[2]);
+		method = g_strdup("MeshRemovePeer");
+
+		result = __connmanctl_dbus_method_call(connection,
+								CONNMAN_SERVICE, CONNMAN_PATH,
+								"net.connman.Manager", "MeshRemovePeer",
+								mesh_return, method, mesh_peer_append,
+								mesh_peer_addr);
+
+		break;
+
+	default:
+		result = -EINVAL;
+		break;
+	}
+
+	g_free(path);
+
+	if (result < 0) {
+		if (result != -EINPROGRESS)
+			printf("Error '%s': %s\n", args[1], strerror(-result));
+	}
+
+
+	return result;
+}
+#endif
 
 static int cmd_tether(char *args[], int num, struct connman_option *options)
 {
@@ -2251,6 +2826,38 @@ static struct connman_option session_options[] = {
 	{ NULL, }
 };
 
+#if defined TIZEN_EXT_WIFI_MESH
+static struct connman_option mesh_options[] = {
+	{"ifadd", 'a', "<ifname> <wifi_ifname>\n"
+		"                     [bridge_ifname]                Add Virtual Mesh "
+			"interface"},
+	{"ifrmv", 'r', "<ifname>                       Remove Virtual Mesh "
+		"interface"},
+	{"peers", 'p', "[peer]                         Display Mesh peer "
+		"informations"},
+	{"connect", 'c', "<peer>                         Connect Mesh Peer"},
+	{"disconnect", 'd', "<peer>                         Disconnect Mesh Peer"},
+	{"remove", 'f', "<peer>                         Forget Mesh Peer"},
+	{"connected_peers", 'C', "[]                             Displays connected"
+		" Peer informations"},
+	{"disconnected_peers", 'D', "[]                           Displays "
+		"Disconnected Peer informations"},
+	{"create_network", 'n', "<name> <frequency> <sec_type>  Create New Mesh "
+		"Network"},
+	{"abort_scan", 'A', "                               Abort ongoing mesh "
+		"scan"},
+	{"specific_scan", 'S', "<name> <frequency>             Create New Mesh "
+		"Network"},
+	{"config", 'P', "<peer>                         Set Mesh Network "
+		"Configurations\n          Passphrase    <passphrase>"},
+	{"set_gate", 'G', "<gate_ann> <rootmode> <stp>    Set Mesh Gate "
+		"Option"},
+	{"add_peer", 'z', "<addr>                         Add Mesh Peer"},
+	{"remove_peer", 'y', "<addr>                         Remove Mesh Peer"},
+	{ NULL, }
+};
+#endif
+
 static char *lookup_options(struct connman_option *options, const char *text,
 		int state)
 {
@@ -2302,6 +2909,13 @@ static char *lookup_session(const char *text, int state)
 {
 	return lookup_options(session_options, text, state);
 }
+
+#if defined TIZEN_EXT_WIFI_MESH
+static char *lookup_mesh(const char *text, int state)
+{
+	return lookup_options(mesh_options, text, state);
+}
+#endif
 
 static int peer_service_cb(DBusMessageIter *iter, const char *error,
 							void *user_data)
@@ -2614,6 +3228,10 @@ static const struct {
 	{ "disable",      "<technology>|offline", NULL,    cmd_disable,
 	  "Disables given technology or offline mode",
 	  lookup_technology_offline },
+#if defined TIZEN_EXT_WIFI_MESH
+	{ "mesh",      "", mesh_options, cmd_mesh, "Mesh specific commands",
+		lookup_mesh },
+#endif
 	{ "tether", "<technology> on|off\n"
 	            "            wifi [on|off] <ssid> <passphrase> ",
 	                                  NULL,            cmd_tether,

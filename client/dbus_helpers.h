@@ -67,6 +67,15 @@ int __connmanctl_dbus_set_property_dict(DBusConnection *connection,
 		connmanctl_dbus_append_func_t append_fn,
 		void *append_user_data);
 
+#if defined TIZEN_EXT_WIFI_MESH
+int __connmanctl_dbus_mesh_dict(DBusConnection *connection,
+		const char *path, const char *interface,
+		connmanctl_dbus_method_return_func_t cb, void *user_data,
+		const char *property, int type,
+		connmanctl_dbus_append_func_t append_fn,
+		void *append_user_data);
+#endif
+
 void __connmanctl_dbus_append_dict_string_array(DBusMessageIter *iter,
 		const char *property, connmanctl_dbus_append_func_t append_fn,
 		void *append_user_data);

@@ -1257,6 +1257,9 @@ static int try_provision_service(struct connman_config_service *config,
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 
 		return -ENOENT;
 	}

@@ -48,6 +48,9 @@
 #include <connman/rtnl.h>
 #include <connman/log.h>
 #include <connman/setting.h>
+#if defined TIZEN_EXT_WIFI_MESH
+#include <connman/mesh.h>
+#endif
 
 static bool eth_tethering = false;
 
@@ -252,6 +255,10 @@ static void ethernet_newlink(unsigned flags, unsigned change, void *user_data)
 		} else {
 			DBG("carrier off");
 			remove_network(device, ethernet);
+#if defined TIZEN_EXT_WIFI_MESH
+			/* Remove ethernet from mesh bridge */
+			__connman_mesh_remove_ethernet_from_bridge();
+#endif
 		}
 	}
 
@@ -430,6 +437,54 @@ static struct connman_technology_driver eth_tech_driver = {
 	.set_tethering		= eth_tech_set_tethering,
 };
 
+#if defined TIZEN_EXT_WIFI_MESH
+static int eth_mesh_add_to_bridge(const char *bridge)
+{
+	GList *list;
+	struct ethernet_data *ethernet;
+
+	DBG("Add ethernet to bridge %s", bridge);
+
+	for (list = eth_interface_list; list; list = list->next) {
+		int index = GPOINTER_TO_INT(list->data);
+		struct connman_device *device =
+			connman_device_find_by_index(index);
+
+		if (device) {
+			ethernet = connman_device_get_data(device);
+			if (ethernet)
+				remove_network(device, ethernet);
+		}
+
+		connman_inet_ifup(index);
+
+		connman_inet_add_to_bridge(index, bridge);
+	}
+
+	return 0;
+}
+
+static int eth_mesh_remove_from_bridge(const char *bridge)
+{
+	GList *list;
+
+	DBG("Remove ethernet from bridge %s", bridge);
+
+	for (list = eth_interface_list; list; list = list->next) {
+		int index = GPOINTER_TO_INT(list->data);
+
+		connman_inet_remove_from_bridge(index, bridge);
+	}
+
+	return 0;
+}
+
+static struct connman_mesh_eth_driver eth_mesh_driver = {
+	.add_to_bridge		= eth_mesh_add_to_bridge,
+	.remove_from_bridge	= eth_mesh_remove_from_bridge,
+};
+#endif
+
 static int ethernet_init(void)
 {
 	int err;
@@ -437,6 +492,12 @@ static int ethernet_init(void)
 	err = connman_technology_driver_register(&eth_tech_driver);
 	if (err < 0)
 		return err;
+
+#if defined TIZEN_EXT_WIFI_MESH
+	err = connman_mesh_eth_driver_register(&eth_mesh_driver);
+	if (err < 0)
+		return err;
+#endif
 
 	err = connman_network_driver_register(&eth_network_driver);
 	if (err < 0)
@@ -454,6 +515,10 @@ static int ethernet_init(void)
 static void ethernet_exit(void)
 {
 	connman_technology_driver_unregister(&eth_tech_driver);
+
+#if defined TIZEN_EXT_WIFI_MESH
+	connman_mesh_eth_driver_unregister(&eth_mesh_driver);
+#endif
 
 	connman_network_driver_unregister(&eth_network_driver);
 

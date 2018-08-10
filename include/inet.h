@@ -81,6 +81,11 @@ int connman_inet_check_ipaddress(const char *host);
 bool connman_inet_check_hostname(const char *ptr, size_t len);
 bool connman_inet_is_ipv6_supported();
 
+#if defined TIZEN_EXT_WIFI_MESH
+char *connman_inet_ifaddr(const char *name);
+char *connman_inet_ifname2addr(const char *name);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

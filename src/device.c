@@ -743,6 +743,11 @@ int connman_device_set_scanning(struct connman_device *device,
 
 	__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
+#if defined TIZEN_EXT_WIFI_MESH
+	if (type == CONNMAN_SERVICE_TYPE_MESH)
+		__connman_mesh_auto_connect();
+#endif
+
 	return 0;
 }
 
@@ -1077,6 +1082,9 @@ int __connman_device_request_specific_scan(enum connman_service_type type,
 		return -EOPNOTSUPP;
 	case CONNMAN_SERVICE_TYPE_WIFI:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	}
 
@@ -1107,6 +1115,100 @@ int __connman_device_request_specific_scan(enum connman_service_type type,
 
 	return last_err;
 }
+
+#if defined TIZEN_EXT_WIFI_MESH
+static int device_abort_scan(enum connman_service_type type,
+				struct connman_device *device)
+{
+	if (!device->driver || !device->driver->scan)
+		return -EOPNOTSUPP;
+
+	if (!device->powered)
+		return -ENOLINK;
+
+	return device->driver->abort_scan(type, device);
+}
+
+int __connman_device_abort_scan(enum connman_service_type type)
+{
+	GSList *list;
+	int err = -EINVAL;
+
+	if (type != CONNMAN_SERVICE_TYPE_MESH)
+		return -EINVAL;
+
+	for (list = device_list; list; list = list->next) {
+		struct connman_device *device = list->data;
+		enum connman_service_type service_type =
+			__connman_device_get_service_type(device);
+
+		if (service_type != CONNMAN_SERVICE_TYPE_UNKNOWN) {
+			if (type == CONNMAN_SERVICE_TYPE_MESH)
+				if (service_type != CONNMAN_SERVICE_TYPE_WIFI)
+					continue;
+
+			if (!device->scanning) {
+				err = -EEXIST;
+				continue;
+			}
+
+			err = device_abort_scan(type, device);
+		}
+	}
+	return err;
+}
+
+static int device_mesh_specific_scan(enum connman_service_type type,
+				struct connman_device *device, const char *name,
+				unsigned int freq)
+{
+	if (!device->driver || !device->driver->mesh_specific_scan)
+		return -EOPNOTSUPP;
+
+	if (!device->powered)
+		return -ENOLINK;
+
+	return device->driver->mesh_specific_scan(type, device, name, freq, NULL);
+}
+
+int __connman_device_request_mesh_specific_scan(enum connman_service_type type,
+						const char *name,
+						unsigned int freq)
+{
+	bool success = false;
+	int last_err = -ENOSYS;
+	GSList *list;
+	int err;
+
+	if (type != CONNMAN_SERVICE_TYPE_MESH)
+		return -EINVAL;
+
+	for (list = device_list; list; list = list->next) {
+		struct connman_device *device = list->data;
+		enum connman_service_type service_type =
+			__connman_device_get_service_type(device);
+
+		if (service_type != CONNMAN_SERVICE_TYPE_UNKNOWN) {
+			if (type == CONNMAN_SERVICE_TYPE_MESH)
+				if (service_type != CONNMAN_SERVICE_TYPE_WIFI)
+					continue;
+		}
+
+		err = device_mesh_specific_scan(type, device, name, freq);
+		if (err == 0 || err == -EALREADY || err == -EINPROGRESS) {
+			success = true;
+		} else {
+			last_err = err;
+			DBG("device %p err %d", device, err);
+		}
+	}
+
+	if (success)
+		return 0;
+
+	return last_err;
+}
+#endif /* TIZEN_EXT_WIFI_MESH */
 #endif
 
 int __connman_device_request_scan(enum connman_service_type type)
@@ -1128,6 +1230,9 @@ int __connman_device_request_scan(enum connman_service_type type)
 		return -EOPNOTSUPP;
 	case CONNMAN_SERVICE_TYPE_WIFI:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	}
 
@@ -1140,6 +1245,11 @@ int __connman_device_request_scan(enum connman_service_type type)
 			if (type == CONNMAN_SERVICE_TYPE_P2P) {
 				if (service_type != CONNMAN_SERVICE_TYPE_WIFI)
 					continue;
+#if defined TIZEN_EXT_WIFI_MESH
+			} else if (type == CONNMAN_SERVICE_TYPE_MESH) {
+				if (service_type != CONNMAN_SERVICE_TYPE_WIFI)
+					continue;
+#endif
 			} else if (service_type != type)
 				continue;
 		}

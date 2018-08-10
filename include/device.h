@@ -131,6 +131,13 @@ struct connman_device_driver {
 			struct connman_device *device, int scan_type,
 			GSList *specific_scan_list, void *user_data);
 #endif
+#if defined TIZEN_EXT_WIFI_MESH
+	int (*abort_scan) (enum connman_service_type type,
+						struct connman_device *device);
+	int (*mesh_specific_scan) (enum connman_service_type type,
+			struct connman_device *device, const char *ssid, unsigned int freq,
+			void *user_data);
+#endif
 };
 
 int connman_device_driver_register(struct connman_device_driver *driver);

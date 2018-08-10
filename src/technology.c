@@ -95,6 +95,9 @@ struct connman_technology {
 	bool softblocked;
 	bool hardblocked;
 	bool dbus_registered;
+#if defined TIZEN_EXT_WIFI_MESH
+	DBusMessage *mesh_dbus_msg;
+#endif
 };
 
 static GSList *driver_list = NULL;
@@ -165,6 +168,10 @@ static const char *get_name(enum connman_service_type type)
 		return "Cellular";
 	case CONNMAN_SERVICE_TYPE_P2P:
 		return "P2P";
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+		return "Mesh";
+#endif
 	}
 
 	return NULL;
@@ -669,6 +676,11 @@ static int technology_affect_devices(struct connman_technology *technology,
 			__connman_technology_disabled(technology->type);
 		return 0;
 	}
+
+#if defined TIZEN_EXT_WIFI_MESH
+	if (technology->type == CONNMAN_SERVICE_TYPE_MESH)
+		return 0;
+#endif
 
 	for (list = technology->device_list; list; list = list->next) {
 		struct connman_device *device = list->data;
@@ -1433,6 +1445,471 @@ static DBusMessage *get_scan_state(DBusConnection *conn, DBusMessage *msg, void 
 }
 #endif
 
+#if defined TIZEN_EXT_WIFI_MESH
+bool __connman_technology_get_connected(enum connman_service_type type)
+{
+	struct connman_technology *technology;
+
+	technology = technology_find(type);
+
+	if (!technology)
+		return false;
+
+	return technology->connected;
+}
+
+void __connman_technology_mesh_interface_create_finished(
+							enum connman_service_type type, bool success,
+							const char *error)
+{
+	DBusMessage *reply;
+	struct connman_technology *technology;
+	DBusMessage *msg;
+	technology = technology_find(type);
+
+	DBG("technology %p success %d", technology, success);
+
+	if (!technology)
+		return;
+
+	msg = technology->mesh_dbus_msg;
+	if (!msg) {
+		DBG("No pending dbus message");
+		return;
+	}
+
+	if (success) {
+		reply = g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+		__connman_device_request_scan(technology->type);
+	} else
+		reply = g_dbus_create_error(msg, CONNMAN_ERROR_INTERFACE
+				".MeshInterfaceAddFailed", "%s", error);
+	g_dbus_send_message(connection, reply);
+	dbus_message_unref(msg);
+	technology->mesh_dbus_msg = NULL;
+}
+
+void __connman_technology_mesh_interface_remove_finished(
+							enum connman_service_type type, bool success)
+{
+	DBusMessage *reply;
+	struct connman_technology *technology;
+	DBusMessage *msg;
+	technology = technology_find(type);
+
+	DBG("technology %p success %d", technology, success);
+
+	if (!technology || !technology->mesh_dbus_msg)
+		return;
+
+	msg = technology->mesh_dbus_msg;
+	if (!msg) {
+		DBG("No pending dbus message");
+		return;
+	}
+
+	if (success)
+		reply = g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+	else
+		reply = __connman_error_failed(msg, EINVAL);
+	g_dbus_send_message(connection, reply);
+	dbus_message_unref(msg);
+	technology->mesh_dbus_msg = NULL;
+}
+
+void __connman_technology_notify_abort_scan(enum connman_service_type type,
+							int result)
+{
+	DBusMessage *reply;
+	struct connman_technology *technology;
+	DBusMessage *msg;
+	technology = technology_find(type);
+
+	DBG("technology %p result %d", technology, result);
+
+	if (!technology || !technology->mesh_dbus_msg)
+		return;
+
+	msg = technology->mesh_dbus_msg;
+	if (!msg) {
+		DBG("No pending dbus message");
+		return;
+	}
+
+	if (result < 0)
+		reply = __connman_error_scan_abort_failed(msg);
+	else
+		reply = g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+
+	g_dbus_send_message(connection, reply);
+	dbus_message_unref(msg);
+	technology->mesh_dbus_msg = NULL;
+}
+
+static DBusMessage *mesh_commands(DBusConnection *conn,
+				  DBusMessage *msg, void *data)
+{
+	struct connman_technology *technology = data;
+	DBusMessageIter iter, value, dict;
+	const char *cmd = NULL, *ifname = NULL, *parent_ifname = NULL;
+	int err;
+
+	DBG("conn %p", conn);
+
+	if (technology->type != CONNMAN_SERVICE_TYPE_MESH)
+		return __connman_error_invalid_arguments(msg);
+
+	if (!dbus_message_iter_init(msg, &iter))
+		return __connman_error_invalid_arguments(msg);
+
+	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING)
+		return __connman_error_invalid_arguments(msg);
+
+	dbus_message_iter_get_basic(&iter, &cmd);
+	dbus_message_iter_next(&iter);
+
+	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
+		return __connman_error_invalid_arguments(msg);
+
+	dbus_message_iter_recurse(&iter, &value);
+
+	if (dbus_message_iter_get_arg_type(&value) != DBUS_TYPE_ARRAY)
+		return __connman_error_invalid_arguments(msg);
+
+	DBG("Mesh Command %s", cmd);
+	if (g_str_equal(cmd, "MeshInterfaceAdd")) {
+		dbus_message_iter_recurse(&value, &dict);
+		const char *bridge_ifname = NULL;
+		while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+			DBusMessageIter entry, value2;
+			const char *key;
+			int type;
+
+			dbus_message_iter_recurse(&dict, &entry);
+
+			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+				return __connman_error_invalid_arguments(msg);
+
+			dbus_message_iter_get_basic(&entry, &key);
+			dbus_message_iter_next(&entry);
+
+			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT)
+				return __connman_error_invalid_arguments(msg);
+
+			dbus_message_iter_recurse(&entry, &value2);
+
+			type = dbus_message_iter_get_arg_type(&value2);
+
+			if (g_str_equal(key, "Ifname")) {
+				if (type != DBUS_TYPE_STRING)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &ifname);
+			} else if (g_str_equal(key, "ParentIfname")) {
+				if (type != DBUS_TYPE_STRING)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &parent_ifname);
+			} else if (g_str_equal(key, "BridgeIfname")) {
+				if (type != DBUS_TYPE_STRING)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &bridge_ifname);
+			}
+			dbus_message_iter_next(&dict);
+		}
+		DBG("Mesh Ifname %s parent %s bridge %s", ifname, parent_ifname,
+					bridge_ifname ? bridge_ifname : "NULL");
+		err = __connman_mesh_add_virtual_interface(ifname, parent_ifname,
+							   bridge_ifname);
+
+		if (err != 0) {
+			DBG("Failed to add virtual mesh interface");
+			return __connman_error_failed(msg, -err);
+		}
+
+		DBG("Successfully added virtual mesh interface");
+
+		dbus_message_ref(msg);
+		technology->mesh_dbus_msg = msg;
+
+	} else if (g_str_equal(cmd, "MeshInterfaceRemove")) {
+		dbus_message_iter_recurse(&value, &dict);
+		while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+			DBusMessageIter entry, value2;
+			const char *key;
+			int type;
+
+			dbus_message_iter_recurse(&dict, &entry);
+
+			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+				return __connman_error_invalid_arguments(msg);
+
+			dbus_message_iter_get_basic(&entry, &key);
+			dbus_message_iter_next(&entry);
+
+			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT)
+				return __connman_error_invalid_arguments(msg);
+
+			dbus_message_iter_recurse(&entry, &value2);
+
+			type = dbus_message_iter_get_arg_type(&value2);
+
+			if (g_str_equal(key, "Ifname")) {
+				if (type != DBUS_TYPE_STRING)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &ifname);
+			}
+			dbus_message_iter_next(&dict);
+		}
+		DBG("Mesh Ifname %s", ifname);
+		err = __connman_mesh_remove_virtual_interface(ifname);
+
+		if (err != 0) {
+			DBG("Failed to remove virtual mesh interface");
+			return __connman_error_failed(msg, -err);
+		}
+
+		DBG("Successfully removed virtual mesh interface");
+
+		dbus_message_ref(msg);
+		technology->mesh_dbus_msg = msg;
+
+	} else if (g_str_equal(cmd, "MeshCreateNetwork")) {
+		struct connman_mesh *connman_mesh;
+		const char *name = NULL;
+		const char *sec_type = NULL;
+		const char *mesh_ifname = NULL;
+		char *identifier, *group, *address;
+		unsigned int freq = 0;
+		unsigned int ieee80211w = 0;
+		GString *str;
+		int i;
+		dbus_message_iter_recurse(&value, &dict);
+		while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+			DBusMessageIter entry, value2;
+			const char *key;
+			int type;
+
+			dbus_message_iter_recurse(&dict, &entry);
+
+			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+				return __connman_error_invalid_arguments(msg);
+
+			dbus_message_iter_get_basic(&entry, &key);
+			dbus_message_iter_next(&entry);
+
+			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT)
+				return __connman_error_invalid_arguments(msg);
+
+			dbus_message_iter_recurse(&entry, &value2);
+
+			type = dbus_message_iter_get_arg_type(&value2);
+
+			if (g_str_equal(key, "Name")) {
+				if (type != DBUS_TYPE_STRING)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &name);
+			} else if (g_str_equal(key, "Frequency")) {
+				if (type != DBUS_TYPE_UINT16)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &freq);
+			} else if (g_str_equal(key, "Security")) {
+				if (type != DBUS_TYPE_STRING)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &sec_type);
+			} else if (g_str_equal(key, "Pmf")) {
+				if (type != DBUS_TYPE_UINT16)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &ieee80211w);
+			}
+			dbus_message_iter_next(&dict);
+		}
+
+		if (name == NULL || sec_type == NULL || freq == 0)
+			return __connman_error_invalid_arguments(msg);
+
+		DBG("Name %s Frequency %d Security type %s Pmf %u",
+		    name, freq, sec_type, ieee80211w);
+
+		if (g_strcmp0(sec_type, "none") != 0 &&
+		    g_strcmp0(sec_type, "sae") != 0) {
+			DBG("Unsupported security");
+			return __connman_error_invalid_arguments(msg);
+		}
+
+		mesh_ifname = connman_mesh_get_interface_name();
+
+		if (!connman_mesh_is_interface_created()) {
+			DBG("Mesh interface doesn't exists");
+			return __connman_error_invalid_command(msg);
+		}
+
+		str = g_string_sized_new((strlen(name) * 2) + 24);
+
+		for (i = 0; name[i]; i++)
+			g_string_append_printf(str, "%02x", name[i]);
+
+		g_string_append_printf(str, "_mesh");
+
+		if (g_strcmp0(sec_type, "none") == 0)
+			g_string_append_printf(str, "_none");
+		else if (g_strcmp0(sec_type, "sae") == 0)
+			g_string_append_printf(str, "_sae");
+
+		group = g_string_free(str, FALSE);
+
+		identifier = connman_inet_ifaddr(mesh_ifname);
+		address = connman_inet_ifname2addr(mesh_ifname);
+
+		connman_mesh = connman_mesh_create(identifier, group);
+		connman_mesh_set_name(connman_mesh, name);
+		connman_mesh_set_address(connman_mesh, address);
+		connman_mesh_set_security(connman_mesh, sec_type);
+		connman_mesh_set_frequency(connman_mesh, freq);
+		connman_mesh_set_index(connman_mesh, connman_inet_ifindex(mesh_ifname));
+		connman_mesh_set_peer_type(connman_mesh,
+					   CONNMAN_MESH_PEER_TYPE_CREATED);
+		connman_mesh_set_ieee80211w(connman_mesh, ieee80211w);
+
+		connman_mesh_register(connman_mesh);
+		g_free(group);
+		g_free(identifier);
+		g_free(address);
+		DBG("Successfully Created Mesh Network");
+		return  g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+
+	} else if (g_str_equal(cmd, "AbortScan")) {
+		DBG("Abort Scan method");
+		err = __connman_device_abort_scan(technology->type);
+		if (err != 0) {
+			DBG("Failed to abort scan");
+			return __connman_error_failed(msg, -err);
+		}
+
+		DBG("Successfully requested to abort scan");
+		dbus_message_ref(msg);
+		technology->mesh_dbus_msg = msg;
+
+	} else if (g_str_equal(cmd, "MeshSpecificScan")) {
+		const char *name = NULL;
+		unsigned int freq = 0;
+		dbus_message_iter_recurse(&value, &dict);
+		while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+			DBusMessageIter entry, value2;
+			const char *key;
+			int type;
+
+			dbus_message_iter_recurse(&dict, &entry);
+
+			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+				return __connman_error_invalid_arguments(msg);
+
+			dbus_message_iter_get_basic(&entry, &key);
+			dbus_message_iter_next(&entry);
+
+			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT)
+				return __connman_error_invalid_arguments(msg);
+
+			dbus_message_iter_recurse(&entry, &value2);
+
+			type = dbus_message_iter_get_arg_type(&value2);
+
+			if (g_str_equal(key, "Name")) {
+				if (type != DBUS_TYPE_STRING)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &name);
+			} else if (g_str_equal(key, "Frequency")) {
+				if (type != DBUS_TYPE_UINT16)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &freq);
+			}
+			dbus_message_iter_next(&dict);
+		}
+
+		DBG("MeshID %s Frequency %d sender %s", name, freq,
+						dbus_message_get_sender(msg));
+
+		dbus_message_ref(msg);
+		technology->scan_pending =
+			g_slist_prepend(technology->scan_pending, msg);
+
+		err = __connman_device_request_mesh_specific_scan(technology->type,
+								  name, freq);
+		if (err < 0)
+			reply_scan_pending(technology, err);
+		else
+			DBG("Successfully requested to scan specific Mesh Network");
+
+	} else if (g_str_equal(cmd, "SetMeshGate")) {
+		unsigned int hwmp_rootmode = 0;
+		bool gate_announce = false;
+		unsigned int stp = 0;
+		int err;
+		dbus_message_iter_recurse(&value, &dict);
+		while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+			DBusMessageIter entry, value2;
+			const char *key;
+			int type;
+
+			dbus_message_iter_recurse(&dict, &entry);
+
+			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+				return __connman_error_invalid_arguments(msg);
+
+			dbus_message_iter_get_basic(&entry, &key);
+			dbus_message_iter_next(&entry);
+
+			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT)
+				return __connman_error_invalid_arguments(msg);
+
+			dbus_message_iter_recurse(&entry, &value2);
+
+			type = dbus_message_iter_get_arg_type(&value2);
+
+			if (g_str_equal(key, "GateAnnounce")) {
+				if (type != DBUS_TYPE_BOOLEAN)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &gate_announce);
+			} else if (g_str_equal(key, "HWMPRootMode")) {
+				if (type != DBUS_TYPE_UINT16)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &hwmp_rootmode);
+			} else if (g_str_equal(key, "STP")) {
+				if (type != DBUS_TYPE_UINT16)
+					return __connman_error_invalid_arguments(msg);
+
+				dbus_message_iter_get_basic(&value2, &stp);
+			}
+			dbus_message_iter_next(&dict);
+		}
+
+		DBG("GateAnnounce %d HWMPRootMode %d STP %d sender %s",
+		    gate_announce, hwmp_rootmode, stp, dbus_message_get_sender(msg));
+
+		err = __connman_mesh_set_stp_gate_announce(gate_announce,
+							   hwmp_rootmode,
+							   stp);
+
+		if (err < 0)
+			return __connman_error_failed(msg, -err);
+
+		return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+	} else
+		return __connman_error_invalid_command(msg);
+	return NULL;
+}
+#endif
+
 static const GDBusMethodTable technology_methods[] = {
 	{ GDBUS_DEPRECATED_METHOD("GetProperties",
 			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
@@ -1446,6 +1923,11 @@ static const GDBusMethodTable technology_methods[] = {
 			NULL, specific_scan) },
 	{ GDBUS_METHOD("GetScanState", NULL, GDBUS_ARGS({ "scan_state", "a{sv}" }),
 			get_scan_state) },
+#endif
+#if defined TIZEN_EXT_WIFI_MESH
+	{ GDBUS_ASYNC_METHOD("MeshCommands",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" }),
+			NULL, mesh_commands) },
 #endif
 	{ },
 };
@@ -1557,7 +2039,12 @@ static struct connman_technology *technology_get(enum connman_service_type type)
 
 	technology = technology_find(type);
 	if (technology) {
+#if defined TIZEN_EXT_WIFI_MESH
+		if (type != CONNMAN_SERVICE_TYPE_P2P &&
+			type != CONNMAN_SERVICE_TYPE_MESH)
+#else
 		if (type != CONNMAN_SERVICE_TYPE_P2P)
+#endif
 			__sync_fetch_and_add(&technology->refcount, 1);
 		return technology;
 	}
@@ -1587,6 +2074,16 @@ static struct connman_technology *technology_get(enum connman_service_type type)
 	technology->tethering_hidden = FALSE;
 	technology->path = g_strdup_printf("%s/technology/%s",
 							CONNMAN_PATH, str);
+
+#if defined TIZEN_EXT_WIFI_MESH
+	if (type == CONNMAN_SERVICE_TYPE_MESH) {
+		struct connman_technology *wifi;
+
+		wifi = technology_find(CONNMAN_SERVICE_TYPE_WIFI);
+		if (wifi)
+			technology->enabled = wifi->enabled;
+	}
+#endif
 
 	technology_load(technology);
 	technology_list = g_slist_prepend(technology_list, technology);
@@ -1666,6 +2163,13 @@ exist:
 			return -ENOMEM;
 	}
 
+#if defined TIZEN_EXT_WIFI_MESH
+	if (driver->type == CONNMAN_SERVICE_TYPE_MESH) {
+		if (!technology_get(CONNMAN_SERVICE_TYPE_MESH))
+			return -ENOMEM;
+	}
+#endif
+
 	return 0;
 }
 
@@ -1703,6 +2207,13 @@ void connman_technology_driver_unregister(struct connman_technology_driver *driv
 		if (technology)
 			technology_put(technology);
 	}
+#if defined TIZEN_EXT_WIFI_MESH
+	if (driver->type == CONNMAN_SERVICE_TYPE_MESH) {
+		technology = technology_find(CONNMAN_SERVICE_TYPE_MESH);
+		if (technology)
+			technology_put(technology);
+	}
+#endif
 }
 
 void __connman_technology_add_interface(enum connman_service_type type,
@@ -1725,6 +2236,9 @@ void __connman_technology_add_interface(enum connman_service_type type,
 	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_GADGET:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	}
 
@@ -1776,6 +2290,9 @@ void __connman_technology_remove_interface(enum connman_service_type type,
 	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_GADGET:
 	case CONNMAN_SERVICE_TYPE_P2P:
+#if defined TIZEN_EXT_WIFI_MESH
+	case CONNMAN_SERVICE_TYPE_MESH:
+#endif
 		break;
 	}
 
@@ -1971,6 +2488,15 @@ int __connman_technology_set_offlinemode(bool offlinemode)
 	return err;
 }
 
+#if defined TIZEN_EXT_WIFI_MESH
+static gboolean __add_ethernet_to_bridge(gpointer data)
+{
+	DBG("");
+	__connman_mesh_add_ethernet_to_bridge();
+	return FALSE;
+}
+#endif
+
 void __connman_technology_set_connected(enum connman_service_type type,
 		bool connected)
 {
@@ -1984,6 +2510,11 @@ void __connman_technology_set_connected(enum connman_service_type type,
 	DBG("technology %p connected %d", technology, connected);
 
 	technology->connected = connected;
+
+#if defined TIZEN_EXT_WIFI_MESH
+	if (technology->type == CONNMAN_SERVICE_TYPE_ETHERNET && connected)
+		g_idle_add(__add_ethernet_to_bridge, NULL);
+#endif
 
 	val = connected;
 	connman_dbus_property_changed_basic(technology->path,

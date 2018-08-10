@@ -13,6 +13,10 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/session.h include/ipaddress.h include/agent.h \
 			include/inotify.h include/peer.h include/machine.h
 
+if TIZEN_EXT_WIFI_MESH
+include_HEADERS += include/mesh.h include/mesh-netlink.h
+endif
+
 nodist_include_HEADERS = include/version.h
 
 noinst_HEADERS = include/rtnl.h include/task.h \
@@ -129,9 +133,17 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			src/inotify.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c
 
+if TIZEN_EXT_WIFI_MESH
+src_connmand_SOURCES += src/mesh.c src/mesh-netlink.c
+endif
+
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ @LIBSYSTEMD_LIBS@ \
 			-lresolv -ldl -lrt
+
+if TIZEN_EXT_WIFI_MESH
+src_connmand_LDADD += -lnl -lnl-genl
+endif
 
 src_connmand_LDFLAGS = -Wl,--export-dynamic -pie \
 				-Wl,--version-script=$(srcdir)/src/connman.ver
@@ -190,10 +202,18 @@ vpn_connman_vpnd_SOURCES = $(gdhcp_sources) $(builtin_vpn_sources) \
 			vpn/vpn-agent.c vpn/vpn-agent.h \
 			vpn/vpn-config.c
 
+if TIZEN_EXT_WIFI_MESH
+vpn_connman_vpnd_SOURCES += src/mesh.c src/mesh-netlink.c
+endif
+
 vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
 				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
 				@LIBSYSTEMD_LIBS@ \
 				-lresolv -ldl
+
+if TIZEN_EXT_WIFI_MESH
+vpn_connman_vpnd_LDADD += -lnl -lnl-genl
+endif
 
 vpn_connman_vpnd_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/vpn/vpn.ver
@@ -313,6 +333,10 @@ client_connmanctl_SOURCES = client/dbus_helpers.h client/dbus_helpers.c \
 			client/peers.h client/peers.c \
 			client/vpnconnections.h client/vpnconnections.c \
 			client/main.c
+
+if TIZEN_EXT_WIFI_MESH
+client_connmanctl_SOURCES += client/mesh.c client/mesh.h
+endif
 
 client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
 				-lreadline -ldl -lncurses

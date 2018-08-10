@@ -5,7 +5,7 @@
 
 Name:           connman
 Version:        1.35
-Release:        27
+Release:        28
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -18,6 +18,7 @@ BuildRequires:  pkgconfig(gio-2.0)
 BuildRequires:  pkgconfig(libiptc)
 BuildRequires:  pkgconfig(xtables)
 BuildRequires:  pkgconfig(libsmack)
+BuildRequires:  pkgconfig(libnl-2.0)
 BuildRequires:  pkgconfig(libsystemd-daemon)
 %if %{with connman_openconnect}
 BuildRequires:  openconnect
@@ -141,8 +142,6 @@ This overwrites conf file of %{name}.
 
 
 %build
-#CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
-
 %if %{with connman_vpnd}
 VPN_CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
 %endif
@@ -151,9 +150,9 @@ chmod +x bootstrap
 ./bootstrap
 %configure \
             --sysconfdir=/etc \
-            --enable-client \
-			--enable-tizen-ext \
-            --enable-pacrunner \
+	    --enable-client \
+	    --enable-tizen-ext \
+	    --enable-pacrunner \
             --enable-wifi=builtin \
 %if %{with connman_openconnect}
             --enable-openconnect \
@@ -170,11 +169,11 @@ chmod +x bootstrap
             --disable-ofono \
             --enable-telephony=builtin \
             --enable-test \
-			--enable-loopback \
-			--enable-ethernet \
-            --with-systemdunitdir=%{_libdir}/systemd/system \
-            --enable-pie \
-			--disable-wispr
+	    --enable-loopback \
+	    --enable-ethernet \
+	    --with-systemdunitdir=%{_libdir}/systemd/system \
+	    --enable-pie \
+	    --disable-wispr
 
 make %{?_smp_mflags}
 

@@ -190,6 +190,78 @@ done:
 	return err;
 }
 
+#if defined TIZEN_EXT_WIFI_MESH
+char *connman_inet_ifaddr(const char *name)
+{
+	struct ifreq ifr;
+	struct ether_addr eth;
+	char *str;
+	int sk, err;
+
+	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	if (sk < 0)
+		return NULL;
+
+	strncpy(ifr.ifr_name, name, IFNAMSIZ-1);
+
+	err = ioctl(sk, SIOCGIFHWADDR, &ifr);
+	close(sk);
+
+	if (err < 0)
+		return NULL;
+
+	str = g_malloc(18);
+	if (!str)
+		return NULL;
+
+	memcpy(&eth, &ifr.ifr_hwaddr.sa_data, sizeof(eth));
+	snprintf(str, 13, "%02x%02x%02x%02x%02x%02x",
+						eth.ether_addr_octet[0],
+						eth.ether_addr_octet[1],
+						eth.ether_addr_octet[2],
+						eth.ether_addr_octet[3],
+						eth.ether_addr_octet[4],
+						eth.ether_addr_octet[5]);
+
+	return str;
+}
+
+char *connman_inet_ifname2addr(const char *name)
+{
+	struct ifreq ifr;
+	struct ether_addr eth;
+	char *str;
+	int sk, err;
+
+	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	if (sk < 0)
+		return NULL;
+
+	strncpy(ifr.ifr_name, name, IFNAMSIZ-1);
+
+	err = ioctl(sk, SIOCGIFHWADDR, &ifr);
+	close(sk);
+
+	if (err < 0)
+		return NULL;
+
+	str = g_malloc(18);
+	if (!str)
+		return NULL;
+
+	memcpy(&eth, &ifr.ifr_hwaddr.sa_data, sizeof(eth));
+	snprintf(str, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
+						eth.ether_addr_octet[0],
+						eth.ether_addr_octet[1],
+						eth.ether_addr_octet[2],
+						eth.ether_addr_octet[3],
+						eth.ether_addr_octet[4],
+						eth.ether_addr_octet[5]);
+
+	return str;
+}
+#endif
+
 int connman_inet_ifindex(const char *name)
 {
 	struct ifreq ifr;
@@ -347,29 +419,14 @@ void connman_inet_update_device_ident(struct connman_device *device)
 	case CONNMAN_DEVICE_TYPE_GADGET:
 	case CONNMAN_DEVICE_TYPE_WIFI:
 		addr = index2addr(index);
-		break;
-	case CONNMAN_DEVICE_TYPE_BLUETOOTH:
-	case CONNMAN_DEVICE_TYPE_CELLULAR:
-	case CONNMAN_DEVICE_TYPE_GPS:
-	case CONNMAN_DEVICE_TYPE_VENDOR:
-		break;
-	}
-
-	switch (type) {
-	case CONNMAN_DEVICE_TYPE_VENDOR:
-	case CONNMAN_DEVICE_TYPE_GPS:
-		break;
-	case CONNMAN_DEVICE_TYPE_ETHERNET:
-	case CONNMAN_DEVICE_TYPE_GADGET:
 		ident = index2ident(index, NULL);
-		break;
-	case CONNMAN_DEVICE_TYPE_WIFI:
-		ident = index2ident(index, NULL);
-		break;
-	case CONNMAN_DEVICE_TYPE_BLUETOOTH:
 		break;
 	case CONNMAN_DEVICE_TYPE_CELLULAR:
 		ident = index2ident(index, NULL);
+		break;
+	case CONNMAN_DEVICE_TYPE_BLUETOOTH:
+	case CONNMAN_DEVICE_TYPE_GPS:
+	case CONNMAN_DEVICE_TYPE_VENDOR:
 		break;
 	}
 

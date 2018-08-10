@@ -537,6 +537,114 @@ error:
 
 }
 
+#if defined TIZEN_EXT_WIFI_MESH
+static void append_mesh_peer_structs(DBusMessageIter *iter, void *user_data)
+{
+	__connman_mesh_peer_list_struct(iter);
+}
+
+static DBusMessage *get_mesh_peers(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	__connman_dbus_append_objpath_dict_array(reply,
+					append_mesh_peer_structs, NULL);
+	return reply;
+}
+
+static DBusMessage *get_connected_mesh_peers(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+	DBusMessageIter iter, array;
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	dbus_message_iter_init_append(reply, &iter);
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+			DBUS_STRUCT_BEGIN_CHAR_AS_STRING
+			DBUS_TYPE_ARRAY_AS_STRING
+				DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_STRING_AS_STRING
+					DBUS_TYPE_VARIANT_AS_STRING
+				DBUS_DICT_ENTRY_END_CHAR_AS_STRING
+			DBUS_STRUCT_END_CHAR_AS_STRING, &array);
+
+	__connman_mesh_connected_peer_list_struct(&array);
+	dbus_message_iter_close_container(&iter, &array);
+	return reply;
+}
+
+static DBusMessage *get_disconnected_mesh_peers(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+	DBusMessageIter iter, array;
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	dbus_message_iter_init_append(reply, &iter);
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+			DBUS_STRUCT_BEGIN_CHAR_AS_STRING
+			DBUS_TYPE_ARRAY_AS_STRING
+				DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_STRING_AS_STRING
+					DBUS_TYPE_VARIANT_AS_STRING
+				DBUS_DICT_ENTRY_END_CHAR_AS_STRING
+			DBUS_STRUCT_END_CHAR_AS_STRING, &array);
+
+	__connman_mesh_disconnected_peer_list_struct(&array);
+	dbus_message_iter_close_container(&iter, &array);
+	return reply;
+}
+
+static DBusMessage *mesh_add_peer(DBusConnection *conn,
+					DBusMessage *msg, void *user_data)
+{
+	const char *addr;
+	int err;
+
+	dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &addr,
+							DBUS_TYPE_INVALID);
+
+	DBG("Address %s", addr);
+
+	err = __connman_mesh_change_peer_status(msg, addr, CONNMAN_MESH_PEER_ADD);
+	if (err < 0)
+		return __connman_error_failed(msg, -err);
+
+	return NULL;
+}
+
+static DBusMessage *mesh_remove_peer(DBusConnection *conn,
+					DBusMessage *msg, void *user_data)
+{
+	const char *addr;
+	int err;
+
+	dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &addr,
+							DBUS_TYPE_INVALID);
+
+	DBG("Address %s", addr);
+
+	err = __connman_mesh_change_peer_status(msg, addr,
+										CONNMAN_MESH_PEER_REMOVE);
+	if (err < 0)
+		return __connman_error_failed(msg, -err);
+
+	return NULL;
+}
+#endif
+
 static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("GetProperties",
 			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
@@ -596,6 +704,21 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("UnregisterPeerService",
 			GDBUS_ARGS({ "specification", "a{sv}" }), NULL,
 			unregister_peer_service) },
+#if defined TIZEN_EXT_WIFI_MESH
+	{ GDBUS_METHOD("GetMeshPeers",
+			NULL, GDBUS_ARGS({ "peers", "a(oa{sv})" }),
+			get_mesh_peers) },
+	{ GDBUS_METHOD("GetConnectedMeshPeers",
+			NULL, GDBUS_ARGS({ "peers", "a(a{sv})" }),
+			get_connected_mesh_peers) },
+	{ GDBUS_METHOD("GetDisconnectedMeshPeers",
+			NULL, GDBUS_ARGS({ "peers", "a(a{sv})" }),
+			get_disconnected_mesh_peers) },
+	{ GDBUS_ASYNC_METHOD("MeshAddPeer", GDBUS_ARGS({ "address", "s" }), NULL,
+				   mesh_add_peer) },
+	{ GDBUS_ASYNC_METHOD("MeshRemovePeer", GDBUS_ARGS({ "address", "s" }), NULL,
+				   mesh_remove_peer) },
+#endif
 	{ },
 };
 

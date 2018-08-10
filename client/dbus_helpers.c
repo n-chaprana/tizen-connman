@@ -224,6 +224,11 @@ static int append_variant(DBusMessageIter *iter, const char *property,
 	case DBUS_TYPE_INT32:
 		type_str = DBUS_TYPE_INT32_AS_STRING;
 		break;
+#if defined TIZEN_EXT_WIFI_MESH
+	case DBUS_TYPE_UINT16:
+		type_str = DBUS_TYPE_UINT16_AS_STRING;
+		break;
+#endif
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -353,6 +358,50 @@ int __connmanctl_dbus_set_property_dict(DBusConnection *connection,
 
 	return send_method_call(connection, message, cb, user_data);
 }
+
+#if defined TIZEN_EXT_WIFI_MESH
+int __connmanctl_dbus_mesh_dict(DBusConnection *connection,
+		const char *path, const char *interface,
+		connmanctl_dbus_method_return_func_t cb, void *user_data,
+		const char *property, int type,
+		connmanctl_dbus_append_func_t append_fn,
+		void *append_user_data)
+{
+	DBusMessage *message;
+	DBusMessageIter iter, variant, dict;
+
+	message = dbus_message_new_method_call(CONNMAN_SERVICE, path,
+			interface, "MeshCommands");
+
+	if (!message)
+		return -ENOMEM;
+
+	dbus_message_iter_init_append(message, &iter);
+	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &property);
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_VARIANT,
+			DBUS_TYPE_ARRAY_AS_STRING
+				DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_STRING_AS_STRING
+					DBUS_TYPE_VARIANT_AS_STRING
+				DBUS_DICT_ENTRY_END_CHAR_AS_STRING,
+			&variant);
+
+	dbus_message_iter_open_container(&variant, DBUS_TYPE_ARRAY,
+			DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
+				DBUS_TYPE_STRING_AS_STRING
+				DBUS_TYPE_VARIANT_AS_STRING
+			DBUS_DICT_ENTRY_END_CHAR_AS_STRING,
+			&dict);
+
+	if (append_fn)
+		append_fn(&dict, append_user_data);
+
+	dbus_message_iter_close_container(&variant, &dict);
+	dbus_message_iter_close_container(&iter, &variant);
+
+	return send_method_call(connection, message, cb, user_data);
+}
+#endif
 
 static void append_variant_array(DBusMessageIter *iter, const char *property,
 		connmanctl_dbus_append_func_t append_fn,

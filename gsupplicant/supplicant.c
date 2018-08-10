@@ -96,6 +96,9 @@ static struct strvalmap keymgmt_map[] = {
 	{ "wpa-eap",		G_SUPPLICANT_KEYMGMT_WPA_EAP	},
 	{ "wpa-eap-sha256",	G_SUPPLICANT_KEYMGMT_WPA_EAP_256	},
 	{ "wps",		G_SUPPLICANT_KEYMGMT_WPS		},
+#if defined TIZEN_EXT_WIFI_MESH
+	{ "sae",		G_SUPPLICANT_KEYMGMT_SAE		},
+#endif
 	{ }
 };
 
@@ -139,6 +142,9 @@ static struct strvalmap mode_capa_map[] = {
 	{ "ad-hoc",		G_SUPPLICANT_CAPABILITY_MODE_IBSS	},
 	{ "ap",			G_SUPPLICANT_CAPABILITY_MODE_AP		},
 	{ "p2p", 		G_SUPPLICANT_CAPABILITY_MODE_P2P	},
+#if defined TIZEN_EXT_WIFI_MESH
+	{ "mesh",		G_SUPPLICANT_CAPABILITY_MODE_MESH	},
+#endif
 	{ }
 };
 
@@ -161,6 +167,14 @@ struct added_network_information {
 	char * passphrase;
 	char * private_passphrase;
 };
+
+#if defined TIZEN_EXT_WIFI_MESH
+struct _GSupplicantMeshGroupInfo {
+	unsigned char ssid[32];
+	unsigned int ssid_len;
+	int disconnect_reason;
+};
+#endif
 
 struct _GSupplicantInterface {
 	char *path;
@@ -198,6 +212,10 @@ struct _GSupplicantInterface {
 #if defined TIZEN_EXT
 	int disconnect_reason;
 #endif
+#if defined TIZEN_EXT_WIFI_MESH
+	bool mesh_support;
+	struct _GSupplicantMeshGroupInfo group_info;
+#endif
 };
 
 struct g_supplicant_bss {
@@ -230,6 +248,9 @@ struct g_supplicant_bss {
 	unsigned char country_code[COUNTRY_CODE_LENGTH];
 #endif
 	unsigned int wps_capabilities;
+#if defined TIZEN_EXT_WIFI_MESH
+	dbus_bool_t sae;
+#endif
 };
 
 struct _GSupplicantNetwork {
@@ -297,6 +318,10 @@ struct interface_create_data {
 	char *ifname;
 	char *driver;
 	char *bridge;
+#if defined TIZEN_EXT_WIFI_MESH
+	char *parent_ifname;
+	bool is_mesh_interface;
+#endif
 	GSupplicantInterface *interface;
 	GSupplicantInterfaceCallback callback;
 	void *user_data;
@@ -331,6 +356,14 @@ struct g_connman_bssids {
 
 static int network_remove(struct interface_data *data);
 
+#if defined TIZEN_EXT_WIFI_MESH
+struct _GSupplicantMeshPeer {
+	GSupplicantInterface *interface;
+	char *peer_address;
+	int disconnect_reason;
+};
+#endif
+
 static inline void debug(const char *format, ...)
 {
 	char str[256];
@@ -359,6 +392,10 @@ static GSupplicantMode string2mode(const char *mode)
 		return G_SUPPLICANT_MODE_INFRA;
 	else if (g_str_equal(mode, "ad-hoc"))
 		return G_SUPPLICANT_MODE_IBSS;
+#if defined TIZEN_EXT_WIFI_MESH
+	else if (g_str_equal(mode, "mesh"))
+		return G_SUPPLICANT_MODE_MESH;
+#endif
 
 	return G_SUPPLICANT_MODE_UNKNOWN;
 }
@@ -374,6 +411,10 @@ static const char *mode2string(GSupplicantMode mode)
 		return "adhoc";
 	case G_SUPPLICANT_MODE_MASTER:
 		return "ap";
+#if defined TIZEN_EXT_WIFI_MESH
+	case G_SUPPLICANT_MODE_MESH:
+		return "mesh";
+#endif
 	}
 
 	return NULL;
@@ -397,6 +438,10 @@ static const char *security2string(GSupplicantSecurity security)
 		return "ft_psk";
 	case G_SUPPLICANT_SECURITY_FT_IEEE8021X:
 		return "ft_ieee8021x";
+#endif
+#if defined TIZEN_EXT_WIFI_MESH
+	case G_SUPPLICANT_SECURITY_SAE:
+		return "sae";
 #endif
 	}
 
@@ -577,6 +622,27 @@ static void callback_p2p_support(GSupplicantInterface *interface)
 
 	if (callbacks_pointer && callbacks_pointer->p2p_support)
 		callbacks_pointer->p2p_support(interface);
+}
+#endif
+
+#if defined TIZEN_EXT_WIFI_MESH
+static void callback_mesh_support(GSupplicantInterface *interface)
+{
+	SUPPLICANT_DBG("");
+
+	if (!interface->mesh_support)
+		return;
+
+	if (callbacks_pointer && callbacks_pointer->mesh_support)
+		callbacks_pointer->mesh_support(interface);
+}
+
+bool g_supplicant_interface_has_mesh(GSupplicantInterface *interface)
+{
+	if (!interface)
+		return false;
+
+	return interface->mesh_support;
 }
 #endif
 
@@ -1698,6 +1764,10 @@ static void merge_network(GSupplicantNetwork *network)
 		g_string_append_printf(str, "_managed");
 	else if (g_strcmp0(mode, "1") == 0)
 		g_string_append_printf(str, "_adhoc");
+#if defined TIZEN_EXT_WIFI_MESH
+	else if (g_strcmp0(mode, "5") == 0)
+		g_string_append_printf(str, "_mesh");
+#endif
 
 	if (g_strcmp0(key_mgmt, "WPA-PSK") == 0)
 		g_string_append_printf(str, "_psk");
@@ -2266,6 +2336,11 @@ static void bss_compute_security(struct g_supplicant_bss *bss)
 		bss->psk = TRUE;
 #endif
 
+#if defined TIZEN_EXT_WIFI_MESH
+	if (bss->keymgmt & G_SUPPLICANT_KEYMGMT_SAE)
+		bss->sae = TRUE;
+#endif
+
 	if (bss->ieee8021x)
 		bss->security = G_SUPPLICANT_SECURITY_IEEE8021X;
 	else if (bss->psk)
@@ -2275,6 +2350,10 @@ static void bss_compute_security(struct g_supplicant_bss *bss)
 		bss->security = G_SUPPLICANT_SECURITY_FT_PSK;
 	else if (bss->ft_ieee8021x == TRUE)
 		bss->security = G_SUPPLICANT_SECURITY_IEEE8021X;
+#endif
+#if defined TIZEN_EXT_WIFI_MESH
+	else if (bss->sae)
+		bss->security = G_SUPPLICANT_SECURITY_SAE;
 #endif
 	else if (bss->privacy)
 		bss->security = G_SUPPLICANT_SECURITY_WEP;
@@ -2671,6 +2750,10 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 #if !defined TIZEN_EXT
 		if (interface->mode_capa & G_SUPPLICANT_CAPABILITY_MODE_P2P)
 			interface->p2p_support = true;
+#endif
+#if defined TIZEN_EXT_WIFI_MESH
+		if (interface->mode_capa & G_SUPPLICANT_CAPABILITY_MODE_MESH)
+			interface->mesh_support = true;
 #endif
 	} else if (g_strcmp0(key, "State") == 0) {
 		const char *str = NULL;
@@ -3969,6 +4052,214 @@ static void signal_group_peer_disconnected(const char *path, DBusMessageIter *it
 	peer->connection_requested = false;
 }
 
+#if defined TIZEN_EXT_WIFI_MESH
+const void *g_supplicant_interface_get_mesh_group_ssid(
+							GSupplicantInterface *interface,
+							unsigned int *ssid_len)
+{
+	if (!ssid_len)
+		return NULL;
+
+	if (!interface || interface->group_info.ssid_len == 0) {
+		*ssid_len = 0;
+		return NULL;
+	}
+
+	*ssid_len = interface->group_info.ssid_len;
+	return interface->group_info.ssid;
+}
+
+int g_supplicant_mesh_get_disconnect_reason(GSupplicantInterface *interface)
+{
+	if (!interface)
+		return -EINVAL;
+
+	return interface->group_info.disconnect_reason;
+}
+
+const char *g_supplicant_mesh_peer_get_address(GSupplicantMeshPeer *mesh_peer)
+{
+	if (!mesh_peer || !mesh_peer->peer_address)
+		return NULL;
+
+	return mesh_peer->peer_address;
+}
+
+int g_supplicant_mesh_peer_get_disconnect_reason(GSupplicantMeshPeer *mesh_peer)
+{
+	if (!mesh_peer)
+		return -EINVAL;
+
+	return mesh_peer->disconnect_reason;
+}
+
+static void callback_mesh_group_started(GSupplicantInterface *interface)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->mesh_group_started)
+		return;
+
+	callbacks_pointer->mesh_group_started(interface);
+}
+
+static void callback_mesh_group_removed(GSupplicantInterface *interface)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->mesh_group_removed)
+		return;
+
+	callbacks_pointer->mesh_group_removed(interface);
+}
+
+static void mesh_group_info(const char *key, DBusMessageIter *iter,
+							void *user_data)
+{
+	GSupplicantInterface *interface = user_data;
+	if (!key)
+		return;
+
+	if (g_strcmp0(key, "SSID") == 0) {
+		DBusMessageIter array;
+		unsigned char *ssid;
+		int ssid_len;
+
+		dbus_message_iter_recurse(iter, &array);
+		dbus_message_iter_get_fixed_array(&array, &ssid, &ssid_len);
+
+		if (ssid_len > 0 && ssid_len < 33) {
+			memcpy(interface->group_info.ssid, ssid, ssid_len);
+			interface->group_info.ssid_len = ssid_len;
+		} else {
+			memset(interface->group_info.ssid, 0, 32);
+			interface->group_info.ssid_len = 0;
+		}
+	} else if (g_strcmp0(key, "DisconnectReason") == 0) {
+		int disconnect_reason = 0;
+		dbus_message_iter_get_basic(iter, &disconnect_reason);
+		interface->group_info.disconnect_reason = disconnect_reason;
+	}
+}
+
+static void signal_mesh_group_started(const char *path, DBusMessageIter *iter)
+{
+	GSupplicantInterface *interface;
+
+	interface = g_hash_table_lookup(interface_table, path);
+	if (!interface)
+		return;
+
+	supplicant_dbus_property_foreach(iter, mesh_group_info, interface);
+
+	callback_mesh_group_started(interface);
+}
+
+static void signal_mesh_group_removed(const char *path, DBusMessageIter *iter)
+{
+	GSupplicantInterface *interface;
+
+	interface = g_hash_table_lookup(interface_table, path);
+	if (!interface)
+		return;
+
+	supplicant_dbus_property_foreach(iter, mesh_group_info, interface);
+
+	callback_mesh_group_removed(interface);
+}
+
+static void callback_mesh_peer_connected(GSupplicantMeshPeer *mesh_peer)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->mesh_peer_connected)
+		return;
+
+	callbacks_pointer->mesh_peer_connected(mesh_peer);
+}
+
+static void callback_mesh_peer_disconnected(GSupplicantMeshPeer *mesh_peer)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->mesh_peer_disconnected)
+		return;
+
+	callbacks_pointer->mesh_peer_disconnected(mesh_peer);
+}
+
+static void mesh_peer_info(const char *key, DBusMessageIter *iter,
+							void *user_data)
+{
+	GSupplicantMeshPeer *mesh_peer = user_data;
+	if (!key)
+		return;
+
+	if (g_strcmp0(key, "PeerAddress") == 0) {
+		DBusMessageIter array;
+		unsigned char *addr;
+		int addr_len;
+
+		dbus_message_iter_recurse(iter, &array);
+		dbus_message_iter_get_fixed_array(&array, &addr, &addr_len);
+
+		if (addr_len == 6) {
+			mesh_peer->peer_address = g_malloc0(19);
+			snprintf(mesh_peer->peer_address, 19,
+					 "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1],
+					 addr[2], addr[3], addr[4], addr[5]);
+		}
+	} else if (g_strcmp0(key, "DisconnectReason") == 0) {
+		int disconnect_reason = 0;
+		dbus_message_iter_get_basic(iter, &disconnect_reason);
+		mesh_peer->disconnect_reason = disconnect_reason;
+	}
+}
+
+static void signal_mesh_peer_connected(const char *path, DBusMessageIter *iter)
+{
+	GSupplicantInterface *interface;
+	GSupplicantMeshPeer *mesh_peer;
+
+	interface = g_hash_table_lookup(interface_table, path);
+	if (!interface)
+		return;
+
+	mesh_peer = dbus_malloc0(sizeof(GSupplicantMeshPeer));
+	mesh_peer->interface = interface;
+
+	supplicant_dbus_property_foreach(iter, mesh_peer_info, mesh_peer);
+
+	callback_mesh_peer_connected(mesh_peer);
+	g_free(mesh_peer->peer_address);
+	g_free(mesh_peer);
+}
+
+static void signal_mesh_peer_disconnected(const char *path,
+								DBusMessageIter *iter)
+{
+	GSupplicantInterface *interface;
+	GSupplicantMeshPeer *mesh_peer;
+
+	interface = g_hash_table_lookup(interface_table, path);
+	if (!interface)
+		return;
+
+	mesh_peer = dbus_malloc0(sizeof(GSupplicantMeshPeer));
+	mesh_peer->interface = interface;
+
+	supplicant_dbus_property_foreach(iter, mesh_peer_info, mesh_peer);
+
+	callback_mesh_peer_disconnected(mesh_peer);
+	g_free(mesh_peer->peer_address);
+	g_free(mesh_peer);
+}
+#endif
+
 static struct {
 	const char *interface;
 	const char *member;
@@ -4012,6 +4303,16 @@ static struct {
 
 	{ SUPPLICANT_INTERFACE ".Group", "PeerJoined", signal_group_peer_joined },
 	{ SUPPLICANT_INTERFACE ".Group", "PeerDisconnected", signal_group_peer_disconnected },
+#if defined TIZEN_EXT_WIFI_MESH
+	{ SUPPLICANT_INTERFACE ".Interface.Mesh", "MeshGroupStarted",
+		signal_mesh_group_started },
+	{ SUPPLICANT_INTERFACE ".Interface.Mesh", "MeshGroupRemoved",
+		signal_mesh_group_removed },
+	{ SUPPLICANT_INTERFACE ".Interface.Mesh", "MeshPeerConnected",
+		signal_mesh_peer_connected },
+	{ SUPPLICANT_INTERFACE ".Interface.Mesh", "MeshPeerDisconnected",
+		signal_mesh_peer_disconnected },
+#endif
 
 	{ }
 };
@@ -4290,6 +4591,9 @@ static void interface_create_data_free(struct interface_create_data *data)
 	g_free(data->ifname);
 	g_free(data->driver);
 	g_free(data->bridge);
+#if defined TIZEN_EXT_WIFI_MESH
+	g_free(data->parent_ifname);
+#endif
 	dbus_free(data);
 }
 
@@ -4316,6 +4620,9 @@ static void interface_create_property(const char *key, DBusMessageIter *iter,
 			data->callback(0, data->interface, data->user_data);
 #if !defined TIZEN_EXT
 			callback_p2p_support(interface);
+#endif
+#if defined TIZEN_EXT_WIFI_MESH
+			callback_mesh_support(interface);
 #endif
 		}
 
@@ -4403,6 +4710,17 @@ static void interface_create_params(DBusMessageIter *iter, void *user_data)
 					DBUS_TYPE_STRING, &config_file);
 	}
 
+#if defined TIZEN_EXT_WIFI_MESH
+	if (data->is_mesh_interface) {
+		if (data->parent_ifname)
+			supplicant_dbus_dict_append_basic(&dict, "ParentIfname",
+					DBUS_TYPE_STRING, &data->parent_ifname);
+
+		supplicant_dbus_dict_append_basic(&dict, "IsMeshInterface",
+					DBUS_TYPE_BOOLEAN, &data->is_mesh_interface);
+	}
+#endif
+
 	supplicant_dbus_dict_close(iter, &dict);
 }
 
@@ -4437,6 +4755,9 @@ static void interface_get_result(const char *error,
 		data->callback(0, interface, data->user_data);
 #if !defined TIZEN_EXT
 		callback_p2p_support(interface);
+#endif
+#if defined TIZEN_EXT_WIFI_MESH
+		callback_mesh_support(interface);
 #endif
 	}
 
@@ -4476,6 +4797,117 @@ static void interface_get_params(DBusMessageIter *iter, void *user_data)
 
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &data->ifname);
 }
+
+#if defined TIZEN_EXT_WIFI_MESH
+int g_supplicant_mesh_interface_create(const char *ifname, const char *driver,
+						const char *bridge, const char *parent_ifname,
+						GSupplicantInterfaceCallback callback, void *user_data)
+{
+	struct interface_create_data *data;
+	int ret;
+
+	SUPPLICANT_DBG("ifname %s", ifname);
+
+	if (!ifname || !parent_ifname)
+		return -EINVAL;
+
+	if (!system_available)
+		return -EFAULT;
+
+	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
+
+	data->ifname = g_strdup(ifname);
+	data->driver = g_strdup(driver);
+	data->bridge = g_strdup(bridge);
+	data->is_mesh_interface = true;
+	data->parent_ifname = g_strdup(parent_ifname);
+	data->callback = callback;
+	data->user_data = user_data;
+
+	ret = supplicant_dbus_method_call(SUPPLICANT_PATH,
+						SUPPLICANT_INTERFACE,
+						"CreateInterface",
+						interface_create_params,
+						interface_create_result, data,
+						NULL);
+	return ret;
+}
+
+struct interface_mesh_peer_data {
+	char *peer_address;
+	char *method;
+	GSupplicantInterface *interface;
+	GSupplicantInterfaceCallback callback;
+	void *user_data;
+};
+
+static void interface_mesh_change_peer_params(DBusMessageIter *iter,
+										   void *user_data)
+{
+	struct interface_mesh_peer_data *data = user_data;
+
+	SUPPLICANT_DBG("");
+
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &data->peer_address);
+}
+
+static void interface_mesh_change_peer_result(const char *error,
+				DBusMessageIter *iter, void *user_data)
+{
+	struct interface_mesh_peer_data *data = user_data;
+	int err = 0;
+
+	SUPPLICANT_DBG("%s", data->method);
+
+	if (error) {
+		err = -EIO;
+		SUPPLICANT_DBG("error %s", error);
+	}
+
+	if (data->callback)
+		data->callback(err, data->interface, data->user_data);
+
+	g_free(data->peer_address);
+	g_free(data->method);
+	dbus_free(data);
+}
+
+int g_supplicant_interface_mesh_peer_change_status(
+				GSupplicantInterface *interface,
+				GSupplicantInterfaceCallback callback, const char *peer_address,
+				const char *method, void *user_data)
+{
+	struct interface_mesh_peer_data *data;
+	int ret;
+
+	if (!peer_address)
+		return -EINVAL;
+
+	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
+
+	data->peer_address = g_strdup(peer_address);
+	data->method = g_strdup(method);
+	data->interface = interface;
+	data->callback = callback;
+	data->user_data = user_data;
+
+	ret = supplicant_dbus_method_call(interface->path,
+						SUPPLICANT_INTERFACE ".Interface.Mesh",
+						method, interface_mesh_change_peer_params,
+						interface_mesh_change_peer_result, data, NULL);
+	if (ret < 0) {
+		g_free(data->peer_address);
+		g_free(data->method);
+		dbus_free(data);
+	}
+
+	return ret;
+}
+#endif
 
 int g_supplicant_interface_create(const char *ifname, const char *driver,
 					const char *bridge,
@@ -4786,6 +5218,57 @@ static int interface_ready_to_scan(GSupplicantInterface *interface)
 
 	return 0;
 }
+
+#if defined TIZEN_EXT_WIFI_MESH
+static void interface_abort_scan_result(const char *error,
+				DBusMessageIter *iter, void *user_data)
+{
+	struct interface_scan_data *data = user_data;
+	int err = 0;
+
+	if (error) {
+		SUPPLICANT_DBG("error %s", error);
+		err = -EIO;
+	}
+
+	g_free(data->path);
+
+		if (data->callback)
+			data->callback(err, data->interface, data->user_data);
+
+	dbus_free(data);
+}
+
+int g_supplicant_interface_abort_scan(GSupplicantInterface *interface,
+				GSupplicantInterfaceCallback callback, void *user_data)
+{
+	struct interface_scan_data *data;
+	int ret;
+
+	if (!interface->scanning)
+		return -EEXIST;
+
+	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
+
+	data->interface = interface;
+	data->path = g_strdup(interface->path);
+	data->callback = callback;
+	data->user_data = user_data;
+
+	ret = supplicant_dbus_method_call(interface->path,
+			SUPPLICANT_INTERFACE ".Interface", "AbortScan", NULL,
+			interface_abort_scan_result, data, interface);
+
+	if (ret < 0) {
+		g_free(data->path);
+		dbus_free(data);
+	}
+
+	return ret;
+}
+#endif
 
 int g_supplicant_interface_scan(GSupplicantInterface *interface,
 				GSupplicantScanParams *scan_data,
@@ -5429,6 +5912,17 @@ static void add_network_security_proto(DBusMessageIter *dict,
 	g_free(proto);
 }
 
+#if defined TIZEN_EXT_WIFI_MESH
+static void add_network_ieee80211w(DBusMessageIter *dict, GSupplicantSSID *ssid)
+{
+	if (ssid->security != G_SUPPLICANT_SECURITY_SAE)
+		return;
+
+	supplicant_dbus_dict_append_basic(dict, "ieee80211w", DBUS_TYPE_UINT32,
+					  &ssid->ieee80211w);
+}
+#endif
+
 static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
 {
 	char *key_mgmt;
@@ -5471,6 +5965,12 @@ static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
 		add_network_security_proto(dict, ssid);
 		break;
 #endif
+#if defined TIZEN_EXT_WIFI_MESH
+	case G_SUPPLICANT_SECURITY_SAE:
+		key_mgmt = "SAE";
+		add_network_security_psk(dict, ssid);
+		break;
+#endif
 	}
 
 	supplicant_dbus_dict_append_basic(dict, "key_mgmt",
@@ -5492,6 +5992,11 @@ static void add_network_mode(DBusMessageIter *dict, GSupplicantSSID *ssid)
 	case G_SUPPLICANT_MODE_MASTER:
 		mode = 2;
 		break;
+#if defined TIZEN_EXT_WIFI_MESH
+	case G_SUPPLICANT_MODE_MESH:
+		mode = 5;
+		break;
+#endif
 	}
 
 	supplicant_dbus_dict_append_basic(dict, "mode",
@@ -5521,6 +6026,10 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 	add_network_mode(&dict, ssid);
 
 	add_network_security(&dict, ssid);
+
+#if defined TIZEN_EXT_WIFI_MESH
+	add_network_ieee80211w(&dict, ssid);
+#endif
 
 	supplicant_dbus_dict_append_fixed_array(&dict, "ssid",
 					DBUS_TYPE_BYTE, &ssid->ssid,
@@ -5865,7 +6374,12 @@ int g_supplicant_interface_connect(GSupplicantInterface *interface,
 			network_remove(intf_data);
 		} else
 #if defined TIZEN_EXT
-			if (ssid->passphrase && g_strcmp0(ssid->passphrase, "") != 0 && !ssid->eap) {
+			if (ssid->passphrase &&
+			    g_strcmp0(ssid->passphrase, "") != 0 &&
+#if defined TIZEN_EXT_WIFI_MESH
+			    ssid->mode != G_SUPPLICANT_MODE_MESH &&
+#endif
+			    !ssid->eap) {
 				ret = send_decryption_request(ssid->passphrase, data);
 				if (ret < 0)
 					SUPPLICANT_DBG("Decryption request failed %d", ret);
@@ -6549,6 +7063,10 @@ static const char *g_supplicant_rule7 = "type=signal,"
 static const char *g_supplicant_rule8 = "type=signal,"
 		"interface=" SUPPLICANT_INTERFACE ".Group";
 #endif
+#if defined TIZEN_EXT_WIFI_MESH
+static const char *g_supplicant_rule9 = "type=signal,"
+		"interface=" SUPPLICANT_INTERFACE ".Interface.Mesh";
+#endif
 
 static void invoke_introspect_method(void)
 {
@@ -6615,6 +7133,9 @@ int g_supplicant_register(const GSupplicantCallbacks *callbacks)
 	dbus_bus_add_match(connection, g_supplicant_rule7, NULL);
 	dbus_bus_add_match(connection, g_supplicant_rule8, NULL);
 #endif
+#if defined TIZEN_EXT_WIFI_MESH
+	dbus_bus_add_match(connection, g_supplicant_rule9, NULL);
+#endif
 	dbus_connection_flush(connection);
 
 	if (dbus_bus_name_has_owner(connection,
@@ -6656,6 +7177,9 @@ void g_supplicant_unregister(const GSupplicantCallbacks *callbacks)
 	SUPPLICANT_DBG("");
 
 	if (connection) {
+#if defined TIZEN_EXT_WIFI_MESH
+		dbus_bus_remove_match(connection, g_supplicant_rule9, NULL);
+#endif
 #if !defined TIZEN_EXT
 		dbus_bus_remove_match(connection, g_supplicant_rule8, NULL);
 		dbus_bus_remove_match(connection, g_supplicant_rule7, NULL);

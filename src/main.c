@@ -806,6 +806,9 @@ int main(int argc, char *argv[])
 	__connman_service_init();
 	__connman_peer_service_init();
 	__connman_peer_init();
+#if defined TIZEN_EXT_WIFI_MESH
+	__connman_mesh_init();
+#endif /* TIZEN_EXT_WIFI_MESH */
 	__connman_provider_init();
 	__connman_network_init();
 	__connman_config_init();
@@ -880,6 +883,9 @@ int main(int argc, char *argv[])
 	__connman_firewall_cleanup();
 	__connman_peer_service_cleanup();
 	__connman_peer_cleanup();
+#if defined TIZEN_EXT_WIFI_MESH
+	__connman_mesh_cleanup();
+#endif /* TIZEN_EXT_WIFI_MESH */
 	__connman_ippool_cleanup();
 	__connman_device_cleanup();
 	__connman_network_cleanup();

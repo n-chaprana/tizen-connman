@@ -57,6 +57,10 @@ DBusMessage *__connman_error_operation_aborted(DBusMessage *msg);
 DBusMessage *__connman_error_operation_timeout(DBusMessage *msg);
 DBusMessage *__connman_error_invalid_service(DBusMessage *msg);
 DBusMessage *__connman_error_invalid_property(DBusMessage *msg);
+#if defined TIZEN_EXT_WIFI_MESH
+DBusMessage *__connman_error_invalid_command(DBusMessage *msg);
+DBusMessage *__connman_error_scan_abort_failed(DBusMessage *msg);
+#endif
 
 int __connman_manager_init(void);
 void __connman_manager_cleanup(void);
@@ -919,6 +923,30 @@ int __connman_peer_service_unregister(const char *owner,
 					int specification_length,
 					const unsigned char *query,
 					int query_length, int version);
+
+#if defined TIZEN_EXT_WIFI_MESH
+#include <connman/mesh.h>
+
+int __connman_mesh_init(void);
+void __connman_mesh_cleanup(void);
+bool __connman_technology_get_connected(enum connman_service_type type);
+void __connman_technology_mesh_interface_create_finished(
+						enum connman_service_type type, bool success,
+						const char *error);
+void __connman_technology_mesh_interface_remove_finished(
+						enum connman_service_type type, bool success);
+void __connman_mesh_peer_list_struct(DBusMessageIter *array);
+void __connman_mesh_connected_peer_list_struct(DBusMessageIter *array);
+void __connman_mesh_disconnected_peer_list_struct(DBusMessageIter *array);
+int __connman_mesh_dhcp_start(struct connman_ipconfig *ipconfig,
+			dhcp_cb callback, gpointer user_data);
+int __connman_device_abort_scan(enum connman_service_type type);
+void __connman_technology_notify_abort_scan(enum connman_service_type type,
+						int result);
+int __connman_device_request_mesh_specific_scan(enum connman_service_type type,
+				const char *name, unsigned int freq);
+void __connman_mesh_auto_connect(void);
+#endif /* TIZEN_EXT_WIFI_MESH */
 
 #include <connman/session.h>
 

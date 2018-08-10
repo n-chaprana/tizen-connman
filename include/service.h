@@ -49,8 +49,15 @@ enum connman_service_type {
 	CONNMAN_SERVICE_TYPE_VPN       = 7,
 	CONNMAN_SERVICE_TYPE_GADGET    = 8,
 	CONNMAN_SERVICE_TYPE_P2P       = 9,
+#if defined TIZEN_EXT_WIFI_MESH
+	CONNMAN_SERVICE_TYPE_MESH      = 10,
+#endif
 };
+#if defined TIZEN_EXT_WIFI_MESH
+#define	MAX_CONNMAN_SERVICE_TYPES        11
+#else
 #define	MAX_CONNMAN_SERVICE_TYPES        10
+#endif
 
 
 enum connman_service_security {

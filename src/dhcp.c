@@ -730,6 +730,41 @@ char *__connman_dhcp_get_server_address(struct connman_ipconfig *ipconfig)
 	return g_dhcp_client_get_server_address(dhcp->dhcp_client);
 }
 
+#if defined TIZEN_EXT_WIFI_MESH
+int __connman_mesh_dhcp_start(struct connman_ipconfig *ipconfig,
+			dhcp_cb callback, gpointer user_data)
+{
+	struct connman_dhcp *dhcp;
+	int err;
+
+	DBG("");
+
+	dhcp = g_hash_table_lookup(ipconfig_table, ipconfig);
+	if (!dhcp) {
+
+		dhcp = g_try_new0(struct connman_dhcp, 1);
+		if (!dhcp)
+			return -ENOMEM;
+
+		dhcp->ipconfig = ipconfig;
+		__connman_ipconfig_ref(ipconfig);
+
+		err = dhcp_initialize(dhcp);
+
+		if (err < 0) {
+			g_free(dhcp);
+			return err;
+		}
+
+		g_hash_table_insert(ipconfig_table, ipconfig, dhcp);
+	}
+
+	dhcp->callback = callback;
+	dhcp->user_data = user_data;
+	return g_dhcp_client_start(dhcp->dhcp_client, NULL);
+}
+#endif
+
 int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
 			struct connman_network *network, dhcp_cb callback,
 			gpointer user_data)

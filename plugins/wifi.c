@@ -163,6 +163,10 @@ struct wifi_data {
 #endif
 	int disconnect_code;
 	int assoc_code;
+#if defined TIZEN_EXT_WIFI_MESH
+	bool mesh_interface;
+	struct wifi_mesh_info *mesh_info;
+#endif
 };
 
 #if defined TIZEN_EXT
@@ -346,6 +350,506 @@ static void add_pending_wifi_device(struct wifi_data *wifi)
 
 	pending_wifi_device = g_list_append(pending_wifi_device, wifi);
 }
+
+#if defined TIZEN_EXT_WIFI_MESH
+struct wifi_mesh_info {
+	struct wifi_data *wifi;
+	GSupplicantInterface *interface;
+	struct connman_mesh *mesh;
+	char *parent_ifname;
+	char *ifname;
+	char *identifier;
+	int index;
+};
+
+struct mesh_change_peer_status_info {
+	char *peer_address;
+	enum connman_mesh_peer_status peer_status;
+	mesh_change_peer_status_cb_t callback;
+	void *user_data;
+};
+
+static struct connman_technology_driver mesh_tech_driver = {
+	.name = "mesh",
+	.type = CONNMAN_SERVICE_TYPE_MESH,
+};
+
+static void mesh_interface_create_callback(int result,
+					   GSupplicantInterface *interface,
+					   void *user_data)
+{
+	struct wifi_mesh_info *mesh_info = user_data;
+	struct wifi_data *wifi;
+	bool success = false;
+
+	DBG("result %d ifname %s, mesh_info %p", result,
+				g_supplicant_interface_get_ifname(interface),
+				mesh_info);
+
+	if (result < 0 || !mesh_info)
+		goto done;
+
+	wifi = mesh_info->wifi;
+
+	mesh_info->interface = interface;
+	mesh_info->identifier = connman_inet_ifaddr(mesh_info->ifname);
+	mesh_info->index = connman_inet_ifindex(mesh_info->ifname);
+	DBG("Mesh Interface identifier %s", mesh_info->identifier);
+	wifi->mesh_interface = true;
+	wifi->mesh_info = mesh_info;
+	g_supplicant_interface_set_data(interface, wifi);
+	success = true;
+
+done:
+	connman_mesh_notify_interface_create(success);
+}
+
+static int add_mesh_interface(const char *ifname, const char *parent_ifname)
+{
+	GList *list;
+	struct wifi_data *wifi;
+	struct wifi_mesh_info *mesh_info;
+	const char *wifi_ifname;
+	bool parent_found = false;
+	const char *driver = "nl80211";
+
+	for (list = iface_list; list; list = list->next) {
+		wifi = list->data;
+
+		if (!g_supplicant_interface_has_mesh(wifi->interface))
+			continue;
+
+		wifi_ifname = g_supplicant_interface_get_ifname(wifi->interface);
+		if (!wifi_ifname)
+			continue;
+
+		if (!g_strcmp0(wifi_ifname, parent_ifname)) {
+			parent_found = true;
+			break;
+		}
+	}
+
+	if (!parent_found) {
+		DBG("Parent interface %s doesn't exist", parent_ifname);
+		return -ENODEV;
+	}
+
+	mesh_info = g_try_malloc0(sizeof(struct wifi_mesh_info));
+	if (!mesh_info)
+		return -ENOMEM;
+
+	mesh_info->wifi = wifi;
+	mesh_info->ifname = g_strdup(ifname);
+	mesh_info->parent_ifname = g_strdup(parent_ifname);
+
+	g_supplicant_mesh_interface_create(ifname, driver, NULL, parent_ifname,
+						mesh_interface_create_callback, mesh_info);
+	return -EINPROGRESS;
+}
+
+static void mesh_interface_remove_callback(int result,
+					GSupplicantInterface *interface,
+							void *user_data)
+{
+	struct wifi_data *wifi = user_data;
+	struct wifi_mesh_info *mesh_info = wifi->mesh_info;
+	bool success = false;
+
+	DBG("result %d mesh_info %p", result, mesh_info);
+
+	if (result < 0 || !mesh_info)
+		goto done;
+
+	mesh_info->interface = NULL;
+	g_free(mesh_info->parent_ifname);
+	g_free(mesh_info->ifname);
+	g_free(mesh_info->identifier);
+	g_free(mesh_info);
+	wifi->mesh_interface = false;
+	wifi->mesh_info = NULL;
+	success = true;
+
+done:
+	connman_mesh_notify_interface_remove(success);
+}
+
+static int remove_mesh_interface(const char *ifname)
+{
+	GList *list;
+	struct wifi_data *wifi;
+	struct wifi_mesh_info *mesh_info;
+	bool mesh_if_found = false;
+	int ret;
+
+	for (list = iface_list; list; list = list->next) {
+		wifi = list->data;
+
+		if (wifi->mesh_interface) {
+			mesh_if_found = true;
+			break;
+		}
+	}
+
+	if (!mesh_if_found) {
+		DBG("Mesh interface %s doesn't exist", ifname);
+		return -ENODEV;
+	}
+
+	mesh_info = wifi->mesh_info;
+	ret = g_supplicant_interface_remove(mesh_info->interface,
+						mesh_interface_remove_callback, wifi);
+	if (ret < 0)
+		return ret;
+
+	return -EINPROGRESS;
+}
+
+static void mesh_disconnect_callback(int result,
+					GSupplicantInterface *interface, void *user_data)
+{
+	struct connman_mesh *mesh = user_data;
+
+	DBG("result %d interface %p mesh %p", result, interface, mesh);
+}
+
+static int mesh_peer_disconnect(struct connman_mesh *mesh)
+{
+	GList *list;
+	struct wifi_data *wifi;
+	struct wifi_mesh_info *mesh_info;
+	bool mesh_if_found = false;
+	GSupplicantInterface *interface;
+
+	for (list = iface_list; list; list = list->next) {
+		wifi = list->data;
+
+		if (wifi->mesh_interface) {
+			mesh_if_found = true;
+			break;
+		}
+	}
+
+	if (!mesh_if_found) {
+		DBG("Mesh interface is not created");
+		return -ENODEV;
+	}
+
+	mesh_info = wifi->mesh_info;
+
+	interface = mesh_info->interface;
+	return g_supplicant_interface_disconnect(interface,
+						mesh_disconnect_callback, mesh);
+}
+
+static void mesh_connect_callback(int result, GSupplicantInterface *interface,
+								  void *user_data)
+{
+	struct connman_mesh *mesh = user_data;
+	DBG("mesh %p result %d", mesh, result);
+
+	if (result < 0)
+		connman_mesh_peer_set_state(mesh, CONNMAN_MESH_STATE_FAILURE);
+	else
+		connman_mesh_peer_set_state(mesh, CONNMAN_MESH_STATE_ASSOCIATION);
+}
+
+static GSupplicantSecurity mesh_network_security(const char *security)
+{
+	if (g_str_equal(security, "none"))
+		return G_SUPPLICANT_SECURITY_NONE;
+	else if (g_str_equal(security, "sae"))
+		return G_SUPPLICANT_SECURITY_SAE;
+
+	return G_SUPPLICANT_SECURITY_UNKNOWN;
+}
+
+static void mesh_ssid_init(GSupplicantSSID *ssid, struct connman_mesh *mesh)
+{
+	const char *name;
+	const char *security;
+
+	if (ssid->ssid)
+		g_free(ssid->ssid);
+
+	memset(ssid, 0, sizeof(*ssid));
+	ssid->mode = G_SUPPLICANT_MODE_MESH;
+
+	security = connman_mesh_get_security(mesh);
+	ssid->security = mesh_network_security(security);
+
+	if (ssid->security == G_SUPPLICANT_SECURITY_SAE)
+		ssid->passphrase = connman_mesh_get_passphrase(mesh);
+
+	ssid->freq = connman_mesh_get_frequency(mesh);
+	name = connman_mesh_get_name(mesh);
+	if (name) {
+		ssid->ssid_len = strlen(name);
+		ssid->ssid = g_malloc0(ssid->ssid_len + 1);
+		memcpy(ssid->ssid, name, ssid->ssid_len);
+		ssid->scan_ssid = 1;
+	}
+}
+
+static int mesh_peer_connect(struct connman_mesh *mesh)
+{
+	GList *list;
+	struct wifi_data *wifi;
+	struct wifi_mesh_info *mesh_info;
+	bool mesh_if_found = false;
+	GSupplicantInterface *interface;
+	GSupplicantSSID *ssid;
+
+	for (list = iface_list; list; list = list->next) {
+		wifi = list->data;
+
+		if (wifi->mesh_interface) {
+			mesh_if_found = true;
+			break;
+		}
+	}
+
+	if (!mesh_if_found) {
+		DBG("Mesh interface is not created");
+		return -ENODEV;
+	}
+
+	mesh_info = wifi->mesh_info;
+
+	interface = mesh_info->interface;
+
+	ssid = g_try_malloc0(sizeof(GSupplicantSSID));
+	if (!ssid)
+		return -ENOMEM;
+
+	mesh_info->mesh = mesh;
+
+	mesh_ssid_init(ssid, mesh);
+	return g_supplicant_interface_connect(interface, ssid,
+						mesh_connect_callback, mesh);
+}
+
+static void mesh_peer_change_status_callback(int result,
+					     GSupplicantInterface *interface,
+					     void *user_data)
+{
+	struct mesh_change_peer_status_info *data = user_data;
+
+	DBG("result %d Peer Status %d", result, data->peer_status);
+
+	if (result == 0 && data->peer_status == CONNMAN_MESH_PEER_REMOVE) {
+		/* WLAN_REASON_MESH_PEERING_CANCELLED = 52 */
+		connman_mesh_remove_connected_peer(data->peer_address, 52);
+	}
+
+	if (data->callback)
+		data->callback(result, data->user_data);
+
+	g_free(data->peer_address);
+	g_free(data);
+	return;
+}
+
+static int mesh_change_peer_status(const char *peer_address,
+				   enum connman_mesh_peer_status status,
+				   mesh_change_peer_status_cb_t callback, void *user_data)
+{
+	GList *list;
+	struct wifi_data *wifi;
+	struct wifi_mesh_info *mesh_info;
+	bool mesh_if_found = false;
+	GSupplicantInterface *interface;
+	struct mesh_change_peer_status_info *data;
+	const char *method;
+
+	for (list = iface_list; list; list = list->next) {
+		wifi = list->data;
+
+		if (wifi->mesh_interface) {
+			mesh_if_found = true;
+			break;
+		}
+	}
+
+	if (!mesh_if_found) {
+		DBG("Mesh interface is not created");
+		return -ENODEV;
+	}
+
+	mesh_info = wifi->mesh_info;
+
+	interface = mesh_info->interface;
+
+	switch (status) {
+	case CONNMAN_MESH_PEER_ADD:
+		method = "MeshPeerAdd";
+		break;
+	case CONNMAN_MESH_PEER_REMOVE:
+		method = "MeshPeerRemove";
+		break;
+	default:
+		DBG("Invalid method");
+		return -EINVAL;
+	}
+
+	data = g_try_malloc0(sizeof(struct mesh_change_peer_status_info));
+	if (data == NULL) {
+		DBG("Memory allocation failed");
+		return -ENOMEM;
+	}
+
+	data->peer_address = g_strdup(peer_address);
+	data->peer_status = status;
+	data->callback = callback;
+	data->user_data = user_data;
+
+	return g_supplicant_interface_mesh_peer_change_status(interface,
+						mesh_peer_change_status_callback, peer_address, method,
+						data);
+}
+
+static struct connman_mesh_driver mesh_driver = {
+	.add_interface      = add_mesh_interface,
+	.remove_interface   = remove_mesh_interface,
+	.connect            = mesh_peer_connect,
+	.disconnect         = mesh_peer_disconnect,
+	.change_peer_status = mesh_change_peer_status,
+};
+
+static void mesh_support(GSupplicantInterface *interface)
+{
+	DBG("");
+
+	if (!g_supplicant_interface_has_mesh(interface))
+		return;
+
+	if (connman_technology_driver_register(&mesh_tech_driver) < 0) {
+		DBG("Could not register Mesh technology driver");
+		return;
+	}
+
+	connman_mesh_driver_register(&mesh_driver);
+}
+
+static void check_mesh_technology(void)
+{
+	bool mesh_exists = false;
+	GList *list;
+
+	for (list = iface_list; list; list = list->next) {
+		struct wifi_data *w = list->data;
+
+		if (w->interface &&
+				g_supplicant_interface_has_mesh(w->interface))
+			mesh_exists = true;
+	}
+
+	if (!mesh_exists) {
+		connman_technology_driver_unregister(&mesh_tech_driver);
+		connman_mesh_driver_unregister(&mesh_driver);
+	}
+}
+
+static void mesh_group_started(GSupplicantInterface *interface)
+{
+	struct wifi_data *wifi;
+	struct wifi_mesh_info *mesh_info;
+	struct connman_mesh *mesh;
+	const unsigned char *ssid;
+	unsigned int ssid_len;
+	char name[33];
+
+	ssid = g_supplicant_interface_get_mesh_group_ssid(interface, &ssid_len);
+	memcpy(name, ssid, ssid_len);
+	name[ssid_len] = '\0';
+	DBG("name %s", name);
+	wifi = g_supplicant_interface_get_data(interface);
+	DBG("wifi %p", wifi);
+
+	if (!wifi)
+		return;
+
+	mesh_info = wifi->mesh_info;
+	if (!mesh_info)
+		return;
+
+	mesh = mesh_info->mesh;
+	if (!mesh)
+		return;
+
+	connman_mesh_peer_set_state(mesh, CONNMAN_MESH_STATE_CONFIGURATION);
+}
+
+static void mesh_group_removed(GSupplicantInterface *interface)
+{
+	struct wifi_data *wifi;
+	struct wifi_mesh_info *mesh_info;
+	struct connman_mesh *mesh;
+	const unsigned char *ssid;
+	unsigned int ssid_len;
+	int disconnect_reason;
+	char name[33];
+
+	ssid = g_supplicant_interface_get_mesh_group_ssid(interface, &ssid_len);
+	memcpy(name, ssid, ssid_len);
+	name[ssid_len] = '\0';
+	DBG("name %s", name);
+
+	disconnect_reason = g_supplicant_mesh_get_disconnect_reason(interface);
+	DBG("Disconnect Reason %d", disconnect_reason);
+
+	wifi = g_supplicant_interface_get_data(interface);
+	DBG("wifi %p", wifi);
+
+	if (!wifi)
+		return;
+
+	mesh_info = wifi->mesh_info;
+	if (!mesh_info)
+		return;
+
+	mesh = connman_get_connected_mesh_from_name(name);
+	if (!mesh) {
+		DBG("%s is not connected", name);
+		mesh = connman_get_connecting_mesh_from_name(name);
+		if (!mesh) {
+			DBG("%s is not connecting", name);
+			return;
+		}
+	}
+
+	connman_mesh_peer_set_disconnect_reason(mesh, disconnect_reason);
+	connman_mesh_peer_set_state(mesh, CONNMAN_MESH_STATE_DISCONNECT);
+}
+
+static void mesh_peer_connected(GSupplicantMeshPeer *mesh_peer)
+{
+	const char *peer_address;
+
+	peer_address = g_supplicant_mesh_peer_get_address(mesh_peer);
+
+	if (!peer_address)
+		return;
+
+	DBG("Peer %s connected", peer_address);
+	connman_mesh_add_connected_peer(peer_address);
+}
+
+static void mesh_peer_disconnected(GSupplicantMeshPeer *mesh_peer)
+{
+	const char *peer_address;
+	int reason;
+
+	peer_address = g_supplicant_mesh_peer_get_address(mesh_peer);
+
+	if (!peer_address)
+		return;
+
+	reason = g_supplicant_mesh_peer_get_disconnect_reason(mesh_peer);
+
+	DBG("Peer %s disconnected with reason %d", peer_address, reason);
+	connman_mesh_remove_connected_peer(peer_address, reason);
+}
+#endif
 
 static struct wifi_data *get_pending_wifi_data(const char *ifname)
 {
@@ -1034,6 +1538,9 @@ static void wifi_remove(struct connman_device *device)
 		iface_list = g_list_remove(iface_list, wifi);
 
 	check_p2p_technology();
+#if defined TIZEN_EXT_WIFI_MESH
+	check_mesh_technology();
+#endif
 
 	remove_pending_wifi_device(wifi);
 
@@ -2094,7 +2601,7 @@ static int wifi_specific_scan(enum connman_service_type type,
 			}
 
 			memcpy(scan_ssid->ssid, ssid, (ssid_len + 1));
-			DBG("scan ssid %s len: %d", scan_ssid->ssid, ssid_len);
+			/* DBG("scan ssid %s len: %d", scan_ssid->ssid, ssid_len); */
 			scan_ssid->ssid_len = ssid_len;
 			scan_params->ssids = g_slist_prepend(scan_params->ssids, scan_ssid);
 			count++;
@@ -2160,7 +2667,7 @@ static int wifi_specific_scan(enum connman_service_type type,
 				}
 
 				memcpy(scan_ssid->ssid, ssid, (ssid_len + 1));
-				DBG("scan ssid %s len: %d", scan_ssid->ssid, ssid_len);
+				/* DBG("scan ssid %s len: %d", scan_ssid->ssid, ssid_len); */
 				scan_ssid->ssid_len = ssid_len;
 				scan_params->ssids = g_slist_prepend(scan_params->ssids, scan_ssid);
 				ap_count++;
@@ -2188,6 +2695,159 @@ static int wifi_specific_scan(enum connman_service_type type,
 	if (ret == 0) {
 		connman_device_set_scanning(device,
 				CONNMAN_SERVICE_TYPE_WIFI, true);
+	} else {
+		g_supplicant_free_scan_params(scan_params);
+		connman_device_unref(device);
+	}
+
+	return ret;
+}
+#endif
+
+#if defined TIZEN_EXT_WIFI_MESH
+static void mesh_scan_callback(int result, GSupplicantInterface *interface,
+						void *user_data)
+{
+	struct connman_device *device = user_data;
+	struct wifi_data *wifi = connman_device_get_data(device);
+	bool scanning;
+
+	DBG("result %d wifi %p", result, wifi);
+
+	scanning = connman_device_get_scanning(device);
+	if (scanning)
+		connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_MESH, false);
+
+	if (scanning)
+		connman_device_unref(device);
+}
+
+static int mesh_scan(struct connman_device *device)
+{
+	struct wifi_data *wifi;
+	struct wifi_mesh_info *mesh_info;
+	int ret;
+
+	DBG("");
+
+	wifi = connman_device_get_data(device);
+
+	if (!wifi->mesh_interface)
+		return -ENOTSUP;
+
+	mesh_info = wifi->mesh_info;
+	reset_autoscan(device);
+	connman_device_ref(device);
+
+	ret = g_supplicant_interface_scan(mesh_info->interface, NULL,
+						mesh_scan_callback, device);
+	if (ret)
+		connman_device_unref(device);
+	else
+		connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_MESH, true);
+
+	return ret;
+}
+
+static void abort_scan_callback(int result, GSupplicantInterface *interface,
+						void *user_data)
+{
+	struct connman_device *device = user_data;
+	struct wifi_data *wifi = connman_device_get_data(device);
+
+	DBG("result %d wifi %p", result, wifi);
+
+	__connman_technology_notify_abort_scan(CONNMAN_SERVICE_TYPE_MESH, result);
+}
+
+static int mesh_abort_scan(enum connman_service_type type,
+						struct connman_device *device)
+{
+	struct wifi_data *wifi = connman_device_get_data(device);
+	struct wifi_mesh_info *mesh_info;
+	bool scanning;
+	int ret;
+
+	if (!wifi || !wifi->mesh_interface)
+		return -ENODEV;
+
+	if (type != CONNMAN_SERVICE_TYPE_MESH)
+		return -EINVAL;
+
+	mesh_info = wifi->mesh_info;
+
+	scanning = connman_device_get_scanning(device);
+	if (!scanning)
+		return -EEXIST;
+
+	ret = g_supplicant_interface_abort_scan(mesh_info->interface,
+						abort_scan_callback, device);
+
+	return ret;
+}
+
+static int mesh_specific_scan(enum connman_service_type type,
+			      struct connman_device *device, const char *ssid,
+			      unsigned int freq, void *user_data)
+{
+	struct wifi_data *wifi = connman_device_get_data(device);
+	GSupplicantScanParams *scan_params = NULL;
+	struct wifi_mesh_info *mesh_info;
+	struct scan_ssid *scan_ssid;
+	bool scanning;
+	int ret;
+
+	if (!wifi || !wifi->mesh_interface)
+		return -ENODEV;
+
+	if (type != CONNMAN_SERVICE_TYPE_MESH)
+		return -EINVAL;
+
+	if (wifi->p2p_device)
+		return 0;
+
+	mesh_info = wifi->mesh_info;
+
+	scanning = connman_device_get_scanning(device);
+	if (scanning)
+		return -EALREADY;
+
+	scan_params = g_try_malloc0(sizeof(GSupplicantScanParams));
+	if (!scan_params)
+		return -ENOMEM;
+
+	scan_ssid = g_try_new(struct scan_ssid, 1);
+	if (!scan_ssid) {
+		g_free(scan_params);
+		return -ENOMEM;
+	}
+
+	scan_ssid->ssid_len = strlen(ssid);
+	memcpy(scan_ssid->ssid, ssid, scan_ssid->ssid_len);
+	scan_params->ssids = g_slist_prepend(scan_params->ssids, scan_ssid);
+	scan_params->num_ssids = 1;
+
+	scan_params->freqs = g_try_new(uint16_t, 1);
+	if (!scan_params->freqs) {
+		g_slist_free_full(scan_params->ssids, g_free);
+		g_free(scan_params);
+		return -ENOMEM;
+	}
+
+	scan_params->freqs[0] = freq;
+	scan_params->num_freqs = 1;
+
+	reset_autoscan(device);
+	connman_device_ref(device);
+
+	ret = g_supplicant_interface_scan(mesh_info->interface, scan_params,
+						mesh_scan_callback, device);
+
+	if (ret == 0) {
+		connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_MESH, true);
 	} else {
 		g_supplicant_free_scan_params(scan_params);
 		connman_device_unref(device);
@@ -2227,6 +2887,11 @@ static int wifi_scan(enum connman_service_type type,
 
 	if (type == CONNMAN_SERVICE_TYPE_P2P)
 		return p2p_find(device);
+
+#if defined TIZEN_EXT_WIFI_MESH
+	if (type == CONNMAN_SERVICE_TYPE_MESH)
+		return mesh_scan(device);
+#endif
 
 	DBG("device %p wifi %p hidden ssid %s", device, wifi->interface, ssid);
 
@@ -2378,6 +3043,10 @@ static struct connman_device_driver wifi_ng_driver = {
 	.set_regdom	= wifi_set_regdom,
 #if defined TIZEN_EXT
 	.specific_scan  = wifi_specific_scan,
+#endif
+#if defined TIZEN_EXT_WIFI_MESH
+	.abort_scan	= mesh_abort_scan,
+	.mesh_specific_scan	= mesh_specific_scan,
 #endif
 };
 
@@ -3238,6 +3907,21 @@ static void interface_removed(GSupplicantInterface *interface)
 
 	wifi = g_supplicant_interface_get_data(interface);
 
+#if defined TIZEN_EXT_WIFI_MESH
+	if (wifi && wifi->mesh_interface) {
+		DBG("Notify mesh interface remove");
+		connman_mesh_notify_interface_remove(true);
+		struct wifi_mesh_info *mesh_info = wifi->mesh_info;
+		g_free(mesh_info->parent_ifname);
+		g_free(mesh_info->ifname);
+		g_free(mesh_info->identifier);
+		g_free(mesh_info);
+		wifi->mesh_interface = false;
+		wifi->mesh_info = NULL;
+		return;
+	}
+#endif
+
 	if (wifi)
 		wifi->interface = NULL;
 
@@ -3252,6 +3936,9 @@ static void interface_removed(GSupplicantInterface *interface)
 	connman_device_set_powered(wifi->device, false);
 
 	check_p2p_technology();
+#if defined TIZEN_EXT_WIFI_MESH
+	check_mesh_technology();
+#endif
 }
 
 static void set_device_type(const char *type, char dev_type[17])
@@ -3391,6 +4078,97 @@ static unsigned char calculate_strength(GSupplicantNetwork *supplicant_network)
 	return strength;
 }
 
+#if defined TIZEN_EXT_WIFI_MESH
+static void mesh_peer_added(GSupplicantNetwork *supplicant_network)
+{
+	GSupplicantInterface *interface;
+	struct wifi_data *wifi;
+	const char *name, *security;
+	struct connman_mesh *connman_mesh;
+	struct wifi_mesh_info *mesh_info;
+	const unsigned char *bssid;
+	const char *identifier;
+	char *address;
+	uint16_t frequency;
+	int ret;
+
+	interface = g_supplicant_network_get_interface(supplicant_network);
+	wifi = g_supplicant_interface_get_data(interface);
+	if (!wifi || !wifi->mesh_interface) {
+		DBG("Virtual Mesh interface not created");
+		return;
+	}
+
+	bssid = g_supplicant_network_get_bssid(supplicant_network);
+	address = g_malloc0(19);
+	snprintf(address, 19, "%02x:%02x:%02x:%02x:%02x:%02x", bssid[0], bssid[1],
+								 bssid[2], bssid[3], bssid[4], bssid[5]);
+
+	identifier = g_supplicant_network_get_identifier(supplicant_network);
+	name = g_supplicant_network_get_name(supplicant_network);
+	security = g_supplicant_network_get_security(supplicant_network);
+	frequency = g_supplicant_network_get_frequency(supplicant_network);
+
+	mesh_info = wifi->mesh_info;
+	connman_mesh = connman_mesh_get(mesh_info->identifier, identifier);
+	if (connman_mesh)
+		goto done;
+
+	DBG("Mesh Peer name %s identifier %s security %s added", name, identifier,
+					security);
+	connman_mesh = connman_mesh_create(mesh_info->identifier, identifier);
+	connman_mesh_set_name(connman_mesh, name);
+	connman_mesh_set_security(connman_mesh, security);
+	connman_mesh_set_frequency(connman_mesh, frequency);
+	connman_mesh_set_address(connman_mesh, address);
+	connman_mesh_set_index(connman_mesh, mesh_info->index);
+	connman_mesh_set_strength(connman_mesh,
+						calculate_strength(supplicant_network));
+	connman_mesh_set_peer_type(connman_mesh, CONNMAN_MESH_PEER_TYPE_DISCOVERED);
+
+	ret = connman_mesh_register(connman_mesh);
+	if (ret == -EALREADY)
+		DBG("Mesh Peer is already registered");
+
+done:
+	g_free(address);
+}
+
+static void mesh_peer_removed(GSupplicantNetwork *supplicant_network)
+{
+	GSupplicantInterface *interface;
+	struct wifi_data *wifi;
+	struct connman_mesh *connman_mesh;
+	struct wifi_mesh_info *mesh_info;
+	const char *identifier;
+
+	interface = g_supplicant_network_get_interface(supplicant_network);
+	wifi = g_supplicant_interface_get_data(interface);
+	if (!wifi || !wifi->mesh_interface) {
+		DBG("Virtual Mesh interface not created");
+		return;
+	}
+
+	identifier = g_supplicant_network_get_identifier(supplicant_network);
+	if (!identifier) {
+		DBG("Failed to get Mesh Peer identifier");
+		return;
+	}
+
+	mesh_info = wifi->mesh_info;
+	connman_mesh = connman_mesh_get(mesh_info->identifier, identifier);
+	if (connman_mesh) {
+		/* Do not unregister connected mesh peer */
+		if (connman_mesh_peer_is_connected_state(connman_mesh)) {
+			DBG("Mesh Peer %s is connected", identifier);
+			return;
+		}
+		DBG("Mesh Peer identifier %s removed", identifier);
+		connman_mesh_unregister(connman_mesh);
+	}
+}
+#endif
+
 static void network_added(GSupplicantNetwork *supplicant_network)
 {
 	struct connman_network *network;
@@ -3416,6 +4194,13 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 
 	if (!g_strcmp0(mode, "adhoc"))
 		return;
+
+#if defined TIZEN_EXT_WIFI_MESH
+	if (!g_strcmp0(mode, "mesh")) {
+		mesh_peer_added(supplicant_network);
+		return;
+	}
+#endif
 
 	interface = g_supplicant_network_get_interface(supplicant_network);
 	wifi = g_supplicant_interface_get_data(interface);
@@ -3542,6 +4327,15 @@ static void network_removed(GSupplicantNetwork *network)
 	struct wifi_data *wifi;
 	const char *name, *identifier;
 	struct connman_network *connman_network;
+
+#if defined TIZEN_EXT_WIFI_MESH
+	const char *mode;
+	mode = g_supplicant_network_get_mode(network);
+	if (!g_strcmp0(mode, "mesh")) {
+		mesh_peer_removed(network);
+		return;
+	}
+#endif
 
 	interface = g_supplicant_network_get_interface(network);
 	wifi = g_supplicant_interface_get_data(interface);
@@ -4026,6 +4820,13 @@ static const GSupplicantCallbacks callbacks = {
 	.debug			= debug,
 	.disconnect_reasoncode  = disconnect_reasoncode,
 	.assoc_status_code      = assoc_status_code,
+#if defined TIZEN_EXT_WIFI_MESH
+	.mesh_support		= mesh_support,
+	.mesh_group_started = mesh_group_started,
+	.mesh_group_removed = mesh_group_removed,
+	.mesh_peer_connected = mesh_peer_connected,
+	.mesh_peer_disconnected = mesh_peer_disconnected,
+#endif
 };
 
 

@@ -462,6 +462,20 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 	if (!extract_link(msg, bytes, &address, &ifname, &mtu, &operstate, &stats))
 		return;
 
+#if defined TIZEN_EXT_WIFI_MESH
+	/* Do not accept Wi-Fi Mesh interface */
+	if (g_strrstr(ifname, "mesh") != NULL) {
+		DBG("Newlink event for Wi-Fi Mesh interface ignored");
+		return;
+	}
+
+	/* Do not accept Wi-Fi WLAN1 interface "dedicated for softAP */
+	if (!g_strcmp0(ifname, "wlan1")) {
+		DBG("Newlink event for Wi-Fi WLAN1 interface ignored");
+		return;
+	}
+#endif
+
 #if defined TIZEN_EXT
 	/* Do not accept Wi-Fi P2P interface */
 	if (g_strrstr(ifname, "p2p") != NULL) {
