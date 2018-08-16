@@ -1341,10 +1341,9 @@ static int icmpv6_recv(int fd, struct xs_cb_data *data)
 	/* Set Received Source Address from router as IPv6 Gateway Address */
 	char src_addr[INET6_ADDRSTRLEN];
 	if(inet_ntop(AF_INET6, &(saddr.sin6_addr), src_addr, INET6_ADDRSTRLEN)
-			== NULL) {
-		xs_cleanup(data);
+			== NULL)
 		return -errno;
-	}
+
 	DBG("Received Source Address %s from router", src_addr);
 
 	/* icmpv6_recv() function can be called in two scenarios :
