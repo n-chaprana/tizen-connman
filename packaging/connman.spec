@@ -310,7 +310,7 @@ systemctl daemon-reload
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/scripts
 %dir %{_libdir}/%{name}/plugins-vpn
-%config %{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
+%attr(644,root,root) %config %{_sysconfdir}/dbus-1/system.d/connman-vpn-dbus.conf
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
 %license COPYING
 %attr(644,root,root) %{_libdir}/systemd/system/connman-vpn.service
