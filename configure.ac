@@ -84,6 +84,13 @@ AC_ARG_ENABLE(tizen-ext-wifi-mesh,
 			[CFLAGS="$CFLAGS -DTIZEN_EXT_WIFI_MESH"], [enable_tizen_ext_wifi_mesh="no"])
 AM_CONDITIONAL(TIZEN_EXT_WIFI_MESH, test "${enable_tizen_ext_wifi_mesh}" != "no")
 
+AC_ARG_ENABLE(tizen-maintain-online,
+	AC_HELP_STRING([--enable-tizen-maintain-online], [enable TIZEN extensions]),
+			[if (test "${enableval}" = "yes"); then
+				CFLAGS="$CFLAGS -DTIZEN_MAINTAIN_ONLINE"
+				LIBS="$LIBS -lsmack"
+			fi])
+
 AC_ARG_WITH(openconnect, AC_HELP_STRING([--with-openconnect=PROGRAM],
         [specify location of openconnect binary]), [path_openconnect=${withval}])
 

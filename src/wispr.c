@@ -688,6 +688,9 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 	const char *str = NULL;
 	guint16 status;
 	gsize length;
+#if defined TIZEN_MAINTAIN_ONLINE
+	static int retried = 0;
+#endif
 
 	DBG("");
 
@@ -719,6 +722,9 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 				wp_context->status_url, wp_context);
 		break;
 	case 200:
+#if defined TIZEN_MAINTAIN_ONLINE
+		retried = 0;
+#endif
 		if (wp_context->wispr_msg.message_type >= 0)
 			break;
 
@@ -756,6 +762,19 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 	case 404:
 		if (__connman_service_online_check_failed(wp_context->service,
 						wp_context->type) == 0) {
+#if defined TIZEN_MAINTAIN_ONLINE
+			if (wp_context->type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+				if (retried == 0) {
+					connman_agent_report_error(wp_context->service,
+						__connman_service_get_path(wp_context->service),
+						"internet-unreachable",
+						NULL, NULL, NULL);
+
+					retried = 1;
+				}
+				break;
+			}
+#endif
 			wispr_portal_error(wp_context);
 			free_connman_wispr_portal_context(wp_context);
 			return false;
