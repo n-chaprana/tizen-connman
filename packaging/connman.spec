@@ -253,9 +253,9 @@ systemctl daemon-reload
 %attr(755,network_fw,network_fw) /%{_localstatedir}/lib/connman
 %attr(600,network_fw,network_fw) /%{_localstatedir}/lib/connman/settings
 %attr(644,root,root) %{_datadir}/dbus-1/system-services/net.connman.service
-%{_sysconfdir}/dbus-1/system.d/*
+%attr(644,root,root) %{_sysconfdir}/dbus-1/system.d/*
 %attr(644,network_fw,network_fw) %{_sysconfdir}/connman/main.conf
-%{_sysconfdir}/dbus-1/system.d/*.conf
+%attr(644,root,root) %{_sysconfdir}/dbus-1/system.d/*.conf
 %attr(644,root,root) %{_libdir}/systemd/system/connman.service
 %attr(644,root,root) %{_libdir}/systemd/system/multi-user.target.wants/connman.service
 %if "%{?_lib}" == "lib64"
