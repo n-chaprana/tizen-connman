@@ -5364,7 +5364,7 @@ static void interface_select_network_result(const char *error,
 
 #if defined TIZEN_EXT
 	g_free(data->ssid->ssid);
-	g_free(data->ssid->passphrase);
+	g_free((char *)data->ssid->passphrase);
 #endif
 	g_free(data->ssid);
 	dbus_free(data);
@@ -5453,7 +5453,7 @@ error:
 	g_free(data->path);
 #if defined TIZEN_EXT
 	g_free(data->ssid->ssid);
-	g_free(data->ssid->passphrase);
+	g_free((char *)data->ssid->passphrase);
 #endif
 	g_free(data->ssid);
 	g_free(data);
@@ -6231,7 +6231,7 @@ done:
 		callback_assoc_failed(decrypt_request_data.data->user_data);
 		g_free(data->path);
 		g_free(data->ssid->ssid);
-		g_free(data->ssid->passphrase);
+		g_free((char *)data->ssid->passphrase);
 		g_free(data->ssid);
 		dbus_free(data);
 	}
