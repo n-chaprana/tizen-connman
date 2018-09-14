@@ -2175,8 +2175,13 @@ struct connman_service *connman_service_get_default_connection(void)
 				state2string(service->state),
 				__connman_service_type2string(service->type));
 
+#if defined TIZEN_MAINTAIN_ONLINE
+		if (service->type == CONNMAN_SERVICE_TYPE_WIFI &&
+				service->state == CONNMAN_SERVICE_STATE_ONLINE) {
+#else
 		if (service->type == CONNMAN_SERVICE_TYPE_WIFI &&
 				is_connected(service->state) == TRUE) {
+#endif
 			return service;
 		} else if (service->type == CONNMAN_SERVICE_TYPE_CELLULAR &&
 				__connman_service_is_internet_profile(service) == TRUE) {
@@ -2202,6 +2207,9 @@ struct connman_service *connman_service_get_default_connection(void)
 
 struct connman_service *__connman_service_get_default(void)
 {
+#if defined TIZEN_MAINTAIN_ONLINE
+	return connman_service_get_default_connection();
+#else
 	struct connman_service *service;
 
 	if (!service_list)
@@ -2213,6 +2221,7 @@ struct connman_service *__connman_service_get_default(void)
 		return NULL;
 
 	return service;
+#endif
 }
 
 bool __connman_service_index_is_default(int index)
@@ -6053,6 +6062,19 @@ static DBusMessage *get_user_favorite(DBusConnection *conn,
 	return reply;
 }
 
+#if defined TIZEN_MAINTAIN_ONLINE
+static DBusMessage *downgrade_service(DBusConnection *conn,
+					DBusMessage *msg, void *user_data)
+{
+	struct connman_service *service = user_data;
+
+	downgrade_state(service);
+	__connman_connection_update_gateway();
+
+	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+}
+#endif
+
 static struct _services_notify {
 	int id;
 	GHashTable *add;
@@ -6205,6 +6227,9 @@ static const GDBusMethodTable service_methods[] = {
 	{ GDBUS_METHOD("GetUserFavorite",
 			NULL, GDBUS_ARGS({ "value", "v" }),
 			get_user_favorite) },
+#if defined TIZEN_MAINTAIN_ONLINE
+	{ GDBUS_METHOD("Downgrade", NULL, NULL, downgrade_service) },
+#endif
 	{ },
 };
 
@@ -7162,7 +7187,12 @@ static void __connman_service_disconnect_default(struct connman_service *service
 		default_connecting_device = NULL;
 }
 
+#if defined TIZEN_MAINTAIN_ONLINE
+static void __connman_service_connect_default(struct connman_service *current,
+								  enum connman_service_state old_state)
+#else
 static void __connman_service_connect_default(struct connman_service *current)
+#endif
 {
 	int err;
 	GList *list;
@@ -7199,6 +7229,11 @@ static void __connman_service_connect_default(struct connman_service *current)
 		}
 
 		return;
+#if defined TIZEN_MAINTAIN_ONLINE
+	} else if (current->state == CONNMAN_SERVICE_STATE_READY &&
+			   old_state == CONNMAN_SERVICE_STATE_ONLINE) {
+		DBG("Device is downgraded: online --> ready");
+#endif
 	} else if (is_connected(current->state) == TRUE || is_connecting(current->state) == TRUE)
 		return;
 
@@ -7302,7 +7337,19 @@ static void set_priority_connected_service(void)
 		if (is_connected(service->state) == FALSE)
 			service->order = 5;
 		else
+#if defined TIZEN_MAINTAIN_ONLINE
+		{
+			if (service->type == CONNMAN_SERVICE_TYPE_WIFI &&
+				service->state == CONNMAN_SERVICE_STATE_ONLINE)
+				service->order = 6;
+			else if (service->type != CONNMAN_SERVICE_TYPE_WIFI)
+				service->order = 6;
+			else
+				service->order = 5;
+		}
+#else
 			service->order = 6;
+#endif
 	}
 }
 #endif
@@ -7445,10 +7492,15 @@ static int service_indicate_state(struct connman_service *service)
 			__connman_ipconfig_disable_ipv6(
 						service->ipconfig_ipv6);
 
+#if !defined TIZEN_MAINTAIN_ONLINE
 		if (connman_setting_get_bool("SingleConnectedTechnology"))
 			single_connected_tech(service);
 		else if (service->type != CONNMAN_SERVICE_TYPE_VPN)
 			vpn_auto_connect();
+#else
+		if (service->type != CONNMAN_SERVICE_TYPE_VPN)
+			vpn_auto_connect();
+#endif
 
 #if defined TIZEN_EXT
 		if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
@@ -7458,6 +7510,15 @@ static int service_indicate_state(struct connman_service *service)
 		break;
 
 	case CONNMAN_SERVICE_STATE_ONLINE:
+#if defined TIZEN_MAINTAIN_ONLINE
+#if defined TIZEN_EXT
+		if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
+			set_priority_connected_service();
+#endif
+
+		if (connman_setting_get_bool("SingleConnectedTechnology"))
+			single_connected_tech(service);
+#endif
 
 		break;
 
@@ -7527,7 +7588,11 @@ static int service_indicate_state(struct connman_service *service)
 	service_list_sort();
 
 #if defined TIZEN_EXT
+#if defined TIZEN_MAINTAIN_ONLINE
+	__connman_service_connect_default(service, old_state);
+#else
 	__connman_service_connect_default(service);
+#endif
 #endif
 
 	__connman_connection_update_gateway();
@@ -7771,12 +7836,35 @@ static gboolean redo_wispr(gpointer user_data)
 	return FALSE;
 }
 
+#if defined TIZEN_MAINTAIN_ONLINE
+static gboolean redo_wispr_ipv4(gpointer user_data)
+{
+	struct connman_service *service = user_data;
+
+	DBG("");
+
+	__connman_wispr_start(service, CONNMAN_IPCONFIG_TYPE_IPV4);
+
+	return FALSE;
+}
+#endif
+
 int __connman_service_online_check_failed(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	DBG("service %p type %d count %d", service, type,
 						service->online_check_count);
 
+#if defined TIZEN_MAINTAIN_ONLINE
+	/* Retry IPv4 stuff also */
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+		connman_warn("Online check failed for %p %s", service,
+					service->name);
+
+		g_timeout_add_seconds(1, redo_wispr_ipv4, service);
+		return 0;
+	}
+#else
 	/* currently we only retry IPv6 stuff */
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4 ||
 			service->online_check_count != 1) {
@@ -7784,6 +7872,7 @@ int __connman_service_online_check_failed(struct connman_service *service,
 			service->name);
 		return 0;
 	}
+#endif
 
 	service->online_check_count = 0;
 
@@ -7891,6 +7980,10 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 			if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 #if !defined TIZEN_EXT
 				check_proxy_setup(service);
+#endif
+#if defined TIZEN_MAINTAIN_ONLINE
+/*		if (old_state == CONNMAN_SERVICE_STATE_ONLINE) */
+			check_proxy_setup(service);
 #endif
 			} else {
 				service->online_check_count = 1;
@@ -8838,8 +8931,15 @@ unsigned int __connman_service_get_order(struct connman_service *service)
 			service->do_split_routing == FALSE)
 		order = 10;
 	else if (service->type == CONNMAN_SERVICE_TYPE_WIFI) {
+#if defined TIZEN_MAINTAIN_ONLINE
+		if (service->state != CONNMAN_SERVICE_STATE_ONLINE)
+			service->order = 0;
+		else if (service->order < 5)
+			service->order = 5;
+#else
 		if (service->order < 5)
 			order = 5;
+#endif
 	} else if (service->type == CONNMAN_SERVICE_TYPE_ETHERNET)
 		order = 4;
 	else if (service->type == CONNMAN_SERVICE_TYPE_BLUETOOTH)
