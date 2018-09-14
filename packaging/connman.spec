@@ -152,7 +152,6 @@ chmod +x bootstrap
             --sysconfdir=/etc \
 	    --enable-client \
 	    --enable-tizen-ext \
-	    --enable-tizen-maintain-online \
 	    --enable-pacrunner \
             --enable-wifi=builtin \
 %if %{with connman_openconnect}
