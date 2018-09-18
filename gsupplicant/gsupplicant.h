@@ -288,6 +288,11 @@ typedef void (*GSupplicantInterfaceCallback) (int result,
 					GSupplicantInterface *interface,
 							void *user_data);
 
+#if defined TIZEN_EXT
+typedef void (*GSupplicantMaxSpeedCallback) (int result,
+					int maxspeed, void *user_data);
+#endif
+
 void g_supplicant_interface_cancel(GSupplicantInterface *interface);
 
 int g_supplicant_interface_create(const char *ifname, const char *driver,
@@ -301,6 +306,12 @@ int g_supplicant_interface_scan(GSupplicantInterface *interface,
 					GSupplicantScanParams *scan_data,
 					GSupplicantInterfaceCallback callback,
 							void *user_data);
+
+#if defined TIZEN_EXT
+int g_supplicant_interface_signalpoll(GSupplicantInterface *interface,
+					GSupplicantMaxSpeedCallback callback,
+					void *user_data);
+#endif
 
 int g_supplicant_interface_p2p_find(GSupplicantInterface *interface,
 					GSupplicantInterfaceCallback callback,

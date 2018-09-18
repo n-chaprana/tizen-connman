@@ -142,7 +142,13 @@ unsigned char *connman_network_get_bssid(struct connman_network *network);
 
 int connman_network_set_maxrate(struct connman_network *network,
 				unsigned int maxrate);
+
+int connman_network_set_maxspeed(struct connman_network *network,
+				int maxrate);
+
 unsigned int connman_network_get_maxrate(struct connman_network *network);
+
+int connman_network_get_maxspeed(struct connman_network *network);
 
 int connman_network_set_enc_mode(struct connman_network *network,
 				const char *encryption_mode);

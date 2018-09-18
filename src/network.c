@@ -108,6 +108,7 @@ struct connman_network {
 		char encryption_mode[WIFI_ENCYPTION_MODE_LEN_MAX];
 		unsigned char bssid[WIFI_BSSID_LEN_MAX];
 		unsigned int maxrate;
+		int maxspeed;
 		bool isHS20AP;
 		unsigned int keymgmt;
 		char *keymgmt_type;
@@ -1970,6 +1971,24 @@ int connman_network_set_bssid(struct connman_network *network,
 unsigned char *connman_network_get_bssid(struct connman_network *network)
 {
 	return (unsigned char *)network->wifi.bssid;
+}
+
+int connman_network_set_maxspeed(struct connman_network *network,
+                                int maxspeed)
+{
+	network->wifi.maxspeed = maxspeed;
+        return 0;
+}
+
+int connman_network_get_maxspeed(struct connman_network *network)
+{
+	if (!network->driver)
+		return 0;
+
+	if (network->connected)
+		return network->wifi.maxspeed;
+
+	return 0;
 }
 
 int connman_network_set_maxrate(struct connman_network *network,

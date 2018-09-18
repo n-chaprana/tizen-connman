@@ -314,6 +314,15 @@ struct interface_data {
 	GSupplicantSSID *ssid;
 };
 
+#if defined TIZEN_EXT
+struct interface_signalpoll_data {
+	GSupplicantInterface *interface;
+	char *path;
+	GSupplicantMaxSpeedCallback callback;
+	void *user_data;
+};
+#endif
+
 struct interface_create_data {
 	char *ifname;
 	char *driver;
@@ -5312,6 +5321,89 @@ int g_supplicant_interface_scan(GSupplicantInterface *interface,
 
 	return ret;
 }
+
+#if defined TIZEN_EXT
+static void interface_signalpoll_result(const char *error,
+                                DBusMessageIter *iter, void *user_data)
+{
+	struct interface_signalpoll_data *data = user_data;
+	int err = 0;
+	dbus_int32_t maxspeed = 0;
+	DBusMessageIter sub_iter, dict;
+
+	if (error) {
+		err = -EIO;
+		SUPPLICANT_DBG("error: %s", error);
+		goto out;
+	}
+
+	dbus_message_iter_get_arg_type(iter);
+	dbus_message_iter_recurse(iter, &sub_iter);
+	dbus_message_iter_recurse(&sub_iter, &dict);
+
+	while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+		DBusMessageIter entry, value;
+		const char *key;
+
+		dbus_message_iter_recurse(&dict, &entry);
+		dbus_message_iter_get_basic(&entry, &key);
+		dbus_message_iter_next(&entry);
+		dbus_message_iter_recurse(&entry, &value);
+
+		switch (dbus_message_iter_get_arg_type(&value)) {
+		case DBUS_TYPE_INT32:
+			if (g_strcmp0(key, "linkspeed") == 0) {
+				dbus_message_iter_get_basic(&value, &maxspeed);
+				SUPPLICANT_DBG("linkspeed = %d", maxspeed);
+				break;
+			}
+		}
+		dbus_message_iter_next(&dict);
+	}
+
+out:
+	if(data->callback)
+		data->callback(err, maxspeed, data->user_data);
+
+	g_free(data->path);
+	dbus_free(data);
+}
+
+int g_supplicant_interface_signalpoll(GSupplicantInterface *interface,
+				GSupplicantMaxSpeedCallback callback,
+				void *user_data)
+{
+	struct interface_signalpoll_data *data;
+	int ret;
+
+	if (!interface)
+		return -EINVAL;
+
+	if (!system_available)
+		return -EFAULT;
+
+	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
+
+	data->interface = interface;
+	data->path = g_strdup(interface->path);
+	data->callback = callback;
+	data->user_data = user_data;
+
+	ret = supplicant_dbus_method_call(interface->path,
+			SUPPLICANT_INTERFACE ".Interface", "SignalPoll",
+			NULL, interface_signalpoll_result, data,
+			interface);
+
+	if (ret < 0) {
+		g_free(data->path);
+		dbus_free(data);
+	}
+
+	return ret;
+}
+#endif
 
 static int parse_supplicant_error(DBusMessageIter *iter)
 {

@@ -3426,6 +3426,59 @@ static int network_disconnect(struct connman_network *network)
 	return err;
 }
 
+#if defined TIZEN_EXT
+static unsigned int automaxspeed_timeout = 0;
+
+static void signalpoll_callback(int result, int maxspeed, void *user_data)
+{
+	struct connman_network *network = user_data;
+
+	if (result != 0) {
+		DBG("Failed to get maxspeed from signalpoll !");
+		return;
+	}
+
+	DBG("maxspeed = %d", maxspeed);
+	if (network)
+		connman_network_set_maxspeed(network, maxspeed);
+}
+
+static int network_signalpoll(struct connman_network *network)
+{
+	struct connman_device *device = connman_network_get_device(network);
+	struct wifi_data *wifi;
+	GSupplicantInterface *interface;
+
+	DBG("network %p", network);
+	wifi = connman_device_get_data(device);
+
+	if (!wifi)
+		return -ENODEV;
+
+	interface = wifi->interface;
+
+	return g_supplicant_interface_signalpoll(interface, signalpoll_callback, network);
+}
+
+static gboolean autosignalpoll_timeout(gpointer data)
+{
+	struct connman_network *network = data;
+	int ret = 0;
+
+	automaxspeed_timeout = 0;
+	ret = network_signalpoll(network);
+
+	if (ret < 0) {
+		DBG("Fail to get max speed !!");
+		return FALSE;
+	}
+
+	automaxspeed_timeout = g_timeout_add_seconds(30, autosignalpoll_timeout, network);
+
+	return FALSE;
+}
+#endif
+
 static struct connman_network_driver network_driver = {
 	.name		= "wifi",
 	.type		= CONNMAN_NETWORK_TYPE_WIFI,
@@ -3768,6 +3821,11 @@ static void interface_state(GSupplicantInterface *interface)
 				CONNMAN_SERVICE_TYPE_WIFI, false);
 			connman_device_unref(device);
 		}
+
+		if (!automaxspeed_timeout) {
+			DBG("Going to start signalpoll timer!!");
+			autosignalpoll_timeout(network);
+		}
 #else
 		/* though it should be already stopped: */
 		stop_autoscan(device);
@@ -3784,6 +3842,15 @@ static void interface_state(GSupplicantInterface *interface)
 		break;
 
 	case G_SUPPLICANT_STATE_DISCONNECTED:
+#if defined TIZEN_EXT
+		connman_network_set_maxspeed(network, 0);
+
+		if (automaxspeed_timeout != 0) {
+			g_source_remove(automaxspeed_timeout);
+			automaxspeed_timeout = 0;
+			DBG("Remove signalpoll timer!!");
+		}
+#endif
 		/*
 		 * If we're in one of the idle modes, we have
 		 * not started association yet and thus setting
