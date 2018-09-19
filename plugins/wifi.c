@@ -3188,7 +3188,11 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid_data = connman_network_get_blob(network, "WiFi.SSID",
 						&ssid->ssid_len);
 	ssid->ssid = g_try_malloc0(ssid->ssid_len);
-	memcpy(ssid->ssid, ssid_data, ssid->ssid_len);
+
+	if (!ssid->ssid)
+		ssid->ssid_len = 0;
+	else
+		memcpy(ssid->ssid, ssid_data, ssid->ssid_len);
 #else
 	ssid->ssid = connman_network_get_blob(network, "WiFi.SSID",
 						&ssid->ssid_len);
