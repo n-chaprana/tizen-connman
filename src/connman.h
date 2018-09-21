@@ -26,6 +26,7 @@
 #define CONNMAN_API_SUBJECT_TO_CHANGE
 #if defined TIZEN_EXT
 #define WIFI_COUNTRY_CODE_LEN 2
+#define WIFI_PHY_MODE_LEN 18
 #endif
 
 #include <connman/dbus.h>

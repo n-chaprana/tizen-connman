@@ -45,6 +45,10 @@
 #define IEEE80211_CAP_PRIVACY	0x0010
 
 #if defined TIZEN_EXT
+#define WLAN_EID_HT_CAP 45
+#define WLAN_EID_VHT_CAP 191
+#define WLAN_EID_SUPP_RATES 1
+#define WLAN_EID_EXT_SUPP_RATES 50
 #define COUNTRY_CODE_LENGTH	2
 #endif
 
@@ -246,6 +250,7 @@ struct g_supplicant_bss {
 	GSList *vsie_list;
 	dbus_bool_t hs20;
 	unsigned char country_code[COUNTRY_CODE_LENGTH];
+	GSupplicantPhy_mode phy_mode;
 #endif
 	unsigned int wps_capabilities;
 #if defined TIZEN_EXT_WIFI_MESH
@@ -277,6 +282,7 @@ struct _GSupplicantNetwork {
 	unsigned int keymgmt;
 	GSList *vsie_list;
 	unsigned char country_code[COUNTRY_CODE_LENGTH];
+	GSupplicantPhy_mode phy_mode;
 #endif
 };
 
@@ -1414,6 +1420,16 @@ dbus_bool_t g_supplicant_network_is_wps_advertizing(GSupplicantNetwork *network)
 	return FALSE;
 }
 
+#ifdef TIZEN_EXT
+GSupplicantPhy_mode g_supplicant_network_get_phy_mode(GSupplicantNetwork *network)
+{
+	if (!network)
+		return G_SUPPLICANT_MODE_IEEE80211_UNKNOWN;
+
+	return network->phy_mode;
+}
+#endif
+
 GSupplicantInterface *g_supplicant_peer_get_interface(GSupplicantPeer *peer)
 {
 	if (!peer)
@@ -2022,6 +2038,7 @@ static int add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 
 	network->isHS20AP = bss->hs20;
 	memcpy(network->country_code, bss->country_code, COUNTRY_CODE_LENGTH);
+	network->phy_mode = bss->phy_mode;
 #endif
 
 	SUPPLICANT_DBG("New network %s created", network->name);
@@ -2204,6 +2221,50 @@ static unsigned int get_tlv(unsigned char *ie, unsigned int ie_size,
 	return 0;
 }
 
+#if defined TIZEN_EXT
+static void get_bss_phy_mode(unsigned int max_rate,
+		unsigned int max_ext_rate, bool ht, bool vht, void *data)
+{
+	struct g_supplicant_bss *bss = data;
+	unsigned int freq = bss->frequency;
+
+	/* Following conditions are used to determine
+	 * IEEE 802.11 Protocol Modes:-
+	 *
+	 * 1. If “Supported rates” is only till 11 Mbps,
+	 *    and frequency is in 2.4GHz band, then protocol is 11B.
+	 * 2. If “Supported rates” is till 54Mbps or
+	 *    “Extended supported rates” are present,
+	 *    and frequency is in 2.4GHz band, then protocol is 11G.
+	 * 3. If “Supported rates” is only till 54 Mbps,
+	 *    frequency is in 5GHz band , then protocol is 11A.
+	 * 4. If “HT capabilities” is supported , then protocol is 11N.
+	 * 5. If “HT capabilities” & “VHT” is supported and
+	 *    frequency is in 5 GHz band, then protocol is 11AC.
+	 * */
+
+	if (freq >= 2412 && freq <= 2484) { /* 2.4 Ghz Band */
+		if (max_rate <= 11 && max_ext_rate <= 0 && !ht)
+			bss->phy_mode = G_SUPPLICANT_MODE_IEEE80211B;
+		else if ((max_rate <= 54 || max_ext_rate > 0) && !ht)
+			bss->phy_mode = G_SUPPLICANT_MODE_IEEE80211BG;
+		else if ((max_rate >= 54 || max_ext_rate > 0) && ht)
+			bss->phy_mode = G_SUPPLICANT_MODE_IEEE80211BGN;
+		else
+			bss->phy_mode = G_SUPPLICANT_MODE_UNKNOWN;
+	} else if (freq >= 5180 && freq <= 5825) { /* 5 Ghz Band */
+		if (max_rate <= 54 && !ht)
+			bss->phy_mode = G_SUPPLICANT_MODE_IEEE80211A;
+		else if ((max_rate >= 54 || max_ext_rate > 0) && ht && !vht)
+			bss->phy_mode = G_SUPPLICANT_MODE_IEEE80211AN;
+		else if ((max_rate >= 54 || max_ext_rate > 0) && ht && vht)
+			bss->phy_mode = G_SUPPLICANT_MODE_IEEE80211ANAC;
+		else
+			bss->phy_mode = G_SUPPLICANT_MODE_UNKNOWN;
+	}
+}
+#endif
+
 static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 {
 	struct g_supplicant_bss *bss = user_data;
@@ -2212,6 +2273,15 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 	DBusMessageIter array;
 	unsigned int value;
 	int ie_len;
+#if defined TIZEN_EXT
+	int r_len, j;
+	unsigned char *rates = NULL;
+	unsigned char *ext_rates = NULL;
+	unsigned int max_rate = 0;
+	unsigned int max_ext_rate = 0;
+	bool ht = false;
+	bool vht = false;
+#endif
 
 #define WMM_WPA1_WPS_INFO 221
 #define WPS_INFO_MIN_LEN  6
@@ -2264,6 +2334,44 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 				continue;
 			}
 		}
+
+		if (ie[0] == WLAN_EID_HT_CAP && ie[1]) {
+			ht = true;
+			continue;
+		}
+
+		if (ie[0] == WLAN_EID_VHT_CAP && ie[1]) {
+			vht = true;
+			continue;
+		}
+
+		if (ie[0] == WLAN_EID_SUPP_RATES && ie[1]) {
+			r_len = ie[1];
+			rates = g_malloc0(r_len);
+			if (!rates)
+				continue;
+
+			for (j = 0; ie && j < r_len; j++) {
+				rates[j] = ((ie[j + 2] & 0x7f) * 500000)/1000000;
+				if (max_rate < rates[j])
+					max_rate = rates[j];
+			}
+			continue;
+		}
+
+		if (ie[0] == WLAN_EID_EXT_SUPP_RATES && ie[1] > 0) {
+			r_len = ie[1];
+			ext_rates = g_malloc0(r_len);
+			if (!ext_rates)
+				continue;
+
+			for (j = 0; ie && j < r_len; j++) {
+				ext_rates[j] = ((ie[j + 2] & 0x7f) * 500000)/1000000;
+				if (max_ext_rate < ext_rates[j])
+					max_ext_rate = ext_rates[j];
+			}
+			continue;
+		}
 #endif
 		if (ie[0] != WMM_WPA1_WPS_INFO || ie[1] < WPS_INFO_MIN_LEN ||
 			memcmp(ie+2, WPS_OUI, sizeof(WPS_OUI)) != 0)
@@ -2299,6 +2407,13 @@ static void bss_process_ies(DBusMessageIter *iter, void *user_data)
 
 		SUPPLICANT_DBG("WPS Methods 0x%x", bss->wps_capabilities);
 	}
+#ifdef TIZEN_EXT
+	get_bss_phy_mode(max_rate, max_ext_rate, ht, vht, user_data);
+	if (rates)
+		g_free(rates);
+	if (ext_rates)
+		g_free(ext_rates);
+#endif
 }
 
 static void bss_compute_security(struct g_supplicant_bss *bss)
@@ -3253,6 +3368,7 @@ static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 	supplicant_dbus_property_foreach(iter, bss_property, bss);
 #if defined TIZEN_EXT
 	network->frequency = bss->frequency;
+	network->phy_mode = bss->phy_mode;
 #endif
 	old_security = network->security;
 	bss_compute_security(bss);

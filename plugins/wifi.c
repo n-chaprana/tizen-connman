@@ -3429,6 +3429,77 @@ static int network_disconnect(struct connman_network *network)
 #if defined TIZEN_EXT
 static unsigned int automaxspeed_timeout = 0;
 
+static void set_connection_mode(struct connman_network *network,
+		int linkspeed)
+{
+	ieee80211_modes_e phy_mode;
+	connection_mode_e conn_mode;
+
+	phy_mode = connman_network_get_phy_mode(network);
+	switch (phy_mode) {
+	case IEEE80211_MODE_B:
+		if (linkspeed > 0 && linkspeed <= 11)
+			conn_mode = CONNECTION_MODE_IEEE80211B;
+		else
+			conn_mode = CONNECTION_MODE_IEEE80211_UNKNOWN;
+
+		break;
+	case IEEE80211_MODE_BG:
+		if (linkspeed > 0 && linkspeed <= 11)
+			conn_mode = CONNECTION_MODE_IEEE80211B;
+		else if (linkspeed > 11 && linkspeed <= 54)
+			conn_mode = CONNECTION_MODE_IEEE80211G;
+		else
+			conn_mode = CONNECTION_MODE_IEEE80211_UNKNOWN;
+
+		break;
+	case IEEE80211_MODE_BGN:
+		if (linkspeed > 0 && linkspeed <= 11)
+			conn_mode = CONNECTION_MODE_IEEE80211B;
+		else if (linkspeed > 11 && linkspeed <= 54)
+			conn_mode = CONNECTION_MODE_IEEE80211G;
+		else if (linkspeed > 54 && linkspeed <= 450)
+			conn_mode = CONNECTION_MODE_IEEE80211N;
+		else
+			conn_mode = CONNECTION_MODE_IEEE80211_UNKNOWN;
+
+		break;
+	case IEEE80211_MODE_A:
+		if (linkspeed > 0 && linkspeed <= 54)
+			conn_mode = CONNECTION_MODE_IEEE80211A;
+		else
+			conn_mode = CONNECTION_MODE_IEEE80211_UNKNOWN;
+
+		break;
+	case IEEE80211_MODE_AN:
+		if (linkspeed > 0 && linkspeed <= 54)
+			conn_mode = CONNECTION_MODE_IEEE80211A;
+		else if (linkspeed > 54 && linkspeed <= 450)
+			conn_mode = CONNECTION_MODE_IEEE80211N;
+		else
+			conn_mode = CONNECTION_MODE_IEEE80211_UNKNOWN;
+
+		break;
+	case IEEE80211_MODE_ANAC:
+		if (linkspeed > 0 && linkspeed <= 54)
+			conn_mode = CONNECTION_MODE_IEEE80211A;
+		else if (linkspeed > 54 && linkspeed <= 450)
+			conn_mode = CONNECTION_MODE_IEEE80211N;
+		else if (linkspeed > 450 && linkspeed <= 1300)
+			conn_mode = CONNECTION_MODE_IEEE80211AC;
+		else
+			conn_mode = CONNECTION_MODE_IEEE80211_UNKNOWN;
+
+		break;
+	default:
+			conn_mode = CONNECTION_MODE_IEEE80211_UNKNOWN;
+		break;
+	}
+
+	DBG("connection mode(%d)", conn_mode);
+	connman_network_set_connection_mode(network, conn_mode);
+}
+
 static void signalpoll_callback(int result, int maxspeed, void *user_data)
 {
 	struct connman_network *network = user_data;
@@ -3439,8 +3510,10 @@ static void signalpoll_callback(int result, int maxspeed, void *user_data)
 	}
 
 	DBG("maxspeed = %d", maxspeed);
-	if (network)
+	if (network) {
 		connman_network_set_maxspeed(network, maxspeed);
+		set_connection_mode(network, maxspeed);
+	}
 }
 
 static int network_signalpoll(struct connman_network *network)
@@ -4256,6 +4329,7 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 #if defined TIZEN_EXT
 	GSList *vsie_list = NULL;
 	const unsigned char *country_code;
+	ieee80211_modes_e phy_mode;
 #endif
 
 	mode = g_supplicant_network_get_mode(supplicant_network);
@@ -4320,6 +4394,8 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 		DBG("vsie_list is NULL");
 	country_code = g_supplicant_network_get_countrycode(supplicant_network);
 	connman_network_set_countrycode(network, country_code);
+	phy_mode = g_supplicant_network_get_phy_mode(supplicant_network);
+	connman_network_set_phy_mode(network, phy_mode);
 #endif
 	connman_network_set_string(network, "WiFi.Security", security);
 	connman_network_set_strength(network,
@@ -4453,6 +4529,7 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	uint16_t frequency;
 	bool wps;
 	const unsigned char *country_code;
+	ieee80211_modes_e phy_mode;
 	GSList *bssid_list;
 #endif
 
@@ -4481,6 +4558,7 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	maxrate = g_supplicant_network_get_maxrate(network);
 	frequency = g_supplicant_network_get_frequency(network);
 	wps = g_supplicant_network_get_wps(network);
+	phy_mode = g_supplicant_network_get_phy_mode(network);
 
 	connman_network_set_bssid(connman_network, bssid);
 	connman_network_set_maxrate(connman_network, maxrate);
@@ -4490,6 +4568,7 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	connman_network_set_countrycode(connman_network, country_code);
 	bssid_list = (GSList *)g_supplicant_network_get_bssid_list(network);
 	connman_network_set_bssid_list(connman_network, bssid_list);
+	connman_network_set_phy_mode(connman_network, phy_mode);
 #endif
 }
 

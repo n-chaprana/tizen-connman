@@ -122,6 +122,8 @@ struct connman_network {
 		char *phase1;
 		unsigned char country_code[WIFI_COUNTRY_CODE_LEN];
 		GSList *bssid_list;
+		ieee80211_modes_e phy_mode;
+		connection_mode_e connection_mode;
 #endif
 	} wifi;
 
@@ -2128,6 +2130,34 @@ int connman_network_set_bssid_list(struct connman_network *network,
 	network->wifi.bssid_list = bssids;
 
 	return 0;
+}
+
+int connman_network_set_phy_mode(struct connman_network *network,
+				    ieee80211_modes_e mode)
+{
+	DBG("network %p phy mode %d", network, mode);
+	network->wifi.phy_mode = mode;
+
+	return 0;
+}
+
+ieee80211_modes_e connman_network_get_phy_mode(struct connman_network *network)
+{
+	return network->wifi.phy_mode;
+}
+
+int connman_network_set_connection_mode(struct connman_network *network,
+				    connection_mode_e mode)
+{
+	DBG("network %p connection mode %d", network, mode);
+	network->wifi.connection_mode = mode;
+
+	return 0;
+}
+
+connection_mode_e connman_network_get_connection_mode(struct connman_network *network)
+{
+	return network->wifi.connection_mode;
 }
 
 void *connman_network_get_bssid_list(struct connman_network *network)

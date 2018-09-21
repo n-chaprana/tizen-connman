@@ -68,6 +68,29 @@ struct connman_bssids {
 	uint16_t strength;
 	uint16_t frequency;
 };
+
+/* Backward compatible
+ * modes of available network */
+typedef enum {
+	IEEE80211_UNKNOWN,
+	IEEE80211_MODE_B,
+	IEEE80211_MODE_BG,
+	IEEE80211_MODE_BGN,
+	IEEE80211_MODE_A,
+	IEEE80211_MODE_AN,
+	IEEE80211_MODE_ANAC,
+} ieee80211_modes_e;
+
+/* connection mode of connected network
+ * based on current linkspeed */
+typedef enum {
+	CONNECTION_MODE_IEEE80211_UNKNOWN,
+	CONNECTION_MODE_IEEE80211B,
+	CONNECTION_MODE_IEEE80211G,
+	CONNECTION_MODE_IEEE80211N,
+	CONNECTION_MODE_IEEE80211A,
+	CONNECTION_MODE_IEEE80211AC,
+} connection_mode_e;
 #endif
 
 #define CONNMAN_NETWORK_PRIORITY_LOW      -100
@@ -177,6 +200,12 @@ unsigned char *connman_network_get_countrycode(struct connman_network *network);
 int connman_network_set_bssid_list(struct connman_network *network,
 					GSList *bssids);
 void *connman_network_get_bssid_list(struct connman_network *network);
+int connman_network_set_phy_mode(struct connman_network *network,
+				ieee80211_modes_e mode);
+ieee80211_modes_e connman_network_get_phy_mode(struct connman_network *network);
+int connman_network_set_connection_mode(struct connman_network *network,
+				connection_mode_e mode);
+connection_mode_e connman_network_get_connection_mode(struct connman_network *network);
 #endif
 
 int connman_network_set_name(struct connman_network *network,

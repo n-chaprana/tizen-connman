@@ -3262,6 +3262,7 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 	char country_code_buff[WIFI_COUNTRY_CODE_LEN + 1] = {0,};
 	char *country_code_str = country_code_buff;
 	unsigned char *country_code;
+	uint16_t connection_mode;
 
 	ssid = connman_network_get_blob(network, "WiFi.SSID", &ssid_len);
 	bssid = connman_network_get_bssid(network);
@@ -3272,6 +3273,7 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 	passpoint = connman_network_get_bool(network, "WiFi.HS20AP");
 	keymgmt = connman_network_get_keymgmt(network);
 	country_code = connman_network_get_countrycode(network);
+	connection_mode = connman_network_get_connection_mode(network);
 
 	snprintf(bssid_str, WIFI_BSSID_STR_LEN, "%02x:%02x:%02x:%02x:%02x:%02x",
 				bssid[0], bssid[1], bssid[2],
@@ -3299,6 +3301,8 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 					DBUS_TYPE_UINT32, &keymgmt);
 	connman_dbus_dict_append_basic(dict, "Country", DBUS_TYPE_STRING,
 				       &country_code_str);
+	connman_dbus_dict_append_basic(dict, "ConnMode",
+					DBUS_TYPE_UINT16, &connection_mode);
 
 	str = connman_network_get_string(network, "WiFi.Security");
 	if (str != NULL && g_str_equal(str, "ieee8021x") == TRUE) {
