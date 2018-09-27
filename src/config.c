@@ -1285,6 +1285,12 @@ static int try_provision_service(struct connman_config_service *config,
 			return -ENOENT;
 	}
 
+#if defined TIZEN_EXT
+	struct connman_ipconfig *ip6config = __connman_service_get_ip6config(service);
+	enum connman_ipconfig_method ipv6_method = __connman_ipconfig_get_method(ip6config);
+	if (ipv6_method == CONNMAN_IPCONFIG_METHOD_MANUAL)
+		goto ipv6_out;
+#endif
 	if (!config->ipv6_address) {
 		connman_network_set_ipv6_method(network,
 						CONNMAN_IPCONFIG_METHOD_AUTO);
@@ -1321,6 +1327,9 @@ static int try_provision_service(struct connman_config_service *config,
 		connman_ipaddress_free(address);
 	}
 
+#if defined TIZEN_EXT
+ipv6_out:
+#endif
 	if (config->ipv6_privacy) {
 		struct connman_ipconfig *ipconfig;
 
@@ -1330,6 +1339,12 @@ static int try_provision_service(struct connman_config_service *config,
 							config->ipv6_privacy);
 	}
 
+#if defined TIZEN_EXT
+	struct connman_ipconfig *ip4config = __connman_service_get_ip4config(service);
+	enum connman_ipconfig_method ipv4_method = __connman_ipconfig_get_method(ip4config);
+	if (ipv4_method == CONNMAN_IPCONFIG_METHOD_MANUAL)
+		goto ipv4_out;
+#endif
 	if (!config->ipv4_address) {
 		connman_network_set_ipv4_method(network,
 						CONNMAN_IPCONFIG_METHOD_DHCP);
@@ -1366,6 +1381,9 @@ static int try_provision_service(struct connman_config_service *config,
 		connman_ipaddress_free(address);
 	}
 
+#if defined TIZEN_EXT
+ipv4_out:
+#endif
 	__connman_service_disconnect(service);
 
 	service_id = __connman_service_get_ident(service);
@@ -1432,7 +1450,9 @@ static int try_provision_service(struct connman_config_service *config,
 		return 0;
 	}
 
+#if !defined TIZEN_EXT
 	__connman_service_set_immutable(service, true);
+#endif
 
 	if (type == CONNMAN_SERVICE_TYPE_ETHERNET ||
 			type == CONNMAN_SERVICE_TYPE_GADGET) {

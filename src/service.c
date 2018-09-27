@@ -8599,8 +8599,15 @@ static int service_register(struct connman_service *service)
 
 	DBG("path %s", service->path);
 
+#if defined TIZEN_EXT
+	service_load(service);
+	int ret = __connman_config_provision_service(service);
+	if (ret < 0)
+		DBG("Failed to provision service");
+#else
 	if (__connman_config_provision_service(service) < 0)
 		service_load(service);
+#endif
 
 	g_dbus_register_interface(connection, service->path,
 					CONNMAN_SERVICE_INTERFACE,
