@@ -135,6 +135,16 @@ typedef enum {
 	G_SUPPLICANT_EAP_KEYMGMT_CCKM,
 	G_SUPPLICANT_EAP_KEYMGMT_OKC,
 } GSupplicantEapKeymgmt;
+
+typedef enum {
+	G_SUPPLICANT_MODE_IEEE80211_UNKNOWN,
+	G_SUPPLICANT_MODE_IEEE80211B,
+	G_SUPPLICANT_MODE_IEEE80211BG,
+	G_SUPPLICANT_MODE_IEEE80211BGN,
+	G_SUPPLICANT_MODE_IEEE80211A,
+	G_SUPPLICANT_MODE_IEEE80211AN,
+	G_SUPPLICANT_MODE_IEEE80211ANAC,
+} GSupplicantPhy_mode;
 #endif
 
 typedef enum {
@@ -458,6 +468,7 @@ void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network);
 const unsigned char *g_supplicant_network_get_countrycode(GSupplicantNetwork
 							  *network);
 void *g_supplicant_network_get_bssid_list(GSupplicantNetwork *network);
+GSupplicantPhy_mode g_supplicant_network_get_phy_mode(GSupplicantNetwork *network);
 #endif
 
 struct _GSupplicantCallbacks {
