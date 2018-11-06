@@ -3253,6 +3253,7 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 	unsigned int ssid_len;
 	unsigned char *bssid;
 	unsigned int maxrate;
+	int maxspeed;
 	unsigned int keymgmt;
 	uint16_t frequency;
 	const char *enc_mode;
@@ -3265,6 +3266,7 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 	ssid = connman_network_get_blob(network, "WiFi.SSID", &ssid_len);
 	bssid = connman_network_get_bssid(network);
 	maxrate = connman_network_get_maxrate(network);
+	maxspeed = connman_network_get_maxspeed(network);
 	frequency = connman_network_get_frequency(network);
 	enc_mode = connman_network_get_enc_mode(network);
 	passpoint = connman_network_get_bool(network, "WiFi.HS20AP");
@@ -3285,6 +3287,8 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 					DBUS_TYPE_STRING, &bssid_str);
 	connman_dbus_dict_append_basic(dict, "MaxRate",
 					DBUS_TYPE_UINT32, &maxrate);
+	connman_dbus_dict_append_basic(dict, "MaxSpeed",
+					DBUS_TYPE_INT32, &maxspeed);
 	connman_dbus_dict_append_basic(dict, "Frequency",
 					DBUS_TYPE_UINT16, &frequency);
 	connman_dbus_dict_append_basic(dict, "EncryptionMode",
