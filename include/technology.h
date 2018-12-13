@@ -83,6 +83,10 @@ struct connman_technology_driver {
 
 int connman_technology_driver_register(struct connman_technology_driver *driver);
 void connman_technology_driver_unregister(struct connman_technology_driver *driver);
+#if defined TIZEN_EXT
+void connman_techonology_wifi_set_5ghz_supported(struct connman_technology *technology,
+		bool is_5_0_Ghz_supported);
+#endif
 
 #ifdef __cplusplus
 }

@@ -368,6 +368,9 @@ void g_supplicant_interface_set_data(GSupplicantInterface *interface,
 								void *data);
 void *g_supplicant_interface_get_data(GSupplicantInterface *interface);
 const char *g_supplicant_interface_get_ifname(GSupplicantInterface *interface);
+#if defined TIZEN_EXT
+bool g_supplicant_interface_get_is_5_0_ghz_supported(GSupplicantInterface *interface);
+#endif
 const char *g_supplicant_interface_get_driver(GSupplicantInterface *interface);
 GSupplicantState g_supplicant_interface_get_state(GSupplicantInterface *interface);
 const char *g_supplicant_interface_get_wps_key(GSupplicantInterface *interface);

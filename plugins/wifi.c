@@ -3566,6 +3566,10 @@ static void interface_added(GSupplicantInterface *interface)
 {
 	const char *ifname = g_supplicant_interface_get_ifname(interface);
 	const char *driver = g_supplicant_interface_get_driver(interface);
+#if defined TIZEN_EXT
+	bool is_5_0_ghz_supported = g_supplicant_interface_get_is_5_0_ghz_supported(interface);
+#endif
+
 	struct wifi_data *wifi;
 
 	wifi = g_supplicant_interface_get_data(interface);
@@ -3589,6 +3593,9 @@ static void interface_added(GSupplicantInterface *interface)
 	}
 
 	connman_device_set_powered(wifi->device, true);
+#if defined TIZEN_EXT
+	connman_techonology_wifi_set_5ghz_supported(wifi_technology, is_5_0_ghz_supported);
+#endif
 }
 
 static bool is_idle(struct wifi_data *wifi)

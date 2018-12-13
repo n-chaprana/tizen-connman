@@ -214,6 +214,7 @@ struct _GSupplicantInterface {
 	GSupplicantNetwork *current_network;
 	struct added_network_information network_info;
 #if defined TIZEN_EXT
+	dbus_bool_t is_5_0_Ghz_supported;
 	int disconnect_reason;
 #endif
 #if defined TIZEN_EXT_WIFI_MESH
@@ -1113,7 +1114,13 @@ static void interface_capability(const char *key, DBusMessageIter *iter,
 		if (max_scan_ssid < 2)
 			max_scan_ssid = 0;
 		interface->max_scan_ssids = max_scan_ssid;
+#if defined TIZEN_EXT
+	} else if (g_strcmp0(key, "Is5GhzSupported") == 0) {
+		dbus_bool_t is_5_0_Ghz_supported;
 
+		dbus_message_iter_get_basic(iter, &is_5_0_Ghz_supported);
+		interface->is_5_0_Ghz_supported = is_5_0_Ghz_supported;
+#endif
 	} else
 		SUPPLICANT_DBG("key %s type %c",
 				key, dbus_message_iter_get_arg_type(iter));
@@ -1201,6 +1208,16 @@ const char *g_supplicant_interface_get_ifname(GSupplicantInterface *interface)
 
 	return interface->ifname;
 }
+
+#if defined TIZEN_EXT
+bool g_supplicant_interface_get_is_5_0_ghz_supported(GSupplicantInterface *interface)
+{
+	if (!interface)
+		return NULL;
+
+	return interface->is_5_0_Ghz_supported;
+}
+#endif
 
 const char *g_supplicant_interface_get_driver(GSupplicantInterface *interface)
 {

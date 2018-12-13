@@ -98,6 +98,9 @@ struct connman_technology {
 #if defined TIZEN_EXT_WIFI_MESH
 	DBusMessage *mesh_dbus_msg;
 #endif
+#if defined TIZEN_EXT
+	bool is_5_0_ghz_supported;
+#endif
 };
 
 static GSList *driver_list = NULL;
@@ -393,6 +396,16 @@ bool connman_technology_get_wifi_tethering(const char **ssid,
 
 	return true;
 }
+
+#if defined TIZEN_EXT
+void connman_techonology_wifi_set_5ghz_supported(struct connman_technology *wifi_technology,
+		bool is_5_0_ghz_supported)
+{
+	DBG("");
+
+	wifi_technology->is_5_0_ghz_supported = is_5_0_ghz_supported;
+}
+#endif
 
 static void free_rfkill(gpointer data)
 {
@@ -1410,6 +1423,33 @@ static DBusMessage *specific_scan(DBusConnection *conn, DBusMessage *msg, void *
 	return NULL;
 }
 
+#if defined TIZEN_EXT
+static DBusMessage *get_5ghz_supported(DBusConnection *conn, DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+	DBusMessageIter iter, dict;
+	struct connman_technology *technology = data;
+	dbus_bool_t supported = technology->is_5_0_ghz_supported;
+
+	DBG("technology %p", technology);
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	dbus_message_iter_init_append(reply, &iter);
+
+	connman_dbus_dict_open(&iter, &dict);
+	connman_dbus_dict_append_basic(&dict, "Is5GhzSupported",
+					DBUS_TYPE_BOOLEAN,
+					&supported);
+
+	connman_dbus_dict_close(&iter, &dict);
+
+	return reply;
+}
+#endif
+
 static DBusMessage *get_scan_state(DBusConnection *conn, DBusMessage *msg, void *data)
 {
 	DBusMessage *reply;
@@ -1923,6 +1963,8 @@ static const GDBusMethodTable technology_methods[] = {
 			NULL, specific_scan) },
 	{ GDBUS_METHOD("GetScanState", NULL, GDBUS_ARGS({ "scan_state", "a{sv}" }),
 			get_scan_state) },
+	{ GDBUS_METHOD("Get5GhzSupported", NULL, GDBUS_ARGS({ "supported", "a{sv}" }),
+			get_5ghz_supported) },
 #endif
 #if defined TIZEN_EXT_WIFI_MESH
 	{ GDBUS_ASYNC_METHOD("MeshCommands",
