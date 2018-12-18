@@ -3360,6 +3360,13 @@ static void signal_network_removed(const char *path, DBusMessageIter *iter)
 
 	interface_network_removed(iter, interface);
 }
+#if defined TIZEN_EXT
+void *copy_vsie_list(gconstpointer src, gpointer data)
+{
+	return g_strdup(src);
+}
+#endif
+
 
 static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 {
@@ -3413,7 +3420,7 @@ static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 		memcpy(new_bss, bss, sizeof(struct g_supplicant_bss));
 		new_bss->path = g_strdup(bss->path);
 #if defined TIZEN_EXT
-		new_bss->vsie_list = NULL;
+		new_bss->vsie_list = g_slist_copy_deep(bss->vsie_list, copy_vsie_list, NULL);
 #endif
 
 		g_hash_table_remove(interface->network_table, network->group);
