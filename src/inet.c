@@ -1108,7 +1108,7 @@ bool connman_inet_compare_subnet(int index, const char *host)
 		return false;
 
 	if (inet_aton(host, &_host_addr) == 0)
-		return -1;
+		return false;
 	host_addr = _host_addr.s_addr;
 
 	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
