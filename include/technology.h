@@ -86,6 +86,8 @@ void connman_technology_driver_unregister(struct connman_technology_driver *driv
 #if defined TIZEN_EXT
 void connman_techonology_wifi_set_5ghz_supported(struct connman_technology *technology,
 		bool is_5_0_Ghz_supported);
+void connman_techonology_set_max_scan_ssids(struct connman_technology *technology,
+		int max_scan_ssids);
 #endif
 
 #ifdef __cplusplus

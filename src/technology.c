@@ -100,6 +100,7 @@ struct connman_technology {
 #endif
 #if defined TIZEN_EXT
 	bool is_5_0_ghz_supported;
+	int max_scan_ssids;
 #endif
 };
 
@@ -1483,6 +1484,38 @@ static DBusMessage *get_scan_state(DBusConnection *conn, DBusMessage *msg, void 
 
 	return reply;
 }
+
+void connman_techonology_set_max_scan_ssids(struct connman_technology *technology,
+		int max_scan_ssids)
+{
+	DBG("");
+	technology->max_scan_ssids = max_scan_ssids;
+}
+
+static DBusMessage *get_max_scan_ssid(DBusConnection *conn, DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+	DBusMessageIter iter, dict;
+	struct connman_technology *technology = data;
+	dbus_int32_t max_scan_ssids = technology->max_scan_ssids;
+
+	DBG("technology %p", technology);
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	dbus_message_iter_init_append(reply, &iter);
+
+	connman_dbus_dict_open(&iter, &dict);
+	connman_dbus_dict_append_basic(&dict, "MaxScanSSID",
+					DBUS_TYPE_INT32,
+					&max_scan_ssids);
+
+	connman_dbus_dict_close(&iter, &dict);
+
+	return reply;
+}
 #endif
 
 #if defined TIZEN_EXT_WIFI_MESH
@@ -1965,6 +1998,8 @@ static const GDBusMethodTable technology_methods[] = {
 			get_scan_state) },
 	{ GDBUS_METHOD("Get5GhzSupported", NULL, GDBUS_ARGS({ "supported", "a{sv}" }),
 			get_5ghz_supported) },
+	{ GDBUS_METHOD("GetMaxScanSsid", NULL, GDBUS_ARGS({ "maxscanssid", "a{sv}" }),
+			get_max_scan_ssid) },
 #endif
 #if defined TIZEN_EXT_WIFI_MESH
 	{ GDBUS_ASYNC_METHOD("MeshCommands",

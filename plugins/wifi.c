@@ -3633,6 +3633,9 @@ static void interface_added(GSupplicantInterface *interface)
 	connman_device_set_powered(wifi->device, true);
 #if defined TIZEN_EXT
 	connman_techonology_wifi_set_5ghz_supported(wifi_technology, is_5_0_ghz_supported);
+	/* Max number of SSIDs supported by wlan chipset that can be scanned */
+	int max_scan_ssids = g_supplicant_interface_get_max_scan_ssids(interface);
+	connman_techonology_set_max_scan_ssids(wifi_technology, max_scan_ssids);
 #endif
 }
 
