@@ -314,6 +314,9 @@ static void print_backtrace(unsigned int offset)
 		buf[len] = '\0';
 
 		pos = strchr(buf, '\n');
+#if defined TIZEN_EXT
+		if (pos) {
+#endif
 		*pos++ = '\0';
 
 		if (strcmp(buf, "??") == 0) {
@@ -330,6 +333,9 @@ static void print_backtrace(unsigned int offset)
 
 		connman_error("#%-2u %p in %s() at %s", i - offset,
 						frames[i], buf, pos);
+#if defined TIZEN_EXT
+		}
+#endif
 	}
 
 	connman_error("+++++++++++++++++++++++++++");
