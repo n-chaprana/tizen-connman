@@ -44,7 +44,7 @@ static const char *program_path;
 
 #define LOG_FILE_PATH "/opt/usr/data/network/connman.log"
 #define MAX_LOG_SIZE	1 * 1024 * 1024
-#define MAX_LOG_COUNT	1
+#define MAX_LOG_COUNT	15
 
 #define openlog __connman_log_open
 #define closelog __connman_log_close
