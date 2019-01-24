@@ -77,7 +77,8 @@ static void __connman_log_update_file_revision(int rev)
 	next_log_file = g_strdup_printf("%s.%d", LOG_FILE_PATH, next_log_rev);
 
 	if (next_log_rev >= MAX_LOG_COUNT)
-		remove(next_log_file);
+		if (remove(next_log_file) != 0)
+			goto error;
 
 	if (access(next_log_file, F_OK) == 0)
 		__connman_log_update_file_revision(next_log_rev);
@@ -85,14 +86,16 @@ static void __connman_log_update_file_revision(int rev)
 	if (rename(log_file, next_log_file) != 0)
 		remove(log_file);
 
+error:
 	g_free(log_file);
 	g_free(next_log_file);
 }
 
-static void __connman_log_make_backup(void)
+static int __connman_log_make_backup(void)
 {
 	const int rev = 0;
 	char *backup = NULL;
+	int ret = 0;
 
 	backup = g_strdup_printf("%s.%d", LOG_FILE_PATH, rev);
 
@@ -100,9 +103,11 @@ static void __connman_log_make_backup(void)
 		__connman_log_update_file_revision(rev);
 
 	if (rename(LOG_FILE_PATH, backup) != 0)
-		remove(LOG_FILE_PATH);
+		if (remove(LOG_FILE_PATH) != 0)
+			ret = -1;
 
 	g_free(backup);
+	return ret;
 }
 
 static void __connman_log_get_local_time(char *strtime, const int size)
@@ -131,14 +136,20 @@ void __connman_log(const int log_priority, const char *format, va_list ap)
 	if (!log_file)
 		return;
 
-	fstat(fileno(log_file), &buf);
+	if (fstat(fileno(log_file), &buf) < 0) {
+		fclose(log_file);
+		log_file = NULL;
+		return;
+	}
+
 	log_size = buf.st_size;
 
 	if (log_size >= MAX_LOG_SIZE) {
 		fclose(log_file);
 		log_file = NULL;
 
-		__connman_log_make_backup();
+		if (__connman_log_make_backup() != 0)
+			return;
 
 		log_file = (FILE *)fopen(LOG_FILE_PATH, "a+");
 

@@ -3956,7 +3956,11 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 	/* When ConnMan crashed,
 	 * probably DNS listener cannot bind existing address */
 	option = 1;
-	setsockopt(sk, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
+	if (setsockopt(sk, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option)) < 0) {
+		connman_error("Failed to set socket option SO_REUSEADDR");
+		close(sk);
+		return NULL;
+	}
 #endif
 #if !defined TIZEN_EXT
 	if (bind(sk, &s.sa, slen) < 0) {
