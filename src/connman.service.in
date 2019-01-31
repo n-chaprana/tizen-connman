@@ -10,7 +10,7 @@ Group=network_fw
 BusName=net.connman
 Restart=on-failure
 SmackProcessLabel=System
-ExecStart=@bindir@/connmand -n --noplugin vpn
+ExecStart=@bindir@/connmand -n --nobacktrace --noplugin vpn
 StandardOutput=null
 Capabilities=cap_setgid,cap_net_admin,cap_net_bind_service,cap_net_broadcast,cap_net_raw,cap_dac_override=i
 SecureBits=keep-caps
