@@ -3535,20 +3535,21 @@ static int network_signalpoll(struct connman_network *network)
 
 static gboolean autosignalpoll_timeout(gpointer data)
 {
-	struct connman_network *network = data;
-	int ret = 0;
-
-	automaxspeed_timeout = 0;
-	ret = network_signalpoll(network);
-
-	if (ret < 0) {
-		DBG("Fail to get max speed !!");
+	if (!automaxspeed_timeout) {
+		DBG("automaxspeed_timeout is found to be zero. i.e. currently in disconnected state. !!");
 		return FALSE;
 	}
 
-	automaxspeed_timeout = g_timeout_add_seconds(30, autosignalpoll_timeout, network);
+	struct connman_network *network = data;
+	int ret = network_signalpoll(network);
 
-	return FALSE;
+	if (ret < 0) {
+		DBG("Fail to get max speed !!");
+		automaxspeed_timeout = 0;
+		return FALSE;
+	}
+
+	return TRUE;
 }
 #endif
 
@@ -3904,7 +3905,11 @@ static void interface_state(GSupplicantInterface *interface)
 
 		if (!automaxspeed_timeout) {
 			DBG("Going to start signalpoll timer!!");
-			autosignalpoll_timeout(network);
+			int ret = network_signalpoll(network);
+			if (ret < 0)
+				DBG("Fail to get max speed !!");
+			else
+				automaxspeed_timeout = g_timeout_add_seconds(30, autosignalpoll_timeout, network);
 		}
 #else
 		/* though it should be already stopped: */
