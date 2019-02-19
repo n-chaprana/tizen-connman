@@ -160,6 +160,7 @@ struct wifi_data {
 	int assoc_retry_count;
 	struct connman_network *scan_pending_network;
 	bool allow_full_scan;
+	unsigned int automaxspeed_timeout;
 #endif
 	int disconnect_code;
 	int assoc_code;
@@ -1552,6 +1553,13 @@ static void wifi_remove(struct connman_device *device)
 	if (wifi->p2p_connection_timeout)
 		g_source_remove(wifi->p2p_connection_timeout);
 
+#if defined TIZEN_EXT
+	if (wifi->automaxspeed_timeout != 0) {
+		g_source_remove(wifi->automaxspeed_timeout);
+		wifi->automaxspeed_timeout = 0;
+	}
+#endif
+
 	remove_networks(device, wifi);
 	remove_peers(wifi);
 
@@ -2281,6 +2289,13 @@ static int wifi_disable(struct connman_device *device)
 		connman_device_set_scanning(device, CONNMAN_SERVICE_TYPE_P2P, false);
 		connman_device_unref(wifi->device);
 	}
+
+#if defined TIZEN_EXT
+	if (wifi->automaxspeed_timeout != 0) {
+		g_source_remove(wifi->automaxspeed_timeout);
+		wifi->automaxspeed_timeout = 0;
+	}
+#endif
 
 	/* In case of a user scan, device is still referenced */
 	if (connman_device_get_scanning(device)) {
@@ -3427,8 +3442,6 @@ static int network_disconnect(struct connman_network *network)
 }
 
 #if defined TIZEN_EXT
-static unsigned int automaxspeed_timeout = 0;
-
 static void set_connection_mode(struct connman_network *network,
 		int linkspeed)
 {
@@ -3516,36 +3529,35 @@ static void signalpoll_callback(int result, int maxspeed, void *user_data)
 	}
 }
 
-static int network_signalpoll(struct connman_network *network)
+static int network_signalpoll(struct wifi_data *wifi)
 {
-	struct connman_device *device = connman_network_get_device(network);
-	struct wifi_data *wifi;
 	GSupplicantInterface *interface;
+	struct connman_network *network;
 
-	DBG("network %p", network);
-	wifi = connman_device_get_data(device);
-
-	if (!wifi)
+	if (!wifi || !wifi->network)
 		return -ENODEV;
 
 	interface = wifi->interface;
+	network = wifi->network;
+
+	DBG("network %p", network);
 
 	return g_supplicant_interface_signalpoll(interface, signalpoll_callback, network);
 }
 
 static gboolean autosignalpoll_timeout(gpointer data)
 {
-	if (!automaxspeed_timeout) {
+	struct wifi_data *wifi = data;
+
+	if (!wifi || !wifi->automaxspeed_timeout) {
 		DBG("automaxspeed_timeout is found to be zero. i.e. currently in disconnected state. !!");
 		return FALSE;
 	}
 
-	struct connman_network *network = data;
-	int ret = network_signalpoll(network);
-
+	int ret = network_signalpoll(wifi);
 	if (ret < 0) {
 		DBG("Fail to get max speed !!");
-		automaxspeed_timeout = 0;
+		wifi->automaxspeed_timeout = 0;
 		return FALSE;
 	}
 
@@ -3903,13 +3915,13 @@ static void interface_state(GSupplicantInterface *interface)
 			connman_device_unref(device);
 		}
 
-		if (!automaxspeed_timeout) {
+		if (!wifi->automaxspeed_timeout) {
 			DBG("Going to start signalpoll timer!!");
-			int ret = network_signalpoll(network);
+			int ret = network_signalpoll(wifi);
 			if (ret < 0)
 				DBG("Fail to get max speed !!");
 			else
-				automaxspeed_timeout = g_timeout_add_seconds(30, autosignalpoll_timeout, network);
+				wifi->automaxspeed_timeout = g_timeout_add_seconds(30, autosignalpoll_timeout, wifi);
 		}
 #else
 		/* though it should be already stopped: */
@@ -3930,9 +3942,9 @@ static void interface_state(GSupplicantInterface *interface)
 #if defined TIZEN_EXT
 		connman_network_set_maxspeed(network, 0);
 
-		if (automaxspeed_timeout != 0) {
-			g_source_remove(automaxspeed_timeout);
-			automaxspeed_timeout = 0;
+		if (wifi->automaxspeed_timeout != 0) {
+			g_source_remove(wifi->automaxspeed_timeout);
+			wifi->automaxspeed_timeout = 0;
 			DBG("Remove signalpoll timer!!");
 		}
 #endif
