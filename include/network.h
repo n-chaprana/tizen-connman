@@ -32,6 +32,12 @@
 extern "C" {
 #endif
 
+#if defined TIZEN_EXT
+#define WIFI_ENCYPTION_MODE_LEN_MAX 6
+#define WIFI_BSSID_LEN_MAX 6
+#define MAC_ADDRESS_LENGTH 18
+#endif
+
 /**
  * SECTION:network
  * @title: Network premitives
@@ -64,7 +70,7 @@ enum connman_network_error {
 
 #if defined TIZEN_EXT
 struct connman_bssids {
-	char bssid[18];
+	unsigned char bssid[WIFI_BSSID_LEN_MAX];
 	uint16_t strength;
 	uint16_t frequency;
 };
@@ -206,6 +212,8 @@ ieee80211_modes_e connman_network_get_phy_mode(struct connman_network *network);
 int connman_network_set_connection_mode(struct connman_network *network,
 				connection_mode_e mode);
 connection_mode_e connman_network_get_connection_mode(struct connman_network *network);
+int connman_network_set_last_bssid(struct connman_network *network, const char *bssid);
+char *connman_network_get_last_bssid(struct connman_network *network);
 #endif
 
 int connman_network_set_name(struct connman_network *network,

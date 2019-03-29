@@ -3342,29 +3342,31 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 
 static void append_bssid_info(DBusMessageIter *iter, void *user_data)
 {
-        GSList *bssid_list = NULL;
+	GSList *bssid_list = NULL;
 	struct connman_network *network = user_data;
-        struct connman_bssids *bssids;
-        char bssid_buf[18] = {0,};
-        char *bssid_str = bssid_buf;
+	struct connman_bssids *bssids;
+	char bssid_buf[MAC_ADDRESS_LENGTH] = {0,};
+	char *bssid_str = bssid_buf;
 
-        bssid_list = (GSList *)connman_network_get_bssid_list(network);
-        if(bssid_list) {
-                GSList *list;
-                for (list = bssid_list; list; list = list->next) {
-                        bssids = (struct connman_bssids *)list->data;
-                        memcpy(bssid_str, bssids->bssid, 18);
+	bssid_list = (GSList *)connman_network_get_bssid_list(network);
+	if(bssid_list) {
+		GSList *list;
+		for (list = bssid_list; list; list = list->next) {
+			bssids = (struct connman_bssids *)list->data;
+			g_snprintf(bssid_buf, MAC_ADDRESS_LENGTH, "%02x:%02x:%02x:%02x:%02x:%02x",
+					bssids->bssid[0], bssids->bssid[1], bssids->bssid[2],
+					bssids->bssid[3], bssids->bssid[4], bssids->bssid[5]);
 
 			connman_dbus_dict_append_basic(iter, "BSSID",
-                                        DBUS_TYPE_STRING, &bssid_str);
+					DBUS_TYPE_STRING, &bssid_str);
 
-                        connman_dbus_dict_append_basic(iter, "Strength",
-                                        DBUS_TYPE_UINT16, &bssids->strength);
+			connman_dbus_dict_append_basic(iter, "Strength",
+					DBUS_TYPE_UINT16, &bssids->strength);
 
-                        connman_dbus_dict_append_basic(iter, "Frequency",
-                                        DBUS_TYPE_UINT16, &bssids->frequency);
-                }
-        }
+			connman_dbus_dict_append_basic(iter, "Frequency",
+					DBUS_TYPE_UINT16, &bssids->frequency);
+		}
+	}
 }
 #endif
 

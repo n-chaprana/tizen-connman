@@ -3261,7 +3261,32 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid->pin_wps = connman_network_get_string(network, "WiFi.PinWPS");
 
 #if defined TIZEN_EXT
-	ssid->bssid = connman_network_get_bssid(network);
+	GSList *bssid_list = (GSList *)connman_network_get_bssid_list(network);
+	if (bssid_list && g_slist_length(bssid_list) > 1) {
+		GSList *list;
+		char buff[MAC_ADDRESS_LENGTH];
+		for (list = bssid_list; list; list = list->next) {
+			struct connman_bssids * bssids = (struct connman_bssids *)list->data;
+
+			g_snprintf(buff, MAC_ADDRESS_LENGTH, "%02x:%02x:%02x:%02x:%02x:%02x",
+					bssids->bssid[0], bssids->bssid[1], bssids->bssid[2],
+					bssids->bssid[3], bssids->bssid[4], bssids->bssid[5]);
+			buff[MAC_ADDRESS_LENGTH - 1] = '\0';
+
+			char *last_bssid = connman_network_get_last_bssid(network);
+
+			if (strcmp(last_bssid, buff) == 0) {
+				DBG("last_bssid match, try next bssid");
+				continue;
+			} else {
+				connman_network_set_last_bssid(network, buff);
+
+				ssid->bssid = &(bssids->bssid[0]);
+				break;
+			}
+		}
+	} else
+		ssid->bssid = connman_network_get_bssid(network);
 
 	ssid->eap_keymgmt = network_eap_keymgmt(
 			connman_network_get_string(network, "WiFi.KeymgmtType"));
@@ -3740,7 +3765,11 @@ static bool handle_assoc_status_code(GSupplicantInterface *interface,
                                      struct wifi_data *wifi)
 {
 	if (wifi->state == G_SUPPLICANT_STATE_ASSOCIATING &&
+#if defined TIZEN_EXT
+			wifi->assoc_code > 0 &&
+#else
 			wifi->assoc_code == ASSOC_STATUS_NO_CLIENT &&
+#endif
 			wifi->load_shaping_retries < LOAD_SHAPING_MAX_RETRIES) {
 		wifi->load_shaping_retries ++;
 		return TRUE;
@@ -3962,8 +3991,15 @@ static void interface_state(GSupplicantInterface *interface)
 		if (is_idle(wifi))
 			break;
 
+#if defined TIZEN_EXT
+		if (handle_assoc_status_code(interface, wifi)) {
+			network_connect(network);
+			break;
+		}
+#else
 		if (handle_assoc_status_code(interface, wifi))
 			break;
+#endif
 
 		/* If previous state was 4way-handshake, then
 		 * it's either: psk was incorrect and thus we retry
@@ -4593,6 +4629,10 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	bssid_list = (GSList *)g_supplicant_network_get_bssid_list(network);
 	connman_network_set_bssid_list(connman_network, bssid_list);
 	connman_network_set_phy_mode(connman_network, phy_mode);
+
+	if (g_str_equal(property, "CheckMultiBssidConnect") &&
+			connman_network_get_associating(connman_network))
+		network_connect(connman_network);
 #endif
 }
 

@@ -50,6 +50,7 @@
 #define WLAN_EID_SUPP_RATES 1
 #define WLAN_EID_EXT_SUPP_RATES 50
 #define COUNTRY_CODE_LENGTH	2
+#define WIFI_BSSID_LEN_MAX 6
 #endif
 
 #define BSS_UNKNOWN_STRENGTH    -90
@@ -364,7 +365,7 @@ struct interface_scan_data {
 
 #if defined TIZEN_EXT
 struct g_connman_bssids {
-	char bssid[18];
+	unsigned char bssid[WIFI_BSSID_LEN_MAX];
 	uint16_t strength;
 	uint16_t frequency;
 };
@@ -1723,18 +1724,13 @@ static void update_bssid_list(gpointer key, gpointer value, gpointer user_data)
 {
 	struct g_supplicant_bss *bss = value;
 	struct g_connman_bssids *bssids = NULL;
-	char buff[18];
 	GSList **list = (GSList **)user_data;
 
 	bssids = (struct g_connman_bssids *)g_try_malloc0(sizeof(struct g_connman_bssids));
 
 	if (bssids) {
-		g_snprintf(buff, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
-				bss->bssid[0], bss->bssid[1], bss->bssid[2], bss->bssid[3],
-				bss->bssid[4], bss->bssid[5]);
+		memcpy(bssids->bssid, bss->bssid, WIFI_BSSID_LEN_MAX);
 
-		memcpy(bssids->bssid, buff, 18);
-		bssids->bssid[17] = '\0';
 		bssids->strength = bss->signal;
 		bssids->strength += 120;
 
@@ -2816,7 +2812,11 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 		g_hash_table_remove(interface->network_table, network->group);
 	} else {
 		if (is_current_network_bss && network->best_bss)
+#if defined TIZEN_EXT
+			callback_network_changed(network, "CheckMultiBssidConnect");
+#else
 			callback_network_changed(network, "");
+#endif
 	}
 }
 
