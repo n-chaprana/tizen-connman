@@ -2788,6 +2788,7 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 	GSupplicantNetwork *network;
 	struct g_supplicant_bss *bss = NULL;
 	const char *path = NULL;
+	bool is_current_network_bss = false;
 
 	dbus_message_iter_get_basic(iter, &path);
 	if (!path)
@@ -2801,6 +2802,7 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 	if (network->best_bss == bss) {
 		network->best_bss = NULL;
 		network->signal = BSS_UNKNOWN_STRENGTH;
+		is_current_network_bss = true;
 	}
 
 	g_hash_table_remove(bss_mapping, path);
@@ -2810,8 +2812,12 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 
 	update_network_signal(network);
 
-	if (g_hash_table_size(network->bss_table) == 0)
+	if (g_hash_table_size(network->bss_table) == 0) {
 		g_hash_table_remove(interface->network_table, network->group);
+	} else {
+		if (is_current_network_bss && network->best_bss)
+			callback_network_changed(network, "");
+	}
 }
 
 static void set_config_methods(DBusMessageIter *iter, void *user_data)
