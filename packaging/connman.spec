@@ -5,7 +5,7 @@
 
 Name:           connman
 Version:        1.35
-Release:        31
+Release:        32
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -18,7 +18,7 @@ BuildRequires:  pkgconfig(gio-2.0)
 BuildRequires:  pkgconfig(libiptc)
 BuildRequires:  pkgconfig(xtables)
 BuildRequires:  pkgconfig(libsmack)
-BuildRequires:  pkgconfig(libnl-2.0)
+BuildRequires:  pkgconfig(libnl-3.0)
 BuildRequires:  pkgconfig(libsystemd-daemon)
 %if %{with connman_openconnect}
 BuildRequires:  openconnect
