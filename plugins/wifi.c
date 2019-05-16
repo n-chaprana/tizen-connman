@@ -161,6 +161,7 @@ struct wifi_data {
 	struct connman_network *scan_pending_network;
 	bool allow_full_scan;
 	unsigned int automaxspeed_timeout;
+	GSupplicantScanParams *hidden_scan_params;
 #endif
 	int disconnect_code;
 	int assoc_code;
@@ -1574,6 +1575,16 @@ static void wifi_remove(struct connman_device *device)
 
 	if (wifi->scan_params)
 		g_supplicant_free_scan_params(wifi->scan_params);
+#if defined TIZEN_EXT
+	if (wifi->hidden_scan_params) {
+		while (wifi->hidden_scan_params->ssids) {
+			struct scan_ssid *ssid;
+			ssid = wifi->hidden_scan_params->ssids->data;
+			wifi->hidden_scan_params->ssids = g_slist_remove(wifi->hidden_scan_params->ssids, ssid);
+		}
+		g_supplicant_free_scan_params(wifi->hidden_scan_params);
+	}
+#endif
 
 	g_free(wifi->autoscan);
 	g_free(wifi->identifier);
@@ -1810,6 +1821,22 @@ static int get_hidden_connections_params(struct wifi_data *wifi,
 
 	DBG("max ssids %d", driver_max_ssids);
 
+#if defined TIZEN_EXT
+	if (!wifi->hidden_scan_params) {
+		wifi->hidden_scan_params = g_try_malloc0(sizeof(GSupplicantScanParams));
+		if (!wifi->hidden_scan_params)
+			return 0;
+
+		if (get_hidden_connections(wifi->hidden_scan_params) == 0) {
+			g_supplicant_free_scan_params(wifi->hidden_scan_params);
+			wifi->hidden_scan_params = NULL;
+
+			return 0;
+		}
+	}
+
+	orig_params = wifi->hidden_scan_params;
+#else
 	if (!wifi->scan_params) {
 		wifi->scan_params = g_try_malloc0(sizeof(GSupplicantScanParams));
 		if (!wifi->scan_params)
@@ -1824,12 +1851,17 @@ static int get_hidden_connections_params(struct wifi_data *wifi,
 	}
 
 	orig_params = wifi->scan_params;
+#endif
 
 	/* Let's transfer driver_max_ssids params */
 	for (i = 0; i < driver_max_ssids; i++) {
 		struct scan_ssid *ssid;
 
+#if defined TIZEN_EXT
+		if (!wifi->hidden_scan_params->ssids)
+#else
 		if (!wifi->scan_params->ssids)
+#endif
 			break;
 
 		ssid = orig_params->ssids->data;
@@ -1857,8 +1889,13 @@ static int get_hidden_connections_params(struct wifi_data *wifi,
 
 err:
 	g_slist_free_full(scan_params->ssids, g_free);
+#if defined TIZEN_EXT
+	g_supplicant_free_scan_params(wifi->hidden_scan_params);
+	wifi->hidden_scan_params = NULL;
+#else
 	g_supplicant_free_scan_params(wifi->scan_params);
 	wifi->scan_params = NULL;
+#endif
 
 	return 0;
 }
@@ -1968,6 +2005,13 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 			g_supplicant_free_scan_params(wifi->scan_params);
 			wifi->scan_params = NULL;
 		}
+
+#if defined TIZEN_EXT
+		if (wifi->hidden_scan_params && !wifi->hidden_scan_params->ssids) {
+			g_supplicant_free_scan_params(wifi->hidden_scan_params);
+			wifi->hidden_scan_params = NULL;
+		}
+#endif
 	}
 
 	if (result < 0)
@@ -2072,8 +2116,13 @@ static void scan_callback_hidden(int result,
 	if (get_hidden_connections_params(wifi, scan_params) > 0) {
 		ret = g_supplicant_interface_scan(wifi->interface,
 							scan_params,
+#if defined TIZEN_EXT
+							scan_callback,
+#else
 							scan_callback_hidden,
+#endif
 							device);
+
 		if (ret == 0)
 			return;
 	}
