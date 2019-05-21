@@ -72,7 +72,11 @@
 #define P2P_LISTEN_INTERVAL 2000
 
 #define ASSOC_STATUS_NO_CLIENT 17
+#if defined TIZEN_EXT
+#define LOAD_SHAPING_MAX_RETRIES 7
+#else
 #define LOAD_SHAPING_MAX_RETRIES 3
+#endif
 
 #if defined TIZEN_EXT
 #define WIFI_EAP_FAST_PAC_FILE		"/var/lib/wifi/wifi.pac"	/* path of Pac file for EAP-FAST */
@@ -179,6 +183,7 @@ struct wifi_data {
 static gboolean wifi_first_scan = false;
 static gboolean found_with_first_scan = false;
 static gboolean is_wifi_notifier_registered = false;
+static GHashTable *failed_bssids = NULL;
 #endif
 
 
@@ -3261,40 +3266,6 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid->pin_wps = connman_network_get_string(network, "WiFi.PinWPS");
 
 #if defined TIZEN_EXT
-	GSList *bssid_list = (GSList *)connman_network_get_bssid_list(network);
-	if (bssid_list && g_slist_length(bssid_list) > 1) {
-		GSList *list;
-		char buff[MAC_ADDRESS_LENGTH];
-		for (list = bssid_list; list; list = list->next) {
-			struct connman_bssids * bssids = (struct connman_bssids *)list->data;
-
-			g_snprintf(buff, MAC_ADDRESS_LENGTH, "%02x:%02x:%02x:%02x:%02x:%02x",
-					bssids->bssid[0], bssids->bssid[1], bssids->bssid[2],
-					bssids->bssid[3], bssids->bssid[4], bssids->bssid[5]);
-			buff[MAC_ADDRESS_LENGTH - 1] = '\0';
-
-			char *last_bssid = connman_network_get_last_bssid(network);
-
-			if (strcmp(last_bssid, buff) == 0) {
-				DBG("last_bssid match, try next bssid");
-				continue;
-			} else {
-				connman_network_set_last_bssid(network, buff);
-
-				ssid->bssid = &(bssids->bssid[0]);
-				break;
-			}
-		}
-	} else
-		ssid->bssid = connman_network_get_bssid(network);
-
-	ssid->eap_keymgmt = network_eap_keymgmt(
-			connman_network_get_string(network, "WiFi.KeymgmtType"));
-	ssid->phase1 = connman_network_get_string(network, "WiFi.Phase1");
-
-	if(g_strcmp0(ssid->eap, "fast") == 0)
-		ssid->pac_file = g_strdup(WIFI_EAP_FAST_PAC_FILE);
-
 	if (set_connman_bssid(CHECK_BSSID, NULL) == 6) {
 		ssid->bssid_for_connect_len = 6;
 		set_connman_bssid(GET_BSSID, (char *)ssid->bssid_for_connect);
@@ -3305,6 +3276,58 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	} else {
 		ssid->freq = connman_network_get_frequency(network);
 	}
+
+	GSList *bssid_list = (GSList *)connman_network_get_bssid_list(network);
+	if (bssid_list && g_slist_length(bssid_list) > 1) {
+
+		/* If there are more than one bssid,
+		 * the user-specified bssid is tried only once at the beginning.
+		 * After that, the bssids in the list are tried in order.
+		 */
+		if (set_connman_bssid(CHECK_BSSID, NULL) == 6) {
+			set_connman_bssid(RESET_BSSID, NULL);
+			goto done;
+		}
+
+		GSList *list;
+		char buff[MAC_ADDRESS_LENGTH];
+		for (list = bssid_list; list; list = list->next) {
+			struct connman_bssids * bssids = (struct connman_bssids *)list->data;
+
+			g_snprintf(buff, MAC_ADDRESS_LENGTH, "%02x:%02x:%02x:%02x:%02x:%02x",
+					bssids->bssid[0], bssids->bssid[1], bssids->bssid[2],
+					bssids->bssid[3], bssids->bssid[4], bssids->bssid[5]);
+			buff[MAC_ADDRESS_LENGTH - 1] = '\0';
+
+			gchar *curr_bssids = g_strdup((const gchar *)buff);
+
+			if (g_hash_table_contains(failed_bssids, curr_bssids)) {
+				DBG("bssid match, try next bssid");
+				g_free(curr_bssids);
+				continue;
+			} else {
+				g_hash_table_add(failed_bssids, curr_bssids);
+
+				ssid->bssid = &(bssids->bssid[0]);
+				ssid->freq = (unsigned int)bssids->frequency;
+				break;
+			}
+		}
+
+		if (!list) {
+			ssid->bssid = connman_network_get_bssid(network);
+			g_hash_table_remove_all(failed_bssids);
+		}
+	} else
+		ssid->bssid = connman_network_get_bssid(network);
+
+done:
+	ssid->eap_keymgmt = network_eap_keymgmt(
+			connman_network_get_string(network, "WiFi.KeymgmtType"));
+	ssid->phase1 = connman_network_get_string(network, "WiFi.Phase1");
+
+	if(g_strcmp0(ssid->eap, "fast") == 0)
+		ssid->pac_file = g_strdup(WIFI_EAP_FAST_PAC_FILE);
 #endif
 
 	if (connman_setting_get_bool("BackgroundScanning"))
@@ -3955,6 +3978,8 @@ static void interface_state(GSupplicantInterface *interface)
 			else
 				wifi->automaxspeed_timeout = g_timeout_add_seconds(30, autosignalpoll_timeout, wifi);
 		}
+
+		g_hash_table_remove_all(failed_bssids);
 #else
 		/* though it should be already stopped: */
 		stop_autoscan(device);
@@ -3996,9 +4021,21 @@ static void interface_state(GSupplicantInterface *interface)
 
 #if defined TIZEN_EXT
 		if (handle_assoc_status_code(interface, wifi)) {
-			network_connect(network);
-			break;
+			GSList *bssid_list = (GSList *)connman_network_get_bssid_list(network);
+			guint bssid_length = 0;
+
+			if (bssid_list)
+				bssid_length = g_slist_length(bssid_list);
+
+			if (bssid_length > 1 && bssid_length > g_hash_table_size(failed_bssids)) {
+				network_connect(network);
+				break;
+			}
+
+			wifi->load_shaping_retries = 0;
 		}
+
+		g_hash_table_remove_all(failed_bssids);
 #else
 		if (handle_assoc_status_code(interface, wifi))
 			break;
@@ -5380,6 +5417,9 @@ static int wifi_init(void)
 		return err;
 	}
 
+#if defined TIZEN_EXT
+	failed_bssids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+#endif
 	return 0;
 }
 
@@ -5392,6 +5432,10 @@ static void wifi_exit(void)
 	g_supplicant_unregister(&callbacks);
 
 	connman_network_driver_unregister(&network_driver);
+
+#if defined TIZEN_EXT
+	g_hash_table_unref(failed_bssids);
+#endif
 }
 
 CONNMAN_PLUGIN_DEFINE(wifi, "WiFi interface plugin", VERSION,

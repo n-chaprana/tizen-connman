@@ -102,7 +102,6 @@ struct connman_network {
 #if defined TIZEN_EXT
 		char encryption_mode[WIFI_ENCYPTION_MODE_LEN_MAX];
 		unsigned char bssid[WIFI_BSSID_LEN_MAX];
-		char last_bssid[MAC_ADDRESS_LENGTH];
 		unsigned int maxrate;
 		int maxspeed;
 		bool isHS20AP;
@@ -1580,11 +1579,6 @@ int connman_network_set_connected(struct connman_network *network,
 		network, network->connected, connected, network->connecting,
 		network->associating);
 
-#if defined TIZEN_EXT
-	/* reset last connect request bssid */
-	connman_network_set_last_bssid(network, NULL);
-#endif
-
 	if ((network->connecting || network->associating) &&
 							!connected) {
 		connman_network_set_error(network,
@@ -1974,23 +1968,6 @@ int connman_network_set_bssid(struct connman_network *network,
 unsigned char *connman_network_get_bssid(struct connman_network *network)
 {
 	return (unsigned char *)network->wifi.bssid;
-}
-
-int connman_network_set_last_bssid(struct connman_network *network,
-				const char *bssid)
-{
-	if (bssid == NULL) {
-		memset(network->wifi.last_bssid, '\0', sizeof(network->wifi.last_bssid));
-		return -EINVAL;
-	}
-	strncpy(network->wifi.last_bssid, bssid, MAC_ADDRESS_LENGTH - 1);
-
-	return 0;
-}
-
-char *connman_network_get_last_bssid(struct connman_network *network)
-{
-	return (char *)network->wifi.last_bssid;
 }
 
 int connman_network_set_maxspeed(struct connman_network *network,

@@ -1743,6 +1743,20 @@ static void update_bssid_list(gpointer key, gpointer value, gpointer user_data)
 		SUPPLICANT_DBG("Failed to allocate memory");
 }
 
+static gint cmp_bss(gconstpointer a, gconstpointer b)
+{
+	struct g_connman_bssids *entry_a = (struct g_connman_bssids *)a;
+	struct g_connman_bssids *entry_b = (struct g_connman_bssids *)b;
+
+	if (entry_a->strength > entry_b->strength)
+		return -1;
+
+	if (entry_a->strength < entry_b->strength)
+		return 1;
+
+	return 0;
+}
+
 void *g_supplicant_network_get_bssid_list(GSupplicantNetwork *network)
 {
 	GSList *bssid_list = NULL;
@@ -1751,6 +1765,7 @@ void *g_supplicant_network_get_bssid_list(GSupplicantNetwork *network)
 		return NULL;
 
 	g_hash_table_foreach(network->bss_table, update_bssid_list, &bssid_list);
+	bssid_list = g_slist_sort(bssid_list, cmp_bss);
 
 	return bssid_list;
 }

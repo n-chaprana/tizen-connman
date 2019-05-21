@@ -212,8 +212,6 @@ ieee80211_modes_e connman_network_get_phy_mode(struct connman_network *network);
 int connman_network_set_connection_mode(struct connman_network *network,
 				connection_mode_e mode);
 connection_mode_e connman_network_get_connection_mode(struct connman_network *network);
-int connman_network_set_last_bssid(struct connman_network *network, const char *bssid);
-char *connman_network_get_last_bssid(struct connman_network *network);
 #endif
 
 int connman_network_set_name(struct connman_network *network,
