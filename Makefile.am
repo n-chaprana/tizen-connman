@@ -142,7 +142,7 @@ src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			-lresolv -ldl -lrt
 
 if TIZEN_EXT_WIFI_MESH
-src_connmand_LDADD += -lnl -lnl-genl
+src_connmand_LDADD += @LIBNL_LIBS@ @LIBNL_GENL_LIBS@
 endif
 
 src_connmand_LDFLAGS = -Wl,--export-dynamic -pie \
@@ -212,7 +212,7 @@ vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
 				-lresolv -ldl
 
 if TIZEN_EXT_WIFI_MESH
-vpn_connman_vpnd_LDADD += -lnl -lnl-genl
+vpn_connman_vpnd_LDADD += @LIBNL_LIBS@ @LIBNL_GENL_LIBS@
 endif
 
 vpn_connman_vpnd_LDFLAGS = -Wl,--export-dynamic \
@@ -312,6 +312,14 @@ endif
 if NFTABLES
 AM_CFLAGS += @NFTABLES_CFLAGS@
 src_connmand_CFLAGS += @NFTABLES_CFLAGS@
+endif
+
+if TIZEN_EXT_WIFI_MESH
+AM_CFLAGS += @LIBNL_CFLAGS@ @LIBNL_GENL_CFLAGS@
+src_connmand_CFLAGS += @LIBNL_CFLAGS@ @LIBNL_GENL_CFLAGS@
+if VPN
+vpn_connman_vpnd_CFLAGS += @LIBNL_CFLAGS@ @LIBNL_GENL_CFLAGS@
+endif
 endif
 
 EXTRA_DIST += vpn/vpn-dbus.conf vpn/vpn-polkit.conf

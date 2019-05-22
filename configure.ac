@@ -270,6 +270,16 @@ PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.28, dummy=yes,
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
+PKG_CHECK_MODULES(LIBNL, libnl-3.0, dummy=yes,
+				AC_MSG_ERROR(libnl-3.0 is required))
+AC_SUBST(LIBNL_CFLAGS)
+AC_SUBST(LIBNL_LIBS)
+
+PKG_CHECK_MODULES(LIBNL_GENL, libnl-genl-3.0, dummy=yes,
+				AC_MSG_ERROR(libnl-genl-3.0 is required))
+AC_SUBST(LIBNL_GENL_CFLAGS)
+AC_SUBST(LIBNL_GENL_LIBS)
+
 PKG_CHECK_MODULES(LIBSYSTEMD, libsystemd-daemon, dummy=yes,
 				AC_MSG_ERROR(libsystemd-daemon library is required))
 AC_SUBST(LIBSYSTEMD_CFLAGS)
