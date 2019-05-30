@@ -350,6 +350,8 @@ enum connman_service_security __connman_service_string2security(const char *str)
 #if defined TIZEN_EXT
 	if (!strcmp(str, "rsn"))
 		return CONNMAN_SERVICE_SECURITY_RSN;
+	if (!strcmp(str, "sae"))
+		return CONNMAN_SERVICE_SECURITY_SAE;
 #endif
 
 	return CONNMAN_SERVICE_SECURITY_UNKNOWN;
@@ -370,6 +372,8 @@ static const char *security2string(enum connman_service_security security)
 		return "psk";
 	case CONNMAN_SERVICE_SECURITY_RSN:
 		return "rsn";
+	case CONNMAN_SERVICE_SECURITY_SAE:
+		return "sae";
 #else
 	case CONNMAN_SERVICE_SECURITY_RSN:
 		return "psk";
@@ -2388,6 +2392,9 @@ static void append_security(DBusMessageIter *iter, void *user_data)
 		case CONNMAN_SERVICE_SECURITY_PSK:
 		case CONNMAN_SERVICE_SECURITY_WPA:
 		case CONNMAN_SERVICE_SECURITY_RSN:
+#if defined TIZEN_EXT
+		case CONNMAN_SERVICE_SECURITY_SAE:
+#endif
 			str = "wps";
 			dbus_message_iter_append_basic(iter,
 						DBUS_TYPE_STRING, &str);
@@ -4143,6 +4150,8 @@ int __connman_service_check_passphrase(enum connman_service_security security,
 	case CONNMAN_SERVICE_SECURITY_PSK:
 #if defined TIZEN_EXT
 	case CONNMAN_SERVICE_SECURITY_RSN:
+	/* TO CHECK: We need to check the key length supported by SAE */
+	case CONNMAN_SERVICE_SECURITY_SAE:
 #endif
 		/* A raw key is always 64 bytes length,
 		 * its content is in hex representation.
@@ -8207,6 +8216,9 @@ static int service_connect(struct connman_service *service)
 		case CONNMAN_SERVICE_SECURITY_PSK:
 		case CONNMAN_SERVICE_SECURITY_WPA:
 		case CONNMAN_SERVICE_SECURITY_RSN:
+#if defined TIZEN_EXT
+		case CONNMAN_SERVICE_SECURITY_SAE:
+#endif
 			if (service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY)
 				return -ENOKEY;
 
@@ -8277,6 +8289,9 @@ static int service_connect(struct connman_service *service)
 		case CONNMAN_SERVICE_SECURITY_PSK:
 		case CONNMAN_SERVICE_SECURITY_WPA:
 		case CONNMAN_SERVICE_SECURITY_RSN:
+#if defined TIZEN_EXT
+		case CONNMAN_SERVICE_SECURITY_SAE:
+#endif
 			break;
 		case CONNMAN_SERVICE_SECURITY_8021X:
 			prepare_8021x(service);
@@ -9028,6 +9043,8 @@ static enum connman_service_security convert_wifi_security(const char *security)
 	else if (g_str_equal(security, "rsn"))
 		return CONNMAN_SERVICE_SECURITY_RSN;
 #if defined TIZEN_EXT
+	else if (g_str_equal(security, "sae"))
+		return CONNMAN_SERVICE_SECURITY_SAE;
 	else if (g_str_equal(security, "ft_psk") == TRUE)
 		return CONNMAN_SERVICE_SECURITY_PSK;
 	else if (g_str_equal(security, "ft_ieee8021x") == TRUE)

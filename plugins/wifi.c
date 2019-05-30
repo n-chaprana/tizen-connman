@@ -3176,6 +3176,8 @@ static GSupplicantSecurity network_security(const char *security)
 		return G_SUPPLICANT_SECURITY_FT_PSK;
 	else if (g_str_equal(security, "ft_ieee8021x") == TRUE)
 		return G_SUPPLICANT_SECURITY_FT_IEEE8021X;
+	else if (g_str_equal(security, "sae"))
+		return G_SUPPLICANT_SECURITY_SAE;
 #endif
 
 	return G_SUPPLICANT_SECURITY_UNKNOWN;
@@ -3221,6 +3223,9 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid->scan_ssid = 1;
 	security = connman_network_get_string(network, "WiFi.Security");
 	ssid->security = network_security(security);
+#if defined TIZEN_EXT
+	ssid->ieee80211w = 1;
+#endif
 	ssid->passphrase = connman_network_get_string(network,
 						"WiFi.Passphrase");
 	ssid->eap = connman_network_get_string(network, "WiFi.EAP");

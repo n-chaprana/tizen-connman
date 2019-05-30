@@ -69,7 +69,7 @@ extern "C" {
 #define G_SUPPLICANT_KEYMGMT_WPA_EAP	(1 << 7)
 #define G_SUPPLICANT_KEYMGMT_WPA_EAP_256	(1 << 8)
 #define G_SUPPLICANT_KEYMGMT_WPS		(1 << 9)
-#if defined TIZEN_EXT_WIFI_MESH
+#if defined TIZEN_EXT
 #define G_SUPPLICANT_KEYMGMT_SAE		(1 << 10)
 #endif
 
@@ -122,8 +122,6 @@ typedef enum {
 #if defined TIZEN_EXT
 	G_SUPPLICANT_SECURITY_FT_PSK,
 	G_SUPPLICANT_SECURITY_FT_IEEE8021X,
-#endif
-#if defined TIZEN_EXT_WIFI_MESH
 	G_SUPPLICANT_SECURITY_SAE,
 #endif
 } GSupplicantSecurity;
@@ -221,8 +219,6 @@ struct _GSupplicantSSID {
 	GSupplicantEapKeymgmt eap_keymgmt;
 	const char *phase1;
 	const char *pac_file;
-#endif
-#if defined TIZEN_EXT_WIFI_MESH
 	uint16_t ieee80211w;
 #endif
 };

@@ -101,7 +101,7 @@ static struct strvalmap keymgmt_map[] = {
 	{ "wpa-eap",		G_SUPPLICANT_KEYMGMT_WPA_EAP	},
 	{ "wpa-eap-sha256",	G_SUPPLICANT_KEYMGMT_WPA_EAP_256	},
 	{ "wps",		G_SUPPLICANT_KEYMGMT_WPS		},
-#if defined TIZEN_EXT_WIFI_MESH
+#if defined TIZEN_EXT
 	{ "sae",		G_SUPPLICANT_KEYMGMT_SAE		},
 #endif
 	{ }
@@ -255,7 +255,7 @@ struct g_supplicant_bss {
 	GSupplicantPhy_mode phy_mode;
 #endif
 	unsigned int wps_capabilities;
-#if defined TIZEN_EXT_WIFI_MESH
+#if defined TIZEN_EXT
 	dbus_bool_t sae;
 #endif
 };
@@ -455,8 +455,6 @@ static const char *security2string(GSupplicantSecurity security)
 		return "ft_psk";
 	case G_SUPPLICANT_SECURITY_FT_IEEE8021X:
 		return "ft_ieee8021x";
-#endif
-#if defined TIZEN_EXT_WIFI_MESH
 	case G_SUPPLICANT_SECURITY_SAE:
 		return "sae";
 #endif
@@ -1655,6 +1653,9 @@ const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network)
 		return NULL;
 
 	if (network->best_bss->security == G_SUPPLICANT_SECURITY_PSK ||
+#if defined TIZEN_EXT
+	    network->best_bss->security == G_SUPPLICANT_SECURITY_SAE ||
+#endif /* TIZEN_EXT */
 	    network->best_bss->security == G_SUPPLICANT_SECURITY_IEEE8021X) {
 		unsigned int pairwise;
 
@@ -1681,6 +1682,11 @@ bool g_supplicant_network_get_rsn_mode(GSupplicantNetwork *network)
 {
 	if (network == NULL || network->best_bss == NULL)
 		return 0;
+
+#if defined TIZEN_EXT
+	if (network->best_bss->security == G_SUPPLICANT_SECURITY_SAE)
+		return false;
+#endif /* TIZEN_EXT */
 
 	if (network->best_bss->rsn_selected) {
 		const char *mode = g_supplicant_network_get_enc_mode(network);
@@ -2488,7 +2494,7 @@ static void bss_compute_security(struct g_supplicant_bss *bss)
 		bss->psk = TRUE;
 #endif
 
-#if defined TIZEN_EXT_WIFI_MESH
+#if defined TIZEN_EXT
 	if (bss->keymgmt & G_SUPPLICANT_KEYMGMT_SAE)
 		bss->sae = TRUE;
 #endif
@@ -2503,7 +2509,7 @@ static void bss_compute_security(struct g_supplicant_bss *bss)
 	else if (bss->ft_ieee8021x == TRUE)
 		bss->security = G_SUPPLICANT_SECURITY_IEEE8021X;
 #endif
-#if defined TIZEN_EXT_WIFI_MESH
+#if defined TIZEN_EXT
 	else if (bss->sae)
 		bss->security = G_SUPPLICANT_SECURITY_SAE;
 #endif
@@ -6165,7 +6171,7 @@ static void add_network_security_proto(DBusMessageIter *dict,
 	g_free(proto);
 }
 
-#if defined TIZEN_EXT_WIFI_MESH
+#if defined TIZEN_EXT
 static void add_network_ieee80211w(DBusMessageIter *dict, GSupplicantSSID *ssid)
 {
 	if (ssid->security != G_SUPPLICANT_SECURITY_SAE)
@@ -6217,8 +6223,6 @@ static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
 		add_network_security_ciphers(dict, ssid);
 		add_network_security_proto(dict, ssid);
 		break;
-#endif
-#if defined TIZEN_EXT_WIFI_MESH
 	case G_SUPPLICANT_SECURITY_SAE:
 		key_mgmt = "SAE";
 		add_network_security_psk(dict, ssid);
@@ -6280,7 +6284,7 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 
 	add_network_security(&dict, ssid);
 
-#if defined TIZEN_EXT_WIFI_MESH
+#if defined TIZEN_EXT
 	add_network_ieee80211w(&dict, ssid);
 #endif
 
