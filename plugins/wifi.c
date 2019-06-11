@@ -184,6 +184,7 @@ static gboolean wifi_first_scan = false;
 static gboolean found_with_first_scan = false;
 static gboolean is_wifi_notifier_registered = false;
 static GHashTable *failed_bssids = NULL;
+static unsigned char buff_bssid[WIFI_BSSID_LEN_MAX] = { 0, };
 #endif
 
 
@@ -3299,16 +3300,17 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 					bssids->bssid[3], bssids->bssid[4], bssids->bssid[5]);
 			buff[MAC_ADDRESS_LENGTH - 1] = '\0';
 
-			gchar *curr_bssids = g_strdup((const gchar *)buff);
+			gchar *curr_bssid = g_strdup((const gchar *)buff);
 
-			if (g_hash_table_contains(failed_bssids, curr_bssids)) {
+			if (g_hash_table_contains(failed_bssids, curr_bssid)) {
 				DBG("bssid match, try next bssid");
-				g_free(curr_bssids);
+				g_free(curr_bssid);
 				continue;
 			} else {
-				g_hash_table_add(failed_bssids, curr_bssids);
+				g_hash_table_add(failed_bssids, curr_bssid);
 
-				ssid->bssid = &(bssids->bssid[0]);
+				memcpy(buff_bssid, bssids->bssid, WIFI_BSSID_LEN_MAX);
+				ssid->bssid = buff_bssid;
 				ssid->freq = (unsigned int)bssids->frequency;
 				break;
 			}
