@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(connman, 1.35)
+AC_INIT(connman, 1.37)
 
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -20,6 +20,7 @@ AC_SUBST(abs_top_srcdir)
 AC_SUBST(abs_top_builddir)
 
 AC_LANG_C
+AC_USE_SYSTEM_EXTENSIONS
 
 AC_PROG_CC
 AM_PROG_CC_C_O
@@ -185,6 +186,8 @@ AC_CHECK_LIB(resolv, ns_initparse, dummy=yes, [
 AC_CHECK_HEADERS([execinfo.h])
 AM_CONDITIONAL([BACKTRACE], [test "${ac_cv_header_execinfo_h}" = "yes"])
 
+AC_CHECK_MEMBERS([struct in6_pktinfo.ipi6_addr], [], [], [[#include <netinet/in.h>]])
+
 AC_CHECK_FUNC(signalfd, dummy=yes,
 			AC_MSG_ERROR(signalfd support is required))
 
@@ -218,8 +221,8 @@ fi
 
 AC_DEFINE_UNQUOTED([STATS_MAX_FILE_SIZE], (${stats_max_file_size}), [Maximal size of a statistics round robin file])
 
-PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.28, dummy=yes,
-				AC_MSG_ERROR(GLib >= 2.28 is required))
+PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.40, dummy=yes,
+				AC_MSG_ERROR(GLib >= 2.40 is required))
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
@@ -230,9 +233,9 @@ AC_SUBST(DBUS_LIBS)
 
 AC_ARG_WITH(dbusconfdir, AC_HELP_STRING([--with-dbusconfdir=PATH],
 	[path to D-Bus config directory]), [path_dbusconf=${withval}],
-		[path_dbusconf="`$PKG_CONFIG --variable=sysconfdir dbus-1`"])
+		[path_dbusconf="`$PKG_CONFIG --variable=datadir dbus-1`"])
 if (test -z "${path_dbusconf}"); then
-	DBUS_CONFDIR="${sysconfdir}/dbus-1/system.d"
+	DBUS_CONFDIR="${datadir}/dbus-1/system.d"
 else
 	DBUS_CONFDIR="${path_dbusconf}/dbus-1/system.d"
 fi
@@ -380,14 +383,24 @@ AC_ARG_ENABLE(tools, AC_HELP_STRING([--disable-tools],
 					[enable_tools=${enableval}])
 AM_CONDITIONAL(TOOLS, test "${enable_tools}" != "no")
 
+AC_ARG_ENABLE(stats, AC_HELP_STRING([--disable-stats],
+				[disable statistics round robin file generation]),
+					[enable_stats=${enableval}])
+AM_CONDITIONAL(STATS, test "${enable_stats}" != "no")
+
 if (test "${enable_tools}" != "no"); then
 	AC_PATH_PROGS(IPTABLES_SAVE, [iptables-save], [],
 						$PATH:/sbin:/usr/sbin)
+	AC_PATH_PROGS(IP6TABLES_SAVE, [ip6tables-save], [],
+						$PATH:/sbin:/usr/sbin)
 	IPTABLES_SAVE=$ac_cv_path_IPTABLES_SAVE
+	IP6TABLES_SAVE=$ac_cv_path_IP6TABLES_SAVE
 else
 	IPTABLES_SAVE=""
+	IP6TABLES_SAVE=""
 fi
 AC_SUBST(IPTABLES_SAVE)
+AC_SUBST(IP6TABLES_SAVE)
 
 AC_ARG_ENABLE(client, AC_HELP_STRING([--disable-client],
 				[disable command line client]),
@@ -432,5 +445,19 @@ AM_CONDITIONAL(VPN, test "${enable_openconnect}" != "no" -o \
 			"${enable_vpnc}" != "no" -o \
 			"${enable_l2tp}" != "no" -o \
 			"${enable_pptp}" != "no")
+
+AC_MSG_CHECKING(which DNS backend to use)
+AC_ARG_WITH(dns-backend, AC_HELP_STRING([--with-dns-backend=TYPE],
+            [specify which DNS backend to use: internal or systemd-resolved [default=internal]]),
+		[dns_backend=${withval}],
+		[dns_backend="internal"])
+
+if (test "${dns_backend}" != "internal" -a \
+		"${dns_backend}" != "systemd-resolved"); then
+	AC_MSG_ERROR(no suitable DNS backend defined)
+fi
+AM_CONDITIONAL(INTERNAL_DNS_BACKEND, test "${dns_backend}" = "internal")
+AM_CONDITIONAL(SYSTEMD_RESOLVED_DNS_BACKEND, test "${dns_backend}" = "systemd-resolved")
+AC_MSG_RESULT(${dns_backend})
 
 AC_OUTPUT(Makefile include/version.h connman.pc)

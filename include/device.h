@@ -50,6 +50,17 @@ enum connman_device_type {
 #define CONNMAN_DEVICE_PRIORITY_DEFAULT     0
 #define CONNMAN_DEVICE_PRIORITY_HIGH      100
 
+struct connman_device_scan_params {
+	enum connman_service_type type;
+	const char *ssid;
+	unsigned int ssid_len;
+	const char *identity;
+	const char* passphrase;
+	const char *security;
+	bool force_full_scan;
+	void *user_data;
+};
+
 struct connman_device;
 
 struct connman_device *connman_device_create(const char *node,
@@ -82,7 +93,8 @@ int connman_device_set_powered(struct connman_device *device,
 bool connman_device_get_powered(struct connman_device *device);
 int connman_device_set_scanning(struct connman_device *device,
 				enum connman_service_type type, bool scanning);
-bool connman_device_get_scanning(struct connman_device *device);
+bool connman_device_get_scanning(struct connman_device *device,
+				enum connman_service_type type);
 void connman_device_reset_scanning(struct connman_device *device);
 
 int connman_device_set_string(struct connman_device *device,
@@ -119,11 +131,10 @@ struct connman_device_driver {
 	void (*remove) (struct connman_device *device);
 	int (*enable) (struct connman_device *device);
 	int (*disable) (struct connman_device *device);
-	int (*scan)(enum connman_service_type type,
-			struct connman_device *device,
-			const char *ssid, unsigned int ssid_len,
-			const char *identity, const char* passphrase,
-			const char *security, void *user_data);
+	int (*scan)(struct connman_device *device,
+			struct connman_device_scan_params *params);
+	void (*stop_scan) (enum connman_service_type type,
+			struct connman_device *device);
 	int (*set_regdom) (struct connman_device *device,
 						const char *alpha2);
 };

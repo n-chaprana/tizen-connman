@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -133,6 +132,10 @@ void vpn_died(struct connman_task *task, int exit_code, void *user_data)
 	if (!data)
 		goto vpn_exit;
 
+	/* The task may die after we have already started the new one */
+	if (data->task != task)
+		goto done;
+
 	state = data->state;
 
 	stop_vpn(provider);
@@ -172,6 +175,7 @@ vpn_exit:
 		g_free(data);
 	}
 
+done:
 	connman_task_destroy(task);
 }
 
@@ -303,19 +307,22 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 						     vpn_newlink, provider);
 		err = connman_inet_ifup(index);
 		if (err < 0) {
-			if (err == -EALREADY)
+			if (err == -EALREADY) {
 				/*
 				 * So the interface is up already, that is just
 				 * great. Unfortunately in this case the
 				 * newlink watch might not have been called at
 				 * all. We must manually call it here so that
 				 * the provider can go to ready state and the
-				 * routes are setup properly.
+				 * routes are setup properly. Also reset flags
+				 * so vpn_newlink() can handle the change.
 				 */
+				data->flags = 0;
 				vpn_newlink(IFF_UP, 0, provider);
-			else
+			} else {
 				DBG("Cannot take interface %d up err %d/%s",
 					index, -err, strerror(-err));
+			}
 		}
 		break;
 
@@ -373,6 +380,7 @@ static int vpn_create_tun(struct vpn_provider *provider, int flags)
 	}
 
 	data->tun_flags = flags;
+	g_free(data->if_name);
 	data->if_name = (char *)g_strdup(ifr.ifr_name);
 	if (!data->if_name) {
 		connman_error("Failed to allocate memory");
@@ -553,10 +561,15 @@ static int vpn_disconnect(struct vpn_provider *provider)
 static int vpn_remove(struct vpn_provider *provider)
 {
 	struct vpn_data *data;
+	struct vpn_driver_data *driver_data;
+	const char *name;
+	int err = 0;
 
 	data = vpn_provider_get_data(provider);
+	name = vpn_provider_get_driver_name(provider);
+
 	if (!data)
-		return 0;
+		goto call_remove;
 
 	if (data->watch != 0) {
 		vpn_provider_unref(provider);
@@ -568,7 +581,20 @@ static int vpn_remove(struct vpn_provider *provider)
 
 	g_usleep(G_USEC_PER_SEC);
 	stop_vpn(provider);
-	return 0;
+
+call_remove:
+	if (!name)
+		return 0;
+
+	driver_data = g_hash_table_lookup(driver_hash, name);
+
+	if (driver_data && driver_data->vpn_driver->remove)
+		err = driver_data->vpn_driver->remove(provider);
+
+	if (err)
+		DBG("%p vpn_driver->remove() returned %d", provider, err);
+
+	return err;
 }
 
 static int vpn_save(struct vpn_provider *provider, GKeyFile *keyfile)
@@ -581,6 +607,26 @@ static int vpn_save(struct vpn_provider *provider, GKeyFile *keyfile)
 	if (vpn_driver_data &&
 			vpn_driver_data->vpn_driver->save)
 		return vpn_driver_data->vpn_driver->save(provider, keyfile);
+
+	return 0;
+}
+
+static int vpn_route_env_parse(struct vpn_provider *provider, const char *key,
+			int *family, unsigned long *idx,
+			enum vpn_provider_route_type *type)
+{
+	struct vpn_driver_data *vpn_driver_data = NULL;
+	const char *name = NULL;
+
+	if (!provider)
+		return -EINVAL;
+
+	name = vpn_provider_get_driver_name(provider);
+	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
+
+	if (vpn_driver_data && vpn_driver_data->vpn_driver->route_env_parse)
+		return vpn_driver_data->vpn_driver->route_env_parse(provider, key,
+			family, idx, type);
 
 	return 0;
 }
@@ -606,6 +652,7 @@ int vpn_register(const char *name, struct vpn_driver *vpn_driver,
 	data->provider_driver.remove = vpn_remove;
 	data->provider_driver.save = vpn_save;
 	data->provider_driver.set_state = vpn_set_state;
+	data->provider_driver.route_env_parse = vpn_route_env_parse;
 
 	if (!driver_hash)
 		driver_hash = g_hash_table_new_full(g_str_hash,

@@ -24,7 +24,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -111,6 +110,11 @@ void print_backtrace(const char* program_path, const char* program_exec,
 		buf[len] = '\0';
 
 		pos = strchr(buf, '\n');
+		if (!pos) {
+			connman_error("Error in backtrace format");
+			break;
+		}
+
 		*pos++ = '\0';
 
 		if (strcmp(buf, "??") == 0) {
@@ -120,6 +124,11 @@ void print_backtrace(const char* program_path, const char* program_exec,
 		}
 
 		ptr = strchr(pos, '\n');
+		if (!ptr) {
+			connman_error("Error in backtrace format");
+			break;
+		}
+
 		*ptr++ = '\0';
 
 		if (strncmp(pos, program_path, pathlen) == 0)

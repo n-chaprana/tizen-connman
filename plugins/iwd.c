@@ -55,14 +55,6 @@ static bool agent_registered;
 #define IWD_AGENT_ERROR_INTERFACE	"net.connman.iwd.Agent.Error"
 #define AGENT_PATH			"/net/connman/iwd_agent"
 
-enum iwd_device_state {
-	IWD_DEVICE_STATE_UNKNOWN,
-	IWD_DEVICE_STATE_CONNECTED,
-	IWD_DEVICE_STATE_DISCONNECTED,
-	IWD_DEVICE_STATE_CONNECTING,
-	IWD_DEVICE_STATE_DISCONNECTING,
-};
-
 struct iwd_adapter {
 	GDBusProxy *proxy;
 	char *path;
@@ -77,7 +69,6 @@ struct iwd_device {
 	char *adapter;
 	char *name;
 	char *address;
-	enum iwd_device_state state;
 	bool powered;
 	bool scanning;
 
@@ -95,38 +86,6 @@ struct iwd_network {
 	struct iwd_device *iwdd;
 	struct connman_network *network;
 };
-
-static enum iwd_device_state string2state(const char *str)
-{
-	if (!strcmp(str, "connected"))
-		return IWD_DEVICE_STATE_CONNECTED;
-	else if (!strcmp(str, "disconnected"))
-		return IWD_DEVICE_STATE_DISCONNECTED;
-	else if (!strcmp(str, "connecting"))
-		return IWD_DEVICE_STATE_CONNECTING;
-	else if (!strcmp(str, "disconnecting"))
-		return IWD_DEVICE_STATE_DISCONNECTING;
-
-	return IWD_DEVICE_STATE_UNKNOWN;
-}
-
-static const char *state2string(enum iwd_device_state state)
-{
-	switch (state) {
-	case IWD_DEVICE_STATE_CONNECTED:
-		return "connected";
-	case IWD_DEVICE_STATE_DISCONNECTED:
-		return "disconnected";
-	case IWD_DEVICE_STATE_CONNECTING:
-		return "connecting";
-	case IWD_DEVICE_STATE_DISCONNECTING:
-		return "disconnecting";
-	default:
-		break;
-	}
-
-	return "unknown";
-}
 
 static const char *proxy_get_string(GDBusProxy *proxy, const char *property)
 {
@@ -484,17 +443,53 @@ static void update_signal_strength(struct iwd_device *iwdd)
 		DBG("GetOrderedNetworks() failed");
 }
 
+static const char *security_remap(const char *security)
+{
+	if (!g_strcmp0(security, "open"))
+		return "none";
+	else if (!g_strcmp0(security, "psk"))
+		return "psk";
+	else if (!g_strcmp0(security, "8021x"))
+		return "ieee8021x";
+
+	return "unknown";
+}
+
+static char *create_identifier(const char *path, const char *security)
+{
+	char *start, *end, *identifier;
+	char *_path = g_strdup(path);
+
+	/*
+	 * _path is something like
+	 *     /0/4/5363686970686f6c5f427573696e6573735f454150_8021x
+	 */
+	start = strrchr(_path, '/');
+	start++;
+	end = strchr(start, '_');
+	*end = '\0';
+
+	/*
+	 * Create an ident which is identical to the corresponding
+	 * wpa_supplicant identifier.
+	 */
+	identifier = g_strdup_printf("%s_managed_%s", start,
+				security_remap(security));
+	g_free(_path);
+
+	return identifier;
+}
+
 static void add_network(const char *path, struct iwd_network *iwdn)
 {
 	struct iwd_device *iwdd;
-	const char *identifier;
+	char *identifier;
 
 	iwdd = g_hash_table_lookup(devices, iwdn->device);
 	if (!iwdd)
 		return;
 
-	identifier = strrchr(path, '/');
-	identifier++; /* strip leading slash as well */
+	identifier = create_identifier(path, iwdn->type);
 	iwdn->network = connman_network_create(identifier,
 					CONNMAN_NETWORK_TYPE_WIFI);
 	connman_network_set_data(iwdn->network, iwdn);
@@ -504,6 +499,7 @@ static void add_network(const char *path, struct iwd_network *iwdn)
 					strlen(iwdn->name));
 	connman_network_set_string(iwdn->network, "WiFi.Security",
 					iwdn->type);
+	connman_network_set_string(iwdn->network, "WiFi.Mode", "managed");
 
 	if (connman_device_add_network(iwdd->device, iwdn->network) < 0) {
 		connman_network_unref(iwdn->network);
@@ -514,6 +510,8 @@ static void add_network(const char *path, struct iwd_network *iwdn)
 
 	connman_network_set_available(iwdn->network, true);
 	connman_network_set_group(iwdn->network, identifier);
+
+	g_free(identifier);
 }
 
 static void remove_network(struct iwd_network *iwdn)
@@ -625,13 +623,6 @@ static void device_property_change(GDBusProxy *proxy, const char *name,
 		iwdd->name = g_strdup(name);
 
 		DBG("%p name %s", path, iwdd->name);
-	} else if (!strcmp(name, "State")) {
-		const char *state;
-
-		dbus_message_iter_get_basic(iter, &state);
-		iwdd->state = string2state(state);
-
-		DBG("%s state %s", path, state2string(iwdd->state));
 	} else if (!strcmp(name, "Powered")) {
 		dbus_bool_t powered;
 
@@ -790,13 +781,11 @@ static void create_device(GDBusProxy *proxy)
 	iwdd->adapter = g_strdup(proxy_get_string(proxy, "Adapter"));
 	iwdd->name = g_strdup(proxy_get_string(proxy, "Name"));
 	iwdd->address = g_strdup(proxy_get_string(proxy, "Address"));
-	iwdd->state = string2state(proxy_get_string(proxy, "State"));
 	iwdd->powered = proxy_get_bool(proxy, "Powered");
 	iwdd->scanning = proxy_get_bool(proxy, "Scanning");
 
-	DBG("adapter %s name %s address %s state %s powered %d scanning %d",
+	DBG("adapter %s name %s address %s powered %d scanning %d",
 		iwdd->adapter, iwdd->name, iwdd->address,
-		state2string(iwdd->state),
 		iwdd->powered, iwdd->scanning);
 
 	g_dbus_proxy_set_property_watch(iwdd->proxy,

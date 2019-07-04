@@ -304,7 +304,7 @@ static gboolean g_io_gnutls_dispatch(GSource *source, GSourceFunc callback,
 							gpointer user_data)
 {
 	GIOGnuTLSWatch *watch = (GIOGnuTLSWatch *) source;
-	GIOFunc func = (GIOFunc) callback;
+	GIOFunc func = (GIOFunc) (void (*) (void)) callback;
 	GIOCondition condition = watch->pollfd.revents;
 
 	DBG("source %p condition %u", source, condition);
@@ -421,7 +421,7 @@ GIOChannel *g_io_channel_gnutls_new(int fd)
 
 	DBG("");
 
-	gnutls_channel = g_new(GIOGnuTLSChannel, 1);
+	gnutls_channel = g_new0(GIOGnuTLSChannel, 1);
 
 	channel = (GIOChannel *) gnutls_channel;
 
