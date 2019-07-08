@@ -1,6 +1,4 @@
 [D-BUS Service]
 Name=net.connman.vpn
 Exec=/bin/false
-User=network_fw
-Group=network_fw
 SystemdService=connman-vpn.service
