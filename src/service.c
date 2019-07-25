@@ -3496,6 +3496,9 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		connman_dbus_dict_append_basic(dict, "AssocStatusCode",
 				DBUS_TYPE_INT32, &service->assoc_status_code);
 
+		connman_dbus_dict_append_basic(dict, "Hidden",
+				DBUS_TYPE_BOOLEAN, &service->hidden_service);
+
 		break;
 #endif
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
