@@ -352,6 +352,8 @@ enum connman_service_security __connman_service_string2security(const char *str)
 		return CONNMAN_SERVICE_SECURITY_RSN;
 	if (!strcmp(str, "sae"))
 		return CONNMAN_SERVICE_SECURITY_SAE;
+	if (!strcmp(str, "owe"))
+		return CONNMAN_SERVICE_SECURITY_OWE;
 #endif
 
 	return CONNMAN_SERVICE_SECURITY_UNKNOWN;
@@ -374,6 +376,8 @@ static const char *security2string(enum connman_service_security security)
 		return "rsn";
 	case CONNMAN_SERVICE_SECURITY_SAE:
 		return "sae";
+	case CONNMAN_SERVICE_SECURITY_OWE:
+		return "owe";
 #else
 	case CONNMAN_SERVICE_SECURITY_RSN:
 		return "psk";
@@ -8212,6 +8216,9 @@ static int service_connect(struct connman_service *service)
 		switch (service->security) {
 		case CONNMAN_SERVICE_SECURITY_UNKNOWN:
 		case CONNMAN_SERVICE_SECURITY_NONE:
+#if defined TIZEN_EXT
+		case CONNMAN_SERVICE_SECURITY_OWE:
+#endif
 			break;
 		case CONNMAN_SERVICE_SECURITY_WEP:
 		case CONNMAN_SERVICE_SECURITY_PSK:
@@ -8292,6 +8299,7 @@ static int service_connect(struct connman_service *service)
 		case CONNMAN_SERVICE_SECURITY_RSN:
 #if defined TIZEN_EXT
 		case CONNMAN_SERVICE_SECURITY_SAE:
+		case CONNMAN_SERVICE_SECURITY_OWE:
 #endif
 			break;
 		case CONNMAN_SERVICE_SECURITY_8021X:
@@ -9046,6 +9054,8 @@ static enum connman_service_security convert_wifi_security(const char *security)
 #if defined TIZEN_EXT
 	else if (g_str_equal(security, "sae"))
 		return CONNMAN_SERVICE_SECURITY_SAE;
+	else if (g_str_equal(security, "owe"))
+		return CONNMAN_SERVICE_SECURITY_OWE;
 	else if (g_str_equal(security, "ft_psk") == TRUE)
 		return CONNMAN_SERVICE_SECURITY_PSK;
 	else if (g_str_equal(security, "ft_ieee8021x") == TRUE)

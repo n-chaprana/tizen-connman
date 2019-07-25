@@ -71,6 +71,7 @@ extern "C" {
 #define G_SUPPLICANT_KEYMGMT_WPS		(1 << 9)
 #if defined TIZEN_EXT
 #define G_SUPPLICANT_KEYMGMT_SAE		(1 << 10)
+#define G_SUPPLICANT_KEYMGMT_OWE		(1 << 22)
 #endif
 
 #define G_SUPPLICANT_PROTO_WPA		(1 << 0)
@@ -123,6 +124,7 @@ typedef enum {
 	G_SUPPLICANT_SECURITY_FT_PSK,
 	G_SUPPLICANT_SECURITY_FT_IEEE8021X,
 	G_SUPPLICANT_SECURITY_SAE,
+	G_SUPPLICANT_SECURITY_OWE,
 #endif
 } GSupplicantSecurity;
 

@@ -3178,6 +3178,8 @@ static GSupplicantSecurity network_security(const char *security)
 		return G_SUPPLICANT_SECURITY_FT_IEEE8021X;
 	else if (g_str_equal(security, "sae"))
 		return G_SUPPLICANT_SECURITY_SAE;
+	else if (g_str_equal(security, "owe"))
+		return G_SUPPLICANT_SECURITY_OWE;
 #endif
 
 	return G_SUPPLICANT_SECURITY_UNKNOWN;
