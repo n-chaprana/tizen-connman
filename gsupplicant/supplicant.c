@@ -103,6 +103,7 @@ static struct strvalmap keymgmt_map[] = {
 	{ "wps",		G_SUPPLICANT_KEYMGMT_WPS		},
 #if defined TIZEN_EXT
 	{ "sae",		G_SUPPLICANT_KEYMGMT_SAE		},
+	{ "owe",		G_SUPPLICANT_KEYMGMT_OWE		},
 #endif
 	{ }
 };
@@ -257,6 +258,7 @@ struct g_supplicant_bss {
 	unsigned int wps_capabilities;
 #if defined TIZEN_EXT
 	dbus_bool_t sae;
+	dbus_bool_t owe;
 #endif
 };
 
@@ -457,6 +459,8 @@ static const char *security2string(GSupplicantSecurity security)
 		return "ft_ieee8021x";
 	case G_SUPPLICANT_SECURITY_SAE:
 		return "sae";
+	case G_SUPPLICANT_SECURITY_OWE:
+		return "owe";
 #endif
 	}
 
@@ -1655,6 +1659,7 @@ const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network)
 	if (network->best_bss->security == G_SUPPLICANT_SECURITY_PSK ||
 #if defined TIZEN_EXT
 	    network->best_bss->security == G_SUPPLICANT_SECURITY_SAE ||
+	    network->best_bss->security == G_SUPPLICANT_SECURITY_OWE ||
 #endif /* TIZEN_EXT */
 	    network->best_bss->security == G_SUPPLICANT_SECURITY_IEEE8021X) {
 		unsigned int pairwise;
@@ -1684,7 +1689,8 @@ bool g_supplicant_network_get_rsn_mode(GSupplicantNetwork *network)
 		return 0;
 
 #if defined TIZEN_EXT
-	if (network->best_bss->security == G_SUPPLICANT_SECURITY_SAE)
+	if (network->best_bss->security == G_SUPPLICANT_SECURITY_SAE ||
+			network->best_bss->security == G_SUPPLICANT_SECURITY_OWE)
 		return false;
 #endif /* TIZEN_EXT */
 
@@ -2497,6 +2503,8 @@ static void bss_compute_security(struct g_supplicant_bss *bss)
 #if defined TIZEN_EXT
 	if (bss->keymgmt & G_SUPPLICANT_KEYMGMT_SAE)
 		bss->sae = TRUE;
+	if (bss->keymgmt & G_SUPPLICANT_KEYMGMT_OWE)
+		bss->owe = TRUE;
 #endif
 
 	if (bss->ieee8021x)
@@ -2512,6 +2520,8 @@ static void bss_compute_security(struct g_supplicant_bss *bss)
 #if defined TIZEN_EXT
 	else if (bss->sae)
 		bss->security = G_SUPPLICANT_SECURITY_SAE;
+	else if (bss->owe)
+		bss->security = G_SUPPLICANT_SECURITY_OWE;
 #endif
 	else if (bss->privacy)
 		bss->security = G_SUPPLICANT_SECURITY_WEP;
@@ -6174,7 +6184,8 @@ static void add_network_security_proto(DBusMessageIter *dict,
 #if defined TIZEN_EXT
 static void add_network_ieee80211w(DBusMessageIter *dict, GSupplicantSSID *ssid)
 {
-	if (ssid->security != G_SUPPLICANT_SECURITY_SAE)
+	if (ssid->security != G_SUPPLICANT_SECURITY_SAE
+			&& ssid->security != G_SUPPLICANT_SECURITY_OWE)
 		return;
 
 	supplicant_dbus_dict_append_basic(dict, "ieee80211w", DBUS_TYPE_UINT32,
@@ -6226,6 +6237,11 @@ static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
 	case G_SUPPLICANT_SECURITY_SAE:
 		key_mgmt = "SAE";
 		add_network_security_psk(dict, ssid);
+		break;
+	case G_SUPPLICANT_SECURITY_OWE:
+		key_mgmt = "OWE";
+		add_network_security_ciphers(dict, ssid);
+		add_network_security_proto(dict, ssid);
 		break;
 #endif
 	}
