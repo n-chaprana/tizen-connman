@@ -84,6 +84,7 @@ static struct {
 #if defined TIZEN_EXT
 	char **cellular_interfaces;
 	bool tizen_tv_extension;
+	bool use_gateway_timeserver;
 #endif
 } connman_settings  = {
 	.bg_scan = true,
@@ -105,6 +106,7 @@ static struct {
 #if defined TIZEN_EXT
 	.cellular_interfaces = NULL,
 	.tizen_tv_extension = false,
+	.use_gateway_timeserver = false,
 #endif
 };
 
@@ -127,6 +129,7 @@ static struct {
 #if defined TIZEN_EXT
 #define CONF_CELLULAR_INTERFACE         "NetworkCellularInterfaceList"
 #define CONF_TIZEN_TV_EXT		"TizenTVExtension"
+#define CONF_USE_GATEWAY_TIMESERVER     "UseGatewayTimeserver"
 #endif
 
 static const char *supported_options[] = {
@@ -148,6 +151,7 @@ static const char *supported_options[] = {
 #if defined TIZEN_EXT
 	CONF_CELLULAR_INTERFACE,
 	CONF_TIZEN_TV_EXT,
+	CONF_USE_GATEWAY_TIMESERVER,
 #endif
 	NULL
 };
@@ -283,6 +287,13 @@ static void check_Tizen_configuration(GKeyFile *config)
 			CONF_TIZEN_TV_EXT, &error);
 	if (!error)
 		connman_settings.tizen_tv_extension = boolean;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
+			CONF_USE_GATEWAY_TIMESERVER, &error);
+	if (!error)
+		connman_settings.use_gateway_timeserver = boolean;
 
 	g_clear_error(&error);
 }
@@ -678,6 +689,11 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_ENABLE_ONLINE_CHECK))
 		return connman_settings.enable_online_check;
+
+#if defined TIZEN_EXT
+	if (g_str_equal(key, CONF_USE_GATEWAY_TIMESERVER))
+		return connman_settings.use_gateway_timeserver;
+#endif
 
 	return false;
 }

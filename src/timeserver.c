@@ -218,6 +218,9 @@ GSList *__connman_timeserver_get_all(struct connman_service *service)
 	for (i = 0; service_ts && service_ts[i]; i++)
 		list = __connman_timeserver_add_list(list, service_ts[i]);
 
+#if defined TIZEN_EXT
+	if (connman_setting_get_bool("UseGatewayTimeserver")) {
+#endif
 	network = __connman_service_get_network(service);
 	if (network) {
 		index = connman_network_get_index(network);
@@ -228,7 +231,9 @@ GSList *__connman_timeserver_get_all(struct connman_service *service)
 		if (service_gw)
 			list = __connman_timeserver_add_list(list, service_gw);
 	}
-
+#if defined TIZEN_EXT
+	}
+#endif
 	/* Then add Global Timeservers to the list */
 	timeservers = load_timeservers();
 
