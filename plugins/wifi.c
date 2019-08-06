@@ -1989,6 +1989,9 @@ static void service_state_changed(struct connman_service *service,
 		break;
 	}
 }
+
+static void scan_callback_hidden(int result,
+			GSupplicantInterface *interface, void *user_data);
 #endif
 
 static void scan_callback(int result, GSupplicantInterface *interface,
@@ -2050,7 +2053,7 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 		wifi->allow_full_scan = FALSE;
 
 		ret = g_supplicant_interface_scan(wifi->interface, NULL,
-							scan_callback, device);
+							scan_callback_hidden, device);
 		if (ret == 0)
 			return;
 
