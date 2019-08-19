@@ -1,7 +1,6 @@
 [Unit]
 Description=Connection service
 After=net-config.service
-DefaultDependencies=no
 
 [Service]
 Type=dbus
