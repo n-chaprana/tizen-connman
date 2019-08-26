@@ -1529,6 +1529,35 @@ static void check_p2p_technology(void)
 	}
 }
 
+struct last_connected {
+	GTimeVal modified;
+	gchar *ssid;
+	int freq;
+};
+
+static gint sort_entry(gconstpointer a, gconstpointer b, gpointer user_data)
+{
+	GTimeVal *aval = (GTimeVal *)a;
+	GTimeVal *bval = (GTimeVal *)b;
+
+	/* Note that the sort order is descending */
+	if (aval->tv_sec < bval->tv_sec)
+		return 1;
+
+	if (aval->tv_sec > bval->tv_sec)
+		return -1;
+
+	return 0;
+}
+
+static void free_entry(gpointer data)
+{
+	struct last_connected *entry = data;
+
+	g_free(entry->ssid);
+	g_free(entry);
+}
+
 static void wifi_remove(struct connman_device *device)
 {
 	struct wifi_data *wifi = connman_device_get_data(device);
@@ -1721,7 +1750,16 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 	int i, ret;
 	bool value;
 	int num_ssids = 0, add_param_failed = 0;
+#if defined TIZEN_EXT
+	GSequenceIter *iter;
+	GSequence *latest_list;
+	struct last_connected *entry;
+	GTimeVal modified;
 
+	latest_list = g_sequence_new(free_entry);
+	if (!latest_list)
+		goto out;
+#endif
 	services = connman_storage_get_services();
 	for (i = 0; services && services[i]; i++) {
 		if (strncmp(services[i], "wifi_", 5) != 0)
@@ -1752,6 +1790,15 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 			g_key_file_free(keyfile);
 			continue;
 		}
+
+		gchar *str = g_key_file_get_string(keyfile,
+					services[i], "Modified", NULL);
+		if (!str) {
+			g_key_file_free(keyfile);
+			continue;
+		}
+		g_time_val_from_iso8601(str, &modified);
+		g_free(str);
 #endif
 
 		ssid = g_key_file_get_string(keyfile,
@@ -1760,6 +1807,22 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 		name = g_key_file_get_string(keyfile, services[i], "Name",
 								NULL);
 
+#if defined TIZEN_EXT
+		entry = g_try_new(struct last_connected, 1);
+		if (!entry) {
+			g_sequence_free(latest_list);
+			g_free(ssid);
+			g_free(name);
+			g_key_file_free(keyfile);
+			goto out;
+		}
+
+		entry->modified = modified;
+		entry->ssid = ssid;
+
+		g_sequence_insert_sorted(latest_list, entry,
+				sort_entry, NULL);
+#else
 		ret = add_scan_param(ssid, NULL, 0, 0, scan_data, 0, name);
 		if (ret < 0)
 			add_param_failed++;
@@ -1767,10 +1830,30 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 			num_ssids++;
 
 		g_free(ssid);
+#endif
 		g_free(name);
 		g_key_file_free(keyfile);
 	}
 
+#if defined TIZEN_EXT
+	gint length = g_sequence_get_length(latest_list);
+	iter = g_sequence_get_begin_iter(latest_list);
+
+	for (i = 0; i < length; i++) {
+		entry = g_sequence_get(iter);
+
+		ret = add_scan_param(entry->ssid, NULL, 0, 0, scan_data, 0, entry->ssid);
+		if (ret < 0)
+			add_param_failed++;
+		else if (ret > 0)
+			num_ssids++;
+
+		iter = g_sequence_iter_next(iter);
+	}
+
+	g_sequence_free(latest_list);
+out:
+#endif
 	/*
 	 * Check if there are any hidden AP that needs to be provisioned.
 	 */
@@ -2379,35 +2462,6 @@ static int wifi_disable(struct connman_device *device)
 		return ret;
 
 	return -EINPROGRESS;
-}
-
-struct last_connected {
-	GTimeVal modified;
-	gchar *ssid;
-	int freq;
-};
-
-static gint sort_entry(gconstpointer a, gconstpointer b, gpointer user_data)
-{
-	GTimeVal *aval = (GTimeVal *)a;
-	GTimeVal *bval = (GTimeVal *)b;
-
-	/* Note that the sort order is descending */
-	if (aval->tv_sec < bval->tv_sec)
-		return 1;
-
-	if (aval->tv_sec > bval->tv_sec)
-		return -1;
-
-	return 0;
-}
-
-static void free_entry(gpointer data)
-{
-	struct last_connected *entry = data;
-
-	g_free(entry->ssid);
-	g_free(entry);
 }
 
 static int get_latest_connections(int max_ssids,
