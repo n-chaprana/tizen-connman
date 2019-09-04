@@ -172,6 +172,11 @@ struct connman_service {
 	enum connman_dnsconfig_method dns_config_method_ipv4;
 	enum connman_dnsconfig_method dns_config_method_ipv6;
 #endif
+#if defined TIZEN_EXT
+	char *connector;
+	char *c_sign_key;
+	char *net_access_key;
+#endif
 };
 
 static bool allow_property_changed(struct connman_service *service);
@@ -350,6 +355,8 @@ enum connman_service_security __connman_service_string2security(const char *str)
 		return CONNMAN_SERVICE_SECURITY_SAE;
 	if (!strcmp(str, "owe"))
 		return CONNMAN_SERVICE_SECURITY_OWE;
+	if (!strcmp(str, "dpp"))
+		return CONNMAN_SERVICE_SECURITY_DPP;
 #endif
 
 	return CONNMAN_SERVICE_SECURITY_UNKNOWN;
@@ -374,6 +381,8 @@ static const char *security2string(enum connman_service_security security)
 		return "sae";
 	case CONNMAN_SERVICE_SECURITY_OWE:
 		return "owe";
+	case CONNMAN_SERVICE_SECURITY_DPP:
+		return "dpp";
 #else
 	case CONNMAN_SERVICE_SECURITY_RSN:
 		return "psk";
@@ -812,6 +821,29 @@ static int service_load(struct connman_service *service)
 		}
 	}
 #endif
+#if defined TIZEN_EXT
+	if (service->type == CONNMAN_SERVICE_TYPE_WIFI &&
+			service->security == CONNMAN_SERVICE_SECURITY_DPP) {
+		str = g_key_file_get_string(keyfile,
+				service->identifier, "Connector", NULL);
+		if (str != NULL) {
+			g_free(service->connector);
+			service->connector = str;
+		}
+		str = g_key_file_get_string(keyfile,
+				service->identifier, "CSignKey", NULL);
+		if (str != NULL) {
+			g_free(service->c_sign_key);
+			service->c_sign_key = str;
+		}
+		str = g_key_file_get_string(keyfile,
+				service->identifier, "NetAccessKey", NULL);
+		if (str != NULL) {
+			g_free(service->net_access_key);
+			service->net_access_key = str;
+		}
+	}
+#endif
 
 done:
 	g_key_file_free(keyfile);
@@ -1086,6 +1118,29 @@ static int service_save(struct connman_service *service)
 		else
 			g_key_file_remove_key(keyfile, service->identifier,
 					"PrivateKeyPassphrase", NULL);
+	}
+	if (service->type == CONNMAN_SERVICE_TYPE_WIFI &&
+			service->security == CONNMAN_SERVICE_SECURITY_DPP) {
+		if (service->connector != NULL && strlen(service->connector) > 0)
+			g_key_file_set_string(keyfile, service->identifier,
+					"Connector", service->connector);
+		else
+			g_key_file_remove_key(keyfile, service->identifier,
+					"Connector", NULL);
+
+		if (service->c_sign_key != NULL && strlen(service->c_sign_key) > 0)
+			g_key_file_set_string(keyfile, service->identifier,
+					"CSignKey", service->c_sign_key);
+		else
+			g_key_file_remove_key(keyfile, service->identifier,
+					"CSignKey", NULL);
+
+		if (service->net_access_key != NULL && strlen(service->net_access_key) > 0)
+			g_key_file_set_string(keyfile, service->identifier,
+					"NetAccessKey", service->net_access_key);
+		else
+			g_key_file_remove_key(keyfile, service->identifier,
+					"NetAccessKey", NULL);
 	}
 #endif
 
@@ -4204,6 +4259,7 @@ int __connman_service_check_passphrase(enum connman_service_security security,
 	case CONNMAN_SERVICE_SECURITY_8021X:
 #if defined TIZEN_EXT
 	case CONNMAN_SERVICE_SECURITY_OWE:
+	case CONNMAN_SERVICE_SECURITY_DPP:
 #endif
 		break;
 	}
@@ -4224,6 +4280,9 @@ int __connman_service_set_passphrase(struct connman_service *service,
 		return -EINVAL;
 
 #if defined TIZEN_EXT
+	if (service->immutable &&
+			service->security != CONNMAN_SERVICE_SECURITY_DPP)
+		return -EINVAL;
 	/* The encrypted passphrase is used here
 	 * and validation is done by net-config before being encrypted.
 	 */
@@ -5711,6 +5770,17 @@ static void __connman_service_cleanup_network_8021x(struct connman_service *serv
 	connman_network_set_string(service->network, "WiFi.Phase2", NULL);
 	connman_network_set_string(service->network, "WiFi.AnonymousIdentity", NULL);
 }
+static void __connman_service_cleanup_network_dpp(struct connman_service *service)
+{
+	if (service == NULL)
+		return;
+
+	DBG("service %p ", service);
+
+	connman_network_set_string(service->network, "WiFi.Connector", NULL);
+	connman_network_set_string(service->network, "WiFi.CSignKey", NULL);
+	connman_network_set_string(service->network, "WiFi.NetAccessKey", NULL);
+}
 #endif
 
 bool __connman_service_remove(struct connman_service *service)
@@ -5784,6 +5854,16 @@ bool __connman_service_remove(struct connman_service *service)
 	g_strfreev(service->nameservers_config);
 	service->nameservers_config = NULL;
 
+	g_free(service->connector);
+	service->connector = NULL;
+
+	g_free(service->c_sign_key);
+	service->c_sign_key = NULL;
+
+	g_free(service->net_access_key);
+	service->net_access_key = NULL;
+
+	__connman_service_cleanup_network_dpp(service);
 #endif
 
 	service->error = CONNMAN_SERVICE_ERROR_UNKNOWN;
@@ -6282,6 +6362,11 @@ static void service_free(gpointer user_data)
 	g_free(service->phase2);
 	g_free(service->config_file);
 	g_free(service->config_entry);
+#if defined TIZEN_EXT
+	g_free(service->connector);
+	g_free(service->c_sign_key);
+	g_free(service->net_access_key);
+#endif
 
 	if (service->stats.timer)
 		g_timer_destroy(service->stats.timer);
@@ -6855,6 +6940,19 @@ void __connman_service_set_string(struct connman_service *service,
 		service->phase2 = g_strdup(value);
 	} else if (g_str_equal(key, "Passphrase"))
 		__connman_service_set_passphrase(service, value);
+#if defined TIZEN_EXT
+	 else if (g_str_equal(key, "Connector")) {
+		g_free(service->connector);
+		service->connector = g_strdup(value);
+	 }	else if (g_str_equal(key, "CSignKey")) {
+		g_free(service->c_sign_key);
+		service->c_sign_key = g_strdup(value);
+	 }	else if (g_str_equal(key, "NetAccessKey")) {
+		g_free(service->net_access_key);
+		service->net_access_key = g_strdup(value);
+	} else
+		DBG("Unknown key: %s", key);
+#endif
 }
 
 void __connman_service_set_search_domains(struct connman_service *service,
@@ -8064,6 +8162,29 @@ static void prepare_8021x(struct connman_service *service)
 							service->phase1);
 #endif
 }
+#if defined TIZEN_EXT
+
+static bool has_valid_configuration_object(struct connman_service *service)
+{
+	return service->connector && service->c_sign_key && service->net_access_key;
+}
+
+static void prepare_dpp(struct connman_service *service)
+{
+	DBG("prepare dpp");
+	if (service->connector)
+		connman_network_set_string(service->network, "WiFi.Connector",
+								service->connector);
+
+	if (service->c_sign_key)
+		connman_network_set_string(service->network, "WiFi.CSignKey",
+							service->c_sign_key);
+
+	if (service->net_access_key)
+		connman_network_set_string(service->network, "WiFi.NetAccessKey",
+							service->net_access_key);
+}
+#endif
 
 static int service_connect(struct connman_service *service)
 {
@@ -8142,6 +8263,13 @@ static int service_connect(struct connman_service *service)
 			}
 			break;
 
+#if defined TIZEN_EXT
+		case CONNMAN_SERVICE_SECURITY_DPP:
+			if (has_valid_configuration_object(service) &&
+					!service->network)
+				return -EINVAL;
+			break;
+#endif
 		case CONNMAN_SERVICE_SECURITY_8021X:
 			if (!service->eap) {
 				connman_warn("EAP type has not been found. "
@@ -8206,6 +8334,9 @@ static int service_connect(struct connman_service *service)
 #if defined TIZEN_EXT
 		case CONNMAN_SERVICE_SECURITY_SAE:
 		case CONNMAN_SERVICE_SECURITY_OWE:
+			break;
+		case CONNMAN_SERVICE_SECURITY_DPP:
+			prepare_dpp(service);
 #endif
 			break;
 		case CONNMAN_SERVICE_SECURITY_8021X:
@@ -8902,6 +9033,8 @@ static enum connman_service_security convert_wifi_security(const char *security)
 		return CONNMAN_SERVICE_SECURITY_SAE;
 	else if (g_str_equal(security, "owe"))
 		return CONNMAN_SERVICE_SECURITY_OWE;
+	else if (g_str_equal(security, "dpp"))
+		return CONNMAN_SERVICE_SECURITY_DPP;
 	else if (g_str_equal(security, "ft_psk") == TRUE)
 		return CONNMAN_SERVICE_SECURITY_PSK;
 	else if (g_str_equal(security, "ft_ieee8021x") == TRUE)
@@ -9122,6 +9255,15 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 		if (service->phase2 != NULL)
 			connman_network_set_string(service->network, "WiFi.Phase2",
 								service->phase2);
+		if (service->eap != NULL)
+			connman_network_set_string(service->network, "WiFi.Connector",
+								service->connector);
+		if (service->identity != NULL)
+			connman_network_set_string(service->network, "WiFi.CSignKey",
+								service->c_sign_key);
+		if (service->phase2 != NULL)
+			connman_network_set_string(service->network, "WiFi.NetAccessKey",
+								service->net_access_key);
 #endif
 	}
 

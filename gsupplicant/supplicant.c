@@ -104,6 +104,7 @@ static struct strvalmap keymgmt_map[] = {
 #if defined TIZEN_EXT
 	{ "sae",		G_SUPPLICANT_KEYMGMT_SAE		},
 	{ "owe",		G_SUPPLICANT_KEYMGMT_OWE		},
+	{ "dpp",		G_SUPPLICANT_KEYMGMT_DPP		},
 #endif
 	{ }
 };
@@ -172,6 +173,11 @@ struct added_network_information {
 	GSupplicantSecurity security;
 	char * passphrase;
 	char * private_passphrase;
+#if defined TIZEN_EXT
+	char *connector;
+	char *c_sign_key;
+	char *net_access_key;
+#endif
 };
 
 #if defined TIZEN_EXT_WIFI_MESH
@@ -259,6 +265,7 @@ struct g_supplicant_bss {
 #if defined TIZEN_EXT
 	dbus_bool_t sae;
 	dbus_bool_t owe;
+	dbus_bool_t dpp;
 #endif
 };
 
@@ -461,6 +468,8 @@ static const char *security2string(GSupplicantSecurity security)
 		return "sae";
 	case G_SUPPLICANT_SECURITY_OWE:
 		return "owe";
+	case G_SUPPLICANT_SECURITY_DPP:
+		return "dpp";
 #endif
 	}
 
@@ -524,6 +533,23 @@ static bool compare_network_parameters(GSupplicantInterface *interface,
 		return FALSE;
 	}
 
+#if defined TIZEN_EXT
+	if (interface->network_info.connector &&
+			g_strcmp0(interface->network_info.connector,
+				ssid->connector) != 0) {
+		return FALSE;
+	}
+	if (interface->network_info.c_sign_key &&
+			g_strcmp0(interface->network_info.c_sign_key,
+				ssid->c_sign_key) != 0) {
+		return FALSE;
+	}
+	if (interface->network_info.net_access_key &&
+			g_strcmp0(interface->network_info.net_access_key,
+				ssid->net_access_key) != 0) {
+		return FALSE;
+	}
+#endif
 	return TRUE;
 }
 
@@ -532,9 +558,19 @@ static void remove_network_information(GSupplicantInterface * interface)
 	g_free(interface->network_info.ssid);
 	g_free(interface->network_info.passphrase);
 	g_free(interface->network_info.private_passphrase);
+#if defined TIZEN_EXT
+	g_free(interface->network_info.connector);
+	g_free(interface->network_info.c_sign_key);
+	g_free(interface->network_info.net_access_key);
+#endif
 	interface->network_info.ssid = NULL;
 	interface->network_info.passphrase = NULL;
 	interface->network_info.private_passphrase = NULL;
+#if defined TIZEN_EXT
+	interface->network_info.connector = NULL;
+	interface->network_info.c_sign_key = NULL;
+	interface->network_info.net_access_key = NULL;
+#endif
 }
 
 static int store_network_information(GSupplicantInterface * interface,
@@ -1686,6 +1722,7 @@ const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network)
 #if defined TIZEN_EXT
 	    network->best_bss->security == G_SUPPLICANT_SECURITY_SAE ||
 	    network->best_bss->security == G_SUPPLICANT_SECURITY_OWE ||
+	    network->best_bss->security == G_SUPPLICANT_SECURITY_DPP ||
 #endif /* TIZEN_EXT */
 	    network->best_bss->security == G_SUPPLICANT_SECURITY_IEEE8021X) {
 		unsigned int pairwise;
@@ -1716,7 +1753,8 @@ bool g_supplicant_network_get_rsn_mode(GSupplicantNetwork *network)
 
 #if defined TIZEN_EXT
 	if (network->best_bss->security == G_SUPPLICANT_SECURITY_SAE ||
-			network->best_bss->security == G_SUPPLICANT_SECURITY_OWE)
+			network->best_bss->security == G_SUPPLICANT_SECURITY_OWE ||
+			network->best_bss->security == G_SUPPLICANT_SECURITY_DPP)
 		return false;
 #endif /* TIZEN_EXT */
 
@@ -2541,6 +2579,8 @@ static void bss_compute_security(struct g_supplicant_bss *bss)
 		bss->sae = TRUE;
 	if (bss->keymgmt & G_SUPPLICANT_KEYMGMT_OWE)
 		bss->owe = TRUE;
+	if (bss->keymgmt & G_SUPPLICANT_KEYMGMT_DPP)
+		bss->dpp = TRUE;
 #endif
 
 	if (bss->ieee8021x)
@@ -2556,6 +2596,8 @@ static void bss_compute_security(struct g_supplicant_bss *bss)
 		bss->security = G_SUPPLICANT_SECURITY_SAE;
 	else if (bss->owe)
 		bss->security = G_SUPPLICANT_SECURITY_OWE;
+	else if (bss->dpp)
+		bss->security = G_SUPPLICANT_SECURITY_DPP;
 #endif
 	else if (bss->privacy)
 		bss->security = G_SUPPLICANT_SECURITY_WEP;
@@ -5687,6 +5729,9 @@ static void interface_select_network_result(const char *error,
 #if defined TIZEN_EXT
 	g_free(data->ssid->ssid);
 	g_free((char *)data->ssid->passphrase);
+	g_free((char *)data->ssid->connector);
+	g_free((char *)data->ssid->c_sign_key);
+	g_free((char *)data->ssid->net_access_key);
 #endif
 	g_free(data->ssid);
 	dbus_free(data);
@@ -5776,6 +5821,9 @@ error:
 #if defined TIZEN_EXT
 	g_free(data->ssid->ssid);
 	g_free((char *)data->ssid->passphrase);
+	g_free((char *)data->ssid->connector);
+	g_free((char *)data->ssid->c_sign_key);
+	g_free((char *)data->ssid->net_access_key);
 #endif
 	g_free(data->ssid);
 	g_free(data);
@@ -6240,12 +6288,77 @@ static void add_network_security_proto(DBusMessageIter *dict,
 static void add_network_ieee80211w(DBusMessageIter *dict, GSupplicantSSID *ssid)
 {
 	if (ssid->security != G_SUPPLICANT_SECURITY_SAE
-			&& ssid->security != G_SUPPLICANT_SECURITY_OWE)
+			&& ssid->security != G_SUPPLICANT_SECURITY_OWE
+			&& ssid->security != G_SUPPLICANT_SECURITY_DPP)
 		return;
 
 	supplicant_dbus_dict_append_basic(dict, "ieee80211w", DBUS_TYPE_UINT32,
 					  &ssid->ieee80211w);
 }
+
+static void add_network_security_connector(DBusMessageIter *dict, GSupplicantSSID *ssid)
+{
+	if (ssid->connector && strlen(ssid->connector) > 0) {
+		const char *key = "dpp_connector";
+
+		supplicant_dbus_dict_append_basic(dict,
+				key, DBUS_TYPE_STRING,
+				&ssid->connector);
+	}
+}
+
+static size_t convert_hexstr_to_bin(const char *hex_str, unsigned char **bin)
+{
+	unsigned char *bin_res = NULL;
+	unsigned int i, j, hex;
+	size_t hex_str_len;
+
+	if (!hex_str || strlen(hex_str) == 0)
+		return 0;
+
+	hex_str_len = strlen(hex_str);
+	bin_res = g_try_malloc0(hex_str_len / 2);
+	if (!bin_res)
+		return 0;
+
+	j = 0;
+	for (i = 0; i < hex_str_len; i+=2) {
+		sscanf(hex_str + i, "%02x", &hex);
+		bin_res[j++] = hex;
+	}
+
+	*bin = bin_res;
+	return hex_str_len / 2;
+}
+
+static void add_network_security_c_sign_key(DBusMessageIter *dict, GSupplicantSSID *ssid)
+{
+	if (ssid->c_sign_key && strlen(ssid->c_sign_key) > 0) {
+		const char *key = "dpp_csign";
+		unsigned char *bin_csign = NULL;
+		size_t bin_csign_len = convert_hexstr_to_bin(ssid->c_sign_key, &bin_csign);
+		if  (bin_csign_len != 0)
+			supplicant_dbus_dict_append_fixed_array(dict,
+					key, DBUS_TYPE_BYTE,
+					&bin_csign, bin_csign_len);
+		g_free(bin_csign);
+	}
+}
+
+static void add_network_security_net_access_key(DBusMessageIter *dict, GSupplicantSSID *ssid)
+{
+	if (ssid->net_access_key && strlen(ssid->net_access_key) > 0) {
+		const char *key = "dpp_netaccesskey";
+		unsigned char *bin_netaccesskey = NULL;
+		size_t bin_netaccesskey_len = convert_hexstr_to_bin(ssid->net_access_key, &bin_netaccesskey);
+		if  (bin_netaccesskey_len != 0)
+			supplicant_dbus_dict_append_fixed_array(dict,
+					key, DBUS_TYPE_BYTE,
+					&bin_netaccesskey, bin_netaccesskey_len);
+		g_free(bin_netaccesskey);
+	}
+}
+
 #endif
 
 static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
@@ -6297,6 +6410,12 @@ static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
 		key_mgmt = "OWE";
 		add_network_security_ciphers(dict, ssid);
 		add_network_security_proto(dict, ssid);
+		break;
+	case G_SUPPLICANT_SECURITY_DPP:
+		key_mgmt = "DPP";
+		add_network_security_connector(dict, ssid);
+		add_network_security_c_sign_key(dict, ssid);
+		add_network_security_net_access_key(dict, ssid);
 		break;
 #endif
 	}
@@ -6557,6 +6676,9 @@ done:
 		g_free(data->path);
 		g_free(data->ssid->ssid);
 		g_free((char *)data->ssid->passphrase);
+		g_free((char *)data->ssid->connector);
+		g_free((char *)data->ssid->c_sign_key);
+		g_free((char *)data->ssid->net_access_key);
 		g_free(data->ssid);
 		dbus_free(data);
 	}
@@ -6612,6 +6734,146 @@ static int send_decryption_request(const char *passphrase,
 	SUPPLICANT_DBG("Decryption request succeeded");
 
 	return 0;
+}
+
+static void decrypt_conf_obj_reply(DBusPendingCall *call,
+						void *user_data)
+{
+	DBusMessage *reply;
+	DBusError error;
+	DBusMessageIter iter, dict;
+	char *out_data;
+	int ret;
+	struct interface_connect_data *data = user_data;
+
+	reply = dbus_pending_call_steal_reply(call);
+
+	dbus_error_init(&error);
+	if (dbus_set_error_from_message(&error, reply)) {
+		SUPPLICANT_DBG("decryption_conf_obj_reply() %s %s", error.name, error.message);
+		dbus_error_free(&error);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	if (dbus_message_iter_init(reply, &iter) == FALSE) {
+		SUPPLICANT_DBG("dbus_message_iter_init() failed");
+		ret = -EINVAL;
+		goto done;
+	}
+
+	dbus_message_iter_recurse(&iter, &dict);
+
+	while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+		DBusMessageIter entry, value;
+		const char *key;
+
+		dbus_message_iter_recurse(&dict, &entry);
+		dbus_message_iter_get_basic(&entry, &key);
+		dbus_message_iter_next(&entry);
+		dbus_message_iter_recurse(&entry, &value);
+		if (dbus_message_iter_get_arg_type(&value) == DBUS_TYPE_STRING) {
+			if (g_strcmp0(key, "connector") == 0) {
+				dbus_message_iter_get_basic(&value, &out_data);
+				data->ssid->connector = g_strdup((const gchar *)out_data);
+				SUPPLICANT_DBG("connector %s", data->ssid->connector);
+			} else if (g_strcmp0(key, "c_sign_key") == 0) {
+				dbus_message_iter_get_basic(&value, &out_data);
+				data->ssid->c_sign_key = g_strdup((const gchar *)out_data);
+				SUPPLICANT_DBG("c_sign_key %s", data->ssid->c_sign_key);
+			} else if (g_strcmp0(key, "net_access_key") == 0) {
+				dbus_message_iter_get_basic(&value, &out_data);
+				data->ssid->net_access_key = g_strdup((const gchar *)out_data);
+				SUPPLICANT_DBG("net_access_key %s", data->ssid->net_access_key);
+			}
+		}
+		dbus_message_iter_next(&dict);
+	}
+
+	ret = supplicant_dbus_method_call(data->interface->path,
+		SUPPLICANT_INTERFACE ".Interface", "AddNetwork",
+		interface_add_network_params,
+		interface_add_network_result, data,
+		data->interface);
+
+done:
+	if (ret < 0) {
+		SUPPLICANT_DBG("AddNetwork failed %d", ret);
+		callback_assoc_failed(decrypt_request_data.data->user_data);
+		g_free(data->path);
+		g_free(data->ssid->ssid);
+		g_free((char *)data->ssid->connector);
+		g_free((char *)data->ssid->c_sign_key);
+		g_free((char *)data->ssid->net_access_key);
+		g_free(data->ssid);
+		dbus_free(data);
+	}
+
+	dbus_message_unref(reply);
+	dbus_pending_call_unref(call);
+
+	decrypt_request_data.pending_call = NULL;
+	decrypt_request_data.data = NULL;
+}
+
+static int send_decryption_conf_obj_request(GSupplicantSSID *ssid,
+			struct interface_connect_data *data)
+{
+	DBusMessage *msg = NULL;
+	DBusPendingCall *call;
+
+	SUPPLICANT_DBG("Decryption configuration object request");
+
+	if (!ssid) {
+		SUPPLICANT_DBG("Invalid parameter");
+		return -EINVAL;
+	}
+
+	if (!connection)
+		return -EINVAL;
+
+	msg = dbus_message_new_method_call(NETCONFIG_SERVICE, NETCONFIG_WIFI_PATH,
+			NETCONFIG_WIFI_INTERFACE, "DecryptConfObj");
+	if (!msg)
+		return -EINVAL;
+
+	dbus_message_append_args(msg, DBUS_TYPE_STRING, &ssid->connector,
+							DBUS_TYPE_INVALID);
+	dbus_message_append_args(msg, DBUS_TYPE_STRING, &ssid->c_sign_key,
+							DBUS_TYPE_INVALID);
+	dbus_message_append_args(msg, DBUS_TYPE_STRING, &ssid->net_access_key,
+							DBUS_TYPE_INVALID);
+
+	if (!dbus_connection_send_with_reply(connection, msg,
+				&call, DBUS_TIMEOUT_USE_DEFAULT)) {
+		dbus_message_unref(msg);
+		return -EIO;
+	}
+
+	if (!call) {
+		dbus_message_unref(msg);
+		return -EIO;
+	}
+
+	decrypt_request_data.pending_call = call;
+	decrypt_request_data.data = data;
+
+	dbus_pending_call_set_notify(call, decrypt_conf_obj_reply, data, NULL);
+	dbus_message_unref(msg);
+
+	SUPPLICANT_DBG("Decrypt Conf Obj request succeeded");
+
+	return 0;
+}
+
+static bool is_valid_config_object(GSupplicantSSID *ssid)
+{
+	return ((ssid->connector &&
+			g_strcmp0(ssid->connector, "") != 0) &&
+			(ssid->c_sign_key &&
+			g_strcmp0(ssid->c_sign_key, "") != 0) &&
+			(ssid->net_access_key &&
+			g_strcmp0(ssid->net_access_key, "") != 0));
 }
 #endif
 
@@ -6708,6 +6970,11 @@ int g_supplicant_interface_connect(GSupplicantInterface *interface,
 				ret = send_decryption_request(ssid->passphrase, data);
 				if (ret < 0)
 					SUPPLICANT_DBG("Decryption request failed %d", ret);
+			} else if (is_valid_config_object(ssid)) {
+				ret = send_decryption_conf_obj_request(ssid, data);
+				if (ret < 0)
+					SUPPLICANT_DBG("Decryption Conf Obj request failed %d", ret);
+
 			} else
 #endif
 			ret = supplicant_dbus_method_call(interface->path,
@@ -6769,6 +7036,14 @@ static void network_remove_result(const char *error,
 			ret = send_decryption_request(data->ssid->passphrase, connect_data);
 			if (ret < 0) {
 				SUPPLICANT_DBG("Decryption request failed %d", ret);
+				g_free(connect_data->ssid);
+				g_free(connect_data->path);
+				dbus_free(connect_data);
+			}
+		} else if (is_valid_config_object(data->ssid)) {
+			ret = send_decryption_conf_obj_request(data->ssid, connect_data);
+			if (ret < 0) {
+				SUPPLICANT_DBG("Decryption Conf Obj request failed %d", ret);
 				g_free(connect_data->ssid);
 				g_free(connect_data->path);
 				dbus_free(connect_data);

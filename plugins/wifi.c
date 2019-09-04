@@ -3387,6 +3387,8 @@ static GSupplicantSecurity network_security(const char *security)
 		return G_SUPPLICANT_SECURITY_SAE;
 	else if (g_str_equal(security, "owe"))
 		return G_SUPPLICANT_SECURITY_OWE;
+	else if (g_str_equal(security, "dpp"))
+		return G_SUPPLICANT_SECURITY_DPP;
 #endif
 
 	return G_SUPPLICANT_SECURITY_UNKNOWN;
@@ -3480,6 +3482,14 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 
 	ssid->use_wps = connman_network_get_bool(network, "WiFi.UseWPS");
 	ssid->pin_wps = connman_network_get_string(network, "WiFi.PinWPS");
+#if defined TIZEN_EXT
+	ssid->connector = connman_network_get_string(network,
+							"WiFi.Connector");
+	ssid->c_sign_key = connman_network_get_string(network,
+							"WiFi.CSignKey");
+	ssid->net_access_key = connman_network_get_string(network,
+						"WiFi.NetAccessKey");
+#endif
 
 #if defined TIZEN_EXT
 	if (set_connman_bssid(CHECK_BSSID, NULL) == 6) {

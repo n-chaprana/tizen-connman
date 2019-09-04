@@ -127,6 +127,9 @@ struct connman_network {
 		GSList *bssid_list;
 		ieee80211_modes_e phy_mode;
 		connection_mode_e connection_mode;
+		char *connector;
+		char *c_sign_key;
+		char *net_access_key;
 #endif
 	} wifi;
 
@@ -2702,6 +2705,17 @@ int connman_network_set_string(struct connman_network *network,
 	} else if (g_str_equal(key, "WiFi.PinWPS")) {
 		g_free(network->wifi.pin_wps);
 		network->wifi.pin_wps = g_strdup(value);
+#if defined TIZEN_EXT
+	} else if (g_str_equal(key, "WiFi.Connector")) {
+		g_free(network->wifi.connector);
+		network->wifi.connector = g_strdup(value);
+	} else if (g_str_equal(key, "WiFi.CSignKey")) {
+		g_free(network->wifi.c_sign_key);
+		network->wifi.c_sign_key = g_strdup(value);
+	} else if (g_str_equal(key, "WiFi.NetAccessKey")) {
+		g_free(network->wifi.net_access_key);
+		network->wifi.net_access_key = g_strdup(value);
+#endif
 	} else {
 		return -EINVAL;
 	}
@@ -2767,6 +2781,14 @@ const char *connman_network_get_string(struct connman_network *network,
 		return network->wifi.phase2_auth;
 	else if (g_str_equal(key, "WiFi.PinWPS"))
 		return network->wifi.pin_wps;
+#if defined TIZEN_EXT
+	else if (g_str_equal(key, "WiFi.Connector"))
+		return network->wifi.connector;
+	else if (g_str_equal(key, "WiFi.CSignKey"))
+		return network->wifi.c_sign_key;
+	else if (g_str_equal(key, "WiFi.NetAccessKey"))
+		return network->wifi.net_access_key;
+#endif
 
 	return NULL;
 }

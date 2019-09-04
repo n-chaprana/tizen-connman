@@ -77,6 +77,11 @@ struct connman_config_service {
 	char **search_domains;
 	char **timeservers;
 	char *domain_name;
+#if defined TIZEN_EXT
+	char *connector;
+	char *c_sign_key;
+	char *net_access_key;
+#endif
 };
 
 struct connman_config {
@@ -123,6 +128,11 @@ static bool cleanup = false;
 #define SERVICE_KEY_SEARCH_DOMAINS     "SearchDomains"
 #define SERVICE_KEY_TIMESERVERS        "Timeservers"
 #define SERVICE_KEY_DOMAIN             "Domain"
+#if defined TIZEN_EXT
+#define SERVICE_KEY_CONNECTOR          "Connector"
+#define SERVICE_KEY_C_SIGN_KEY         "CSignKey"
+#define SERVICE_KEY_NET_ACCESS_KEY     "NetAccessKey"
+#endif
 
 static const char *config_possible_keys[] = {
 	CONFIG_KEY_NAME,
@@ -159,6 +169,11 @@ static const char *service_possible_keys[] = {
 	SERVICE_KEY_SEARCH_DOMAINS,
 	SERVICE_KEY_TIMESERVERS,
 	SERVICE_KEY_DOMAIN,
+#if defined TIZEN_EXT
+	SERVICE_KEY_CONNECTOR,
+	SERVICE_KEY_C_SIGN_KEY,
+	SERVICE_KEY_NET_ACCESS_KEY,
+#endif
 	NULL,
 };
 
@@ -265,6 +280,11 @@ free_only:
 	g_free(config_service->config_ident);
 	g_free(config_service->config_entry);
 	g_free(config_service->virtual_file);
+#if defined TIZEN_EXT
+	g_free(config_service->connector);
+	g_free(config_service->c_sign_key);
+	g_free(config_service->net_access_key);
+#endif
 	g_free(config_service);
 }
 
@@ -728,6 +748,29 @@ static bool load_service(GKeyFile *keyfile, const char *group,
 		g_free(service->passphrase);
 		service->passphrase = str;
 	}
+#if defined TIZEN_EXT
+
+	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_CONNECTOR,
+					NULL);
+	if (str) {
+		g_free(service->connector);
+		service->connector = str;
+	}
+
+	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_C_SIGN_KEY,
+					NULL);
+	if (str) {
+		g_free(service->c_sign_key);
+		service->c_sign_key = str;
+	}
+
+	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_NET_ACCESS_KEY,
+					NULL);
+	if (str) {
+		g_free(service->net_access_key);
+		service->net_access_key = str;
+	}
+#endif
 
 	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_SECURITY,
 			NULL);
@@ -763,6 +806,16 @@ static bool load_service(GKeyFile *keyfile, const char *group,
 
 		} else
 			service->security = CONNMAN_SERVICE_SECURITY_PSK;
+#if defined TIZEN_EXT
+	} else if (service->connector) {
+
+		if (str && security != CONNMAN_SERVICE_SECURITY_DPP)
+			connman_info("Mismatch between DPP configuration and "
+					"setting %s = %s",
+					SERVICE_KEY_SECURITY, str);
+
+		service->security = CONNMAN_SERVICE_SECURITY_DPP;
+#endif
 	} else if (str) {
 
 		if (security != CONNMAN_SERVICE_SECURITY_NONE)
@@ -1178,6 +1231,18 @@ static void provision_service_wifi(struct connman_config_service *config,
 
 	if (config->hidden)
 		__connman_service_set_hidden(service);
+
+#if defined TIZEN_EXT
+	if (config->connector)
+		__connman_service_set_string(service, "Connector",
+						config->connector);
+	if (config->c_sign_key)
+		__connman_service_set_string(service, "CSignKey",
+						config->c_sign_key);
+	if (config->net_access_key)
+		__connman_service_set_string(service, "NetAccessKey",
+						config->net_access_key);
+#endif
 }
 
 struct connect_virtual {

@@ -71,6 +71,7 @@ enum connman_service_security {
 #if defined TIZEN_EXT
 	CONNMAN_SERVICE_SECURITY_SAE     = 10,
 	CONNMAN_SERVICE_SECURITY_OWE     = 11,
+	CONNMAN_SERVICE_SECURITY_DPP     = 12,
 #endif
 };
 
