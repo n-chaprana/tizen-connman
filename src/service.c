@@ -7955,6 +7955,10 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 			connman_warn("ipconfig state %d ipconfig method %d",
 				new_state, method);
 
+#if defined TIZEN_EXT
+		if (old_state != CONNMAN_SERVICE_STATE_READY &&
+				old_state != CONNMAN_SERVICE_STATE_ONLINE)
+#endif
 		new_state = CONNMAN_SERVICE_STATE_IDLE;
 		break;
 
