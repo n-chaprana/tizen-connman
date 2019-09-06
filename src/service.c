@@ -171,8 +171,11 @@ struct connman_service {
 	 * Only for EAP-FAST
 	 */
 	char *phase1;
-#endif
-#ifdef TIZEN_EXT
+	/*
+	 * Description: To indicate that disconnection triggered by user.
+	 */
+	bool disconnection_requested;
+
 	enum connman_dnsconfig_method dns_config_method_ipv4;
 	enum connman_dnsconfig_method dns_config_method_ipv6;
 #endif
@@ -2298,6 +2301,51 @@ static void state_changed(struct connman_service *service)
 				CONNMAN_SERVICE_INTERFACE, "State",
 						DBUS_TYPE_STRING, &str);
 }
+
+#if defined TIZEN_EXT
+static void connect_reason_changed(struct connman_service *service)
+{
+	if (!service->path)
+		return;
+
+	if (!allow_property_changed(service))
+		return;
+
+	connman_dbus_property_changed_basic(service->path,
+					    CONNMAN_SERVICE_INTERFACE,
+					    "ConnectReason",
+					    DBUS_TYPE_INT32,
+					    &service->connect_reason);
+}
+
+static void disconnection_requested_changed(struct connman_service *service)
+{
+	dbus_bool_t disconnection_requested;
+
+	if (!service->path)
+		return;
+
+	if (!allow_property_changed(service))
+		return;
+
+	disconnection_requested = service->disconnection_requested;
+	connman_dbus_property_changed_basic(service->path,
+					    CONNMAN_SERVICE_INTERFACE,
+					    "DisconnectionRequested",
+					    DBUS_TYPE_BOOLEAN,
+					    &disconnection_requested);
+}
+
+void connman_service_set_disconnection_requested(struct connman_service *service,
+						 bool disconnection_requested)
+{
+	if (service == NULL)
+		return;
+
+	service->disconnection_requested = disconnection_requested;
+	disconnection_requested_changed(service);
+}
+#endif
 
 static void strength_changed(struct connman_service *service)
 {
@@ -5585,6 +5633,9 @@ static DBusMessage *connect_service(DBusConnection *conn,
 
 	/*Reset the association status code while issue connect request*/
 	service->assoc_status_code = 0;
+
+	/* Reset the disconnection_requested while issue connect request*/
+	connman_service_set_disconnection_requested(service, false);
 #endif
 
 	if (service->pending)
@@ -6413,6 +6464,7 @@ static void service_initialize(struct connman_service *service)
 
 	service->wps = false;
 #if defined TIZEN_EXT
+	service->disconnection_requested = false;
 	service->storage_reload = false;
 	/*
 	 * Description: TIZEN implements system global connection management.
@@ -8386,6 +8438,9 @@ int __connman_service_connect(struct connman_service *service,
 	DBG("service %p err %d", service, err);
 
 	service->connect_reason = reason;
+#if defined TIZEN_EXT
+	connect_reason_changed(service);
+#endif
 	if (err >= 0)
 		return 0;
 

@@ -1705,6 +1705,8 @@ int __connman_network_connect(struct connman_network *network)
 	__connman_device_disconnect(network->device);
 #if defined TIZEN_EXT
 	DBG("ConnMan, Connect Request [%s]", network->name);
+	struct connman_service *service = connman_service_lookup_from_network(network);
+	connman_service_set_disconnection_requested(service, false);
 #endif
 	err = network->driver->connect(network);
 	if (err < 0) {
@@ -1746,6 +1748,8 @@ int __connman_network_disconnect(struct connman_network *network)
 	network->connecting = false;
 #if defined TIZEN_EXT
 	DBG("ConnMan, Disconnect request");
+	struct connman_service *service = connman_service_lookup_from_network(network);
+	connman_service_set_disconnection_requested(service, true);
 #endif
 	if (network->driver->disconnect)
 		err = network->driver->disconnect(network);
