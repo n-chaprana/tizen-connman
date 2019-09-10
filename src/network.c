@@ -2243,6 +2243,9 @@ int connman_network_set_strength(struct connman_network *network,
 						uint8_t strength)
 {
 	network->strength = strength;
+#if defined TIZEN_EXT
+	__connman_service_notify_strength_changed(network);
+#endif
 
 	return 0;
 }

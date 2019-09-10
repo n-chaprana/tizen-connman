@@ -9286,6 +9286,30 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 	return service;
 }
 
+#if defined TIZEN_EXT
+void __connman_service_notify_strength_changed(struct connman_network *network)
+{
+	struct connman_service *service;
+	uint8_t strength = 0;
+
+	service = connman_service_lookup_from_network(network);
+	if (!service)
+		return;
+
+	if (!service->network)
+		return;
+
+	strength = connman_network_get_strength(service->network);
+	if (strength == service->strength)
+		return;
+
+	service->strength = strength;
+	DBG("Strength %d", strength);
+	strength_changed(service);
+	service_list_sort();
+}
+#endif
+
 void __connman_service_update_from_network(struct connman_network *network)
 {
 	bool need_sort = false;

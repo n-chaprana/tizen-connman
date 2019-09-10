@@ -3676,7 +3676,8 @@ static void set_connection_mode(struct connman_network *network,
 	connman_network_set_connection_mode(network, conn_mode);
 }
 
-static void signalpoll_callback(int result, int maxspeed, void *user_data)
+static void signalpoll_callback(int result, int maxspeed, uint8_t strength,
+				void *user_data)
 {
 	struct connman_network *network = user_data;
 
@@ -3685,8 +3686,13 @@ static void signalpoll_callback(int result, int maxspeed, void *user_data)
 		return;
 	}
 
-	DBG("maxspeed = %d", maxspeed);
+	strength += 120;
+	if (strength > 100)
+		strength = 100;
+
+	DBG("maxspeed = %d, strength = %d", maxspeed, strength);
 	if (network) {
+		connman_network_set_strength(network, strength);
 		connman_network_set_maxspeed(network, maxspeed);
 		set_connection_mode(network, maxspeed);
 	}
@@ -4091,7 +4097,7 @@ static void interface_state(GSupplicantInterface *interface)
 			if (ret < 0)
 				DBG("Fail to get max speed !!");
 			else
-				wifi->automaxspeed_timeout = g_timeout_add_seconds(30, autosignalpoll_timeout, wifi);
+				wifi->automaxspeed_timeout = g_timeout_add_seconds(10, autosignalpoll_timeout, wifi);
 		}
 
 		g_hash_table_remove_all(failed_bssids);
@@ -4112,6 +4118,7 @@ static void interface_state(GSupplicantInterface *interface)
 
 	case G_SUPPLICANT_STATE_DISCONNECTED:
 #if defined TIZEN_EXT
+		connman_network_set_strength(network, 0);
 		connman_network_set_maxspeed(network, 0);
 
 		if (wifi->automaxspeed_timeout != 0) {
