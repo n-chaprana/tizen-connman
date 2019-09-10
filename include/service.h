@@ -187,6 +187,9 @@ struct connman_service *connman_service_get_default_connection(void);
  */
 int connman_service_set_proxy(struct connman_service *service,
 					const char *proxy, gboolean active);
+
+void connman_service_set_disconnection_requested(struct connman_service *service,
+						 bool disconnection_requested);
 #endif
 
 #ifdef __cplusplus
