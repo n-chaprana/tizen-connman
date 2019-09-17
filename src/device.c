@@ -52,7 +52,7 @@ struct connman_device {
 							 * request
 							 */
 	bool powered;
-	bool scanning;
+	bool scanning[MAX_CONNMAN_SERVICE_TYPES];
 	char *name;
 	char *node;
 	char *address;
@@ -152,6 +152,33 @@ enum connman_service_type __connman_device_get_service_type(
 	return CONNMAN_SERVICE_TYPE_UNKNOWN;
 }
 
+static bool device_has_service_type(struct connman_device *device,
+				enum connman_service_type service_type)
+{
+	enum connman_service_type device_service_type =
+		__connman_device_get_service_type(device);
+
+	/*
+	 * For devices whose device_service_type is unknown we should
+	 * allow to decide whether they support specific service_type
+	 * by themself.
+	 */
+	if (device_service_type == CONNMAN_SERVICE_TYPE_UNKNOWN)
+		return true;
+
+#if defined TIZEN_EXT_WIFI_MESH
+	if (device_service_type == CONNMAN_SERVICE_TYPE_MESH)
+		return service_type != CONNMAN_SERVICE_TYPE_MESH;
+#endif
+
+	if (device_service_type == CONNMAN_SERVICE_TYPE_WIFI) {
+		return service_type == CONNMAN_SERVICE_TYPE_WIFI ||
+			service_type == CONNMAN_SERVICE_TYPE_P2P;
+	}
+
+	return service_type == device_service_type;
+}
+
 static gboolean device_pending_reset(gpointer user_data)
 {
 	struct connman_device *device = user_data;
@@ -179,7 +206,7 @@ int __connman_device_enable(struct connman_device *device)
 		return -EBUSY;
 
 	if (device->powered_pending == PENDING_ENABLE)
-		return -EALREADY;
+		return -EINPROGRESS;
 
 	if (device->powered_pending == PENDING_NONE && device->powered)
 		return -EALREADY;
@@ -230,7 +257,7 @@ int __connman_device_disable(struct connman_device *device)
 		return -EBUSY;
 
 	if (device->powered_pending == PENDING_DISABLE)
-		return -EALREADY;
+		return -EINPROGRESS;
 
 	if (device->powered_pending == PENDING_NONE && !device->powered)
 		return -EALREADY;
@@ -565,7 +592,9 @@ const char *connman_device_get_ident(struct connman_device *device)
 int connman_device_set_powered(struct connman_device *device,
 						bool powered)
 {
+	struct connman_device_scan_params params;
 	enum connman_service_type type;
+	int i;
 
 	DBG("device %p powered %d", device, powered);
 
@@ -587,11 +616,15 @@ int connman_device_set_powered(struct connman_device *device,
 
 	__connman_technology_enabled(type);
 
-	device->scanning = false;
+	for (i = 0; i < MAX_CONNMAN_SERVICE_TYPES; i++)
+		device->scanning[i] = false;
 
-	if (device->driver && device->driver->scan)
-		device->driver->scan(CONNMAN_SERVICE_TYPE_UNKNOWN, device,
-					NULL, 0, NULL, NULL, NULL, NULL);
+	if (device->driver && device->driver->scan) {
+		memset(&params, 0, sizeof(params));
+		params.type = CONNMAN_SERVICE_TYPE_UNKNOWN;
+
+		device->driver->scan(device, &params);
+	}
 
 	return 0;
 }
@@ -602,16 +635,22 @@ bool connman_device_get_powered(struct connman_device *device)
 }
 
 static int device_scan(enum connman_service_type type,
-				struct connman_device *device)
+				struct connman_device *device,
+				bool force_full_scan)
 {
+	struct connman_device_scan_params params;
+
 	if (!device->driver || !device->driver->scan)
 		return -EOPNOTSUPP;
 
 	if (!device->powered)
 		return -ENOLINK;
 
-	return device->driver->scan(type, device, NULL, 0,
-					NULL, NULL, NULL, NULL);
+	memset(&params, 0, sizeof(params));
+	params.type = type;
+	params.force_full_scan = force_full_scan;
+
+	return device->driver->scan(device, &params);
 }
 
 int __connman_device_disconnect(struct connman_device *device)
@@ -682,7 +721,8 @@ static gboolean remove_unavailable_network(gpointer key, gpointer value,
 {
 	struct connman_network *network = value;
 
-	if (connman_network_get_connected(network))
+	if (connman_network_get_connected(network) ||
+			connman_network_get_connecting(network))
 		return FALSE;
 
 	if (connman_network_get_available(network))
@@ -697,9 +737,19 @@ void __connman_device_cleanup_networks(struct connman_device *device)
 					remove_unavailable_network, NULL);
 }
 
-bool connman_device_get_scanning(struct connman_device *device)
+bool connman_device_get_scanning(struct connman_device *device,
+				enum connman_service_type type)
 {
-	return device->scanning;
+	int i;
+
+	if (type != CONNMAN_SERVICE_TYPE_UNKNOWN)
+		return device->scanning[type];
+
+	for (i = 0; i < MAX_CONNMAN_SERVICE_TYPES; i++)
+		if (device->scanning[i])
+			return true;
+
+	return false;
 }
 
 void connman_device_reset_scanning(struct connman_device *device)
@@ -723,10 +773,13 @@ int connman_device_set_scanning(struct connman_device *device,
 	if (!device->driver || !device->driver->scan)
 		return -EINVAL;
 
-	if (device->scanning == scanning)
+	if (type == CONNMAN_SERVICE_TYPE_UNKNOWN)
+		return -EINVAL;
+
+	if (device->scanning[type] == scanning)
 		return -EALREADY;
 
-	device->scanning = scanning;
+	device->scanning[type] = scanning;
 
 	if (scanning) {
 		__connman_technology_scan_started(device);
@@ -1211,7 +1264,8 @@ int __connman_device_request_mesh_specific_scan(enum connman_service_type type,
 #endif /* TIZEN_EXT_WIFI_MESH */
 #endif
 
-int __connman_device_request_scan(enum connman_service_type type)
+static int connman_device_request_scan(enum connman_service_type type,
+					bool force_full_scan)
 {
 	bool success = false;
 	int last_err = -ENOSYS;
@@ -1238,23 +1292,11 @@ int __connman_device_request_scan(enum connman_service_type type)
 
 	for (list = device_list; list; list = list->next) {
 		struct connman_device *device = list->data;
-		enum connman_service_type service_type =
-			__connman_device_get_service_type(device);
 
-		if (service_type != CONNMAN_SERVICE_TYPE_UNKNOWN) {
-			if (type == CONNMAN_SERVICE_TYPE_P2P) {
-				if (service_type != CONNMAN_SERVICE_TYPE_WIFI)
-					continue;
-#if defined TIZEN_EXT_WIFI_MESH
-			} else if (type == CONNMAN_SERVICE_TYPE_MESH) {
-				if (service_type != CONNMAN_SERVICE_TYPE_WIFI)
-					continue;
-#endif
-			} else if (service_type != type)
-				continue;
-		}
+		if (!device_has_service_type(device, type))
+			continue;
 
-		err = device_scan(type, device);
+		err = device_scan(type, device, force_full_scan);
 #if defined TIZEN_EXT
 		/* When Scan is already in progress then return Error so that
 		 * wifi-manager can block the scan-done signal to be sent to
@@ -1277,20 +1319,53 @@ int __connman_device_request_scan(enum connman_service_type type)
 	return last_err;
 }
 
+int __connman_device_request_scan(enum connman_service_type type)
+{
+	return connman_device_request_scan(type, false);
+}
+
+int __connman_device_request_scan_full(enum connman_service_type type)
+{
+	return connman_device_request_scan(type, true);
+}
+
 int __connman_device_request_hidden_scan(struct connman_device *device,
 				const char *ssid, unsigned int ssid_len,
 				const char *identity, const char *passphrase,
 				const char *security, void *user_data)
 {
+	struct connman_device_scan_params params;
+
 	DBG("device %p", device);
 
 	if (!device || !device->driver ||
 			!device->driver->scan)
 		return -EINVAL;
 
-	return device->driver->scan(CONNMAN_SERVICE_TYPE_UNKNOWN,
-					device, ssid, ssid_len, identity,
-					passphrase, security, user_data);
+	params.type = CONNMAN_SERVICE_TYPE_UNKNOWN;
+	params.ssid = ssid;
+	params.ssid_len = ssid_len;
+	params.identity = identity;
+	params.passphrase = passphrase;
+	params.security = security;
+	params.user_data = user_data;
+
+	return device->driver->scan(device, &params);
+}
+
+void __connman_device_stop_scan(enum connman_service_type type)
+{
+	GSList *list;
+
+	for (list = device_list; list; list = list->next) {
+		struct connman_device *device = list->data;
+
+		if (!device_has_service_type(device, type))
+			continue;
+
+		if (device->driver && device->driver->stop_scan)
+			device->driver->stop_scan(type, device);
+	}
 }
 
 #if defined TIZEN_EXT

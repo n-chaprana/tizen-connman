@@ -30,16 +30,18 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/signalfd.h>
-#include <sys/types.h>
-#include <sys/resource.h>
 #include <getopt.h>
 #include <sys/stat.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include <gdbus.h>
 
 #include "connman.h"
+
+#define CONF_ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]) - 1)
 
 #define DEFAULT_INPUT_REQUEST_TIMEOUT (120 * 1000)
 #define DEFAULT_BROWSER_LAUNCH_TIMEOUT (300 * 1000)
@@ -51,6 +53,11 @@ static char *default_auto_connect[] = {
 	"wifi",
 	"ethernet",
 	"cellular",
+	NULL
+};
+
+static char *default_favorite_techs[] = {
+	"ethernet",
 	NULL
 };
 
@@ -68,6 +75,7 @@ static struct {
 	bool bg_scan;
 	char **pref_timeservers;
 	unsigned int *auto_connect;
+	unsigned int *favorite_techs;
 	unsigned int *preferred_techs;
 	unsigned int *always_connected_techs;
 	char **fallback_nameservers;
@@ -75,21 +83,25 @@ static struct {
 	unsigned int timeout_browserlaunch;
 	char **blacklisted_interfaces;
 	bool allow_hostname_updates;
+	bool allow_domainname_updates;
 	bool single_tech;
 	char **tethering_technologies;
 	bool persistent_tethering_mode;
 	bool enable_6to4;
 	char *vendor_class_id;
 	bool enable_online_check;
+	bool auto_connect_roaming_services;
+	bool acd;
+	bool use_gateways_as_timeservers;
 #if defined TIZEN_EXT
 	char **cellular_interfaces;
 	bool tizen_tv_extension;
-	bool use_gateway_timeserver;
 #endif
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
 	.auto_connect = NULL,
+	.favorite_techs = NULL,
 	.preferred_techs = NULL,
 	.always_connected_techs = NULL,
 	.fallback_nameservers = NULL,
@@ -97,22 +109,26 @@ static struct {
 	.timeout_browserlaunch = DEFAULT_BROWSER_LAUNCH_TIMEOUT,
 	.blacklisted_interfaces = NULL,
 	.allow_hostname_updates = true,
+	.allow_domainname_updates = true,
 	.single_tech = false,
 	.tethering_technologies = NULL,
 	.persistent_tethering_mode = false,
 	.enable_6to4 = false,
 	.vendor_class_id = NULL,
 	.enable_online_check = true,
+	.auto_connect_roaming_services = false,
+	.acd = false,
+	.use_gateways_as_timeservers = false,
 #if defined TIZEN_EXT
 	.cellular_interfaces = NULL,
 	.tizen_tv_extension = false,
-	.use_gateway_timeserver = false,
 #endif
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
 #define CONF_PREF_TIMESERVERS           "FallbackTimeservers"
-#define CONF_AUTO_CONNECT               "DefaultAutoConnectTechnologies"
+#define CONF_AUTO_CONNECT_TECHS         "DefaultAutoConnectTechnologies"
+#define CONF_FAVORITE_TECHS             "DefaultFavoriteTechnologies"
 #define CONF_ALWAYS_CONNECTED_TECHS     "AlwaysConnectedTechnologies"
 #define CONF_PREFERRED_TECHS            "PreferredTechnologies"
 #define CONF_FALLBACK_NAMESERVERS       "FallbackNameservers"
@@ -120,22 +136,25 @@ static struct {
 #define CONF_TIMEOUT_BROWSERLAUNCH      "BrowserLaunchTimeout"
 #define CONF_BLACKLISTED_INTERFACES     "NetworkInterfaceBlacklist"
 #define CONF_ALLOW_HOSTNAME_UPDATES     "AllowHostnameUpdates"
+#define CONF_ALLOW_DOMAINNAME_UPDATES   "AllowDomainnameUpdates"
 #define CONF_SINGLE_TECH                "SingleConnectedTechnology"
 #define CONF_TETHERING_TECHNOLOGIES      "TetheringTechnologies"
 #define CONF_PERSISTENT_TETHERING_MODE  "PersistentTetheringMode"
 #define CONF_ENABLE_6TO4                "Enable6to4"
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
 #define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
+#define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
+#define CONF_ACD                        "AddressConflictDetection"
+#define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewaysAsTimeservers"
 #if defined TIZEN_EXT
 #define CONF_CELLULAR_INTERFACE         "NetworkCellularInterfaceList"
 #define CONF_TIZEN_TV_EXT		"TizenTVExtension"
-#define CONF_USE_GATEWAY_TIMESERVER     "UseGatewayTimeserver"
 #endif
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
 	CONF_PREF_TIMESERVERS,
-	CONF_AUTO_CONNECT,
+	CONF_AUTO_CONNECT_TECHS,
 	CONF_ALWAYS_CONNECTED_TECHS,
 	CONF_PREFERRED_TECHS,
 	CONF_FALLBACK_NAMESERVERS,
@@ -143,15 +162,19 @@ static const char *supported_options[] = {
 	CONF_TIMEOUT_BROWSERLAUNCH,
 	CONF_BLACKLISTED_INTERFACES,
 	CONF_ALLOW_HOSTNAME_UPDATES,
+	CONF_ALLOW_DOMAINNAME_UPDATES,
 	CONF_SINGLE_TECH,
 	CONF_TETHERING_TECHNOLOGIES,
 	CONF_PERSISTENT_TETHERING_MODE,
 	CONF_ENABLE_6TO4,
+	CONF_VENDOR_CLASS_ID,
 	CONF_ENABLE_ONLINE_CHECK,
+	CONF_AUTO_CONNECT_ROAMING_SERVICES,
+	CONF_ACD,
+	CONF_USE_GATEWAYS_AS_TIMESERVERS,
 #if defined TIZEN_EXT
 	CONF_CELLULAR_INTERFACE,
 	CONF_TIZEN_TV_EXT,
-	CONF_USE_GATEWAY_TIMESERVER,
 #endif
 	NULL
 };
@@ -289,13 +312,6 @@ static void check_Tizen_configuration(GKeyFile *config)
 		connman_settings.tizen_tv_extension = boolean;
 
 	g_clear_error(&error);
-
-	boolean = __connman_config_get_bool(config, "General",
-			CONF_USE_GATEWAY_TIMESERVER, &error);
-	if (!error)
-		connman_settings.use_gateway_timeserver = boolean;
-
-	g_clear_error(&error);
 }
 
 static void set_nofile_inc(void)
@@ -328,7 +344,9 @@ static void parse_config(GKeyFile *config)
 
 	if (!config) {
 		connman_settings.auto_connect =
-			parse_service_types(default_auto_connect, 3);
+			parse_service_types(default_auto_connect, CONF_ARRAY_SIZE(default_auto_connect));
+		connman_settings.favorite_techs =
+			parse_service_types(default_favorite_techs, CONF_ARRAY_SIZE(default_favorite_techs));
 		connman_settings.blacklisted_interfaces =
 			g_strdupv(default_blacklist);
 		return;
@@ -351,14 +369,26 @@ static void parse_config(GKeyFile *config)
 	g_clear_error(&error);
 
 	str_list = __connman_config_get_string_list(config, "General",
-			CONF_AUTO_CONNECT, &len, &error);
+			CONF_AUTO_CONNECT_TECHS, &len, &error);
 
 	if (!error)
 		connman_settings.auto_connect =
 			parse_service_types(str_list, len);
 	else
 		connman_settings.auto_connect =
-			parse_service_types(default_auto_connect, 3);
+			parse_service_types(default_auto_connect, CONF_ARRAY_SIZE(default_auto_connect));
+
+	g_clear_error(&error);
+
+	str_list = __connman_config_get_string_list(config, "General",
+			CONF_FAVORITE_TECHS, &len, &error);
+
+	if (!error)
+		connman_settings.favorite_techs =
+			parse_service_types(str_list, len);
+	else
+		connman_settings.favorite_techs =
+			parse_service_types(default_favorite_techs, CONF_ARRAY_SIZE(default_favorite_techs));
 
 	g_strfreev(str_list);
 
@@ -431,6 +461,14 @@ static void parse_config(GKeyFile *config)
 	g_clear_error(&error);
 
 	boolean = __connman_config_get_bool(config, "General",
+					CONF_ALLOW_DOMAINNAME_UPDATES,
+					&error);
+	if (!error)
+		connman_settings.allow_domainname_updates = boolean;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
 			CONF_SINGLE_TECH, &error);
 	if (!error)
 		connman_settings.single_tech = boolean;
@@ -474,6 +512,26 @@ static void parse_config(GKeyFile *config)
 		if (!boolean)
 			connman_info("Online check disabled by main config.");
 	}
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
+				CONF_AUTO_CONNECT_ROAMING_SERVICES, &error);
+	if (!error)
+		connman_settings.auto_connect_roaming_services = boolean;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General", CONF_ACD, &error);
+	if (!error)
+		connman_settings.acd = boolean;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
+				CONF_USE_GATEWAYS_AS_TIMESERVERS, &error);
+	if (!error)
+		connman_settings.use_gateways_as_timeservers = boolean;
 
 	g_clear_error(&error);
 
@@ -632,9 +690,9 @@ static GOptionEntry options[] = {
 				G_OPTION_ARG_CALLBACK, parse_debug,
 				"Specify debug options to enable", "DEBUG" },
 	{ "device", 'i', 0, G_OPTION_ARG_STRING, &option_device,
-			"Specify networking device or interface", "DEV" },
+			"Specify networking devices or interfaces", "DEV,..." },
 	{ "nodevice", 'I', 0, G_OPTION_ARG_STRING, &option_nodevice,
-			"Specify networking interface to ignore", "DEV" },
+			"Specify networking interfaces to ignore", "DEV,..." },
 	{ "plugin", 'p', 0, G_OPTION_ARG_STRING, &option_plugin,
 				"Specify plugins to load", "NAME,..." },
 	{ "noplugin", 'P', 0, G_OPTION_ARG_CALLBACK, &parse_noplugin,
@@ -646,7 +704,7 @@ static GOptionEntry options[] = {
 				"Don't fork daemon to background" },
 	{ "nodnsproxy", 'r', G_OPTION_FLAG_REVERSE,
 				G_OPTION_ARG_NONE, &option_dnsproxy,
-				"Don't enable DNS Proxy" },
+				"Don't support DNS resolving" },
 	{ "nobacktrace", 0, G_OPTION_FLAG_REVERSE,
 				G_OPTION_ARG_NONE, &option_backtrace,
 				"Don't print out backtrace information" },
@@ -678,6 +736,9 @@ bool connman_setting_get_bool(const char *key)
 	if (g_str_equal(key, CONF_ALLOW_HOSTNAME_UPDATES))
 		return connman_settings.allow_hostname_updates;
 
+	if (g_str_equal(key, CONF_ALLOW_DOMAINNAME_UPDATES))
+		return connman_settings.allow_domainname_updates;
+
 	if (g_str_equal(key, CONF_SINGLE_TECH))
 		return connman_settings.single_tech;
 
@@ -690,10 +751,14 @@ bool connman_setting_get_bool(const char *key)
 	if (g_str_equal(key, CONF_ENABLE_ONLINE_CHECK))
 		return connman_settings.enable_online_check;
 
-#if defined TIZEN_EXT
-	if (g_str_equal(key, CONF_USE_GATEWAY_TIMESERVER))
-		return connman_settings.use_gateway_timeserver;
-#endif
+	if (g_str_equal(key, CONF_AUTO_CONNECT_ROAMING_SERVICES))
+		return connman_settings.auto_connect_roaming_services;
+
+	if (g_str_equal(key, CONF_ACD))
+		return connman_settings.acd;
+
+	if (g_str_equal(key, CONF_USE_GATEWAYS_AS_TIMESERVERS))
+		return connman_settings.use_gateways_as_timeservers;
 
 	return false;
 }
@@ -722,8 +787,11 @@ char **connman_setting_get_string_list(const char *key)
 
 unsigned int *connman_setting_get_uint_list(const char *key)
 {
-	if (g_str_equal(key, CONF_AUTO_CONNECT))
+	if (g_str_equal(key, CONF_AUTO_CONNECT_TECHS))
 		return connman_settings.auto_connect;
+
+	if (g_str_equal(key, CONF_FAVORITE_TECHS))
+		return connman_settings.favorite_techs;
 
 	if (g_str_equal(key, CONF_PREFERRED_TECHS))
 		return connman_settings.preferred_techs;
@@ -926,6 +994,7 @@ int main(int argc, char *argv[])
 		g_strfreev(connman_settings.pref_timeservers);
 
 	g_free(connman_settings.auto_connect);
+	g_free(connman_settings.favorite_techs);
 	g_free(connman_settings.preferred_techs);
 	g_strfreev(connman_settings.fallback_nameservers);
 	g_strfreev(connman_settings.blacklisted_interfaces);

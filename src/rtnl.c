@@ -167,6 +167,7 @@ static void read_uevent(struct interface_data *interface)
 	if (ether_blacklisted(name)) {
 		interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
 		interface->device_type = CONNMAN_DEVICE_TYPE_UNKNOWN;
+		goto out;
 	} else {
 		interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 		interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
@@ -1381,10 +1382,10 @@ static void rtnl_newnduseropt(struct nlmsghdr *hdr)
 			DBG("service: %p\n",service);
 #endif
 			servers = rtnl_nd_opt_rdnss(opt, &lifetime,
-					&nr_servers);
+								&nr_servers);
 			for (i = 0; i < nr_servers; i++) {
 				if (!inet_ntop(AF_INET6, servers + i, buf,
-							sizeof(buf)))
+								sizeof(buf)))
 					continue;
 
 #if defined TIZEN_EXT
@@ -1396,7 +1397,7 @@ static void rtnl_newnduseropt(struct nlmsghdr *hdr)
 						CONNMAN_IPCONFIG_TYPE_IPV6);
 #endif
 				connman_resolver_append_lifetime(index,
-						NULL, buf, lifetime);
+							NULL, buf, lifetime);
 			}
 
 		} else if (opt->nd_opt_type == 31) { /* ND_OPT_DNSSL */
@@ -1531,7 +1532,7 @@ static void rtnl_message(void *buf, size_t len)
 		if (!NLMSG_OK(hdr, len))
 			break;
 
-		DBG("%s len %d type %d flags 0x%04x seq %d pid %d",
+		DBG("%s len %u type %u flags 0x%04x seq %u pid %u",
 					type2string(hdr->nlmsg_type),
 					hdr->nlmsg_len, hdr->nlmsg_type,
 					hdr->nlmsg_flags, hdr->nlmsg_seq,

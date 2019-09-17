@@ -134,6 +134,7 @@ GDHCPClient *g_dhcp_client_new(GDHCPType type, int index,
 
 int g_dhcp_client_start(GDHCPClient *client, const char *last_address);
 void g_dhcp_client_stop(GDHCPClient *client);
+int g_dhcp_client_decline(GDHCPClient *client, uint32_t requested);
 
 GDHCPClient *g_dhcp_client_ref(GDHCPClient *client);
 void g_dhcp_client_unref(GDHCPClient *client);
@@ -216,9 +217,6 @@ struct _GDHCPServer;
 
 typedef struct _GDHCPServer GDHCPServer;
 
-typedef void (*GDHCPSaveACKLeaseFunc) (char *hostname,
-			unsigned char *mac, unsigned int nip);
-
 GDHCPServer *g_dhcp_server_new(GDHCPType type,
 		int ifindex, GDHCPServerError *error);
 int g_dhcp_server_start(GDHCPServer *server);
@@ -239,11 +237,6 @@ void g_dhcp_server_set_save_lease(GDHCPServer *dhcp_server,
 				GDHCPSaveLeaseFunc func, gpointer user_data);
 void g_dhcp_server_set_lease_added_cb(GDHCPServer *dhcp_server,
 							GDHCPLeaseAddedCb cb);
-void g_dhcp_server_set_save_ack_lease(GDHCPServer *dhcp_server,
-				GDHCPSaveACKLeaseFunc func, gpointer user_data);
-
-int dhcp_get_random(uint64_t *val);
-void dhcp_cleanup_random(void);
 
 #if defined TIZEN_EXT
 void g_dhcp_client_set_address_known(GDHCPClient *client, gboolean known);

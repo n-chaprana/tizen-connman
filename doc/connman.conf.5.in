@@ -16,8 +16,7 @@ behavior. The location of the file may be changed through use of
 the \fB\-\-config= \fRargument for \fBconnman\fP(8).
 .SH "FILE FORMAT"
 .P
-The configuration file format is key file format.
-It consists of sections (groups) of key-value pairs.
+The configuration file consists of sections (groups) of key-value pairs.
 Lines beginning with a '#' and blank lines are considered comments.
 Sections are started by a header line containing the section enclosed
 in '[' and ']', and ended implicitly by the start of the next section
@@ -43,16 +42,27 @@ user interface designs.
 .TP
 .BI BackgroundScanning=true\ \fR|\fB\ false
 Enable background scanning. Default is true.
-Background scanning will start every 5 minutes unless
-the scan list is empty. In that case, a simple backoff
-mechanism starting from 10s up to 5 minutes will run.
+If wifi is disconnected, the background scanning will follow a simple
+backoff mechanism from 3s up to 5 minutes. Then, it will stay in 5
+minutes unless user specifically asks for scanning through a D-Bus
+call. If so, the mechanism will start again from 3s. This feature
+activates also the background scanning while being connected, which
+is required for roaming on wifi.
+When BackgroundScanning is false, ConnMan will not perform any scan
+regardless of wifi is connected or not, unless it is requested by
+the user through a D-Bus call.
+.TP
+.BI UseGatewaysAsTimeservers=true \fR|\fB\ false
+Assume that service gateways also function as timeservers.
+Default is false.
 .TP
 .BI FallbackTimeservers= server\fR[,...]
 List of Fallback timeservers separated by ",".
 These timeservers are used for NTP sync when there are
-no timeserver set by the user or by the service.
-These can contain mixed combination of fully qualified
-domain names, IPv4 and IPv6 addresses.
+no timeservers set by the user or by the service, and
+when UseGatewaysAsTimeservers = false. These can contain
+a mixed combination of fully qualified domain names, IPv4
+and IPv6 addresses.
 .TP
 .BI FallbackNameservers= server\fR[,...]
 List of fallback nameservers separated by "," appended
@@ -66,6 +76,12 @@ by default, separated by commas ",". The default value
 for this entry when empty is ethernet,wifi,cellular.
 Services that are automatically connected must have been
 set up and saved to storage beforehand.
+.TP
+.BI DefaultFavoriteTechnologies= technology\fR[,...]
+List of technologies that are marked favorite by default,
+separated by commas ",". The default value for this entry
+when empty is ethernet. Connects to services from this
+technology even if not setup and saved to storage.
 .TP
 .BI AlwaysConnectedTechnologies= technology\fR[,...]
 List of technoolgies which are always connected regardless
@@ -96,6 +112,11 @@ vmnet,vboxnet,virbr,ifb.
 .BI AllowHostnameUpdates=true\ \fR|\fB\ false
 Allow connman to change the system hostname. This can
 happen for example if we receive DHCP hostname option.
+Default value is true.
+.TP
+.BI AllowDomainnameUpdates=true\ \fR|\fB\ false
+Allow connman to change the system domainname. This can
+happen for example if we receive DHCP domainname option.
 Default value is true.
 .TP
 .BI SingleConnectedTechnology=true\ \fR|\fB\ false
@@ -138,13 +159,28 @@ be used by DHCP servers to identify specific clients without having to
 rely on MAC address ranges, etc
 .TP
 .BI EnableOnlineCheck=true\ \fR|\fB\ false
-Enable or disable use of HTTP GET as on online status check.
+Enable or disable use of HTTP GET as an online status check.
 When a service is in a READY state, and is selected as default,
 ConnMan will issue an HTTP GET request to verify that end-to-end
 connectivity is successful. Only then the service will be
 transitioned to ONLINE state.
 If this setting is false, the default service will remain in READY state.
 Default value is true.
+.TP
+.BI AutoConnectRoamingServices=true\ \fR|\fB\ false
+Automatically connect roaming services. This is not recommended unless you know
+you won't have any billing problem.
+Default value is false.
+.TP
+.BI AddressConflictDetection=true\ \fR|\fB\ false
+Enable or disable the implementation of IPv4 address conflict detection
+according to RFC5227. ConnMan will send probe ARP packets to see if an
+IPv4 address is already in use before assigning the address to an interface.
+If an address conflict occurs for a statically configured address, an IPv4LL
+address will be chosen instead (according to RFC3927). If an address conflict
+occurs for an address offered via DHCP, ConnMan send a DHCP DECLINE once and
+for the second conflict resort to finding an IPv4LL address.
+Default value is false.
 .SH "EXAMPLE"
 The following example configuration disables hostname updates and enables
 ethernet tethering.
@@ -152,6 +188,7 @@ ethernet tethering.
 .nf
 [General]
 AllowHostnameUpdates = false
+AllowDomainnameUpdates = false
 TetheringTechnologies = ethernet,wifi,bluetooth,gadget
 .fi
 .SH "SEE ALSO"

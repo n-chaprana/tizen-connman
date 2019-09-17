@@ -134,7 +134,7 @@ static bool apply_dhcp_invalidate_on_network(struct connman_dhcp *dhcp)
 					CONNMAN_IPCONFIG_TYPE_IPV4);
 #else
 			__connman_service_nameserver_remove(service,
-					dhcp->nameservers[i], false);
+						dhcp->nameservers[i], false);
 #endif
 		}
 		g_strfreev(dhcp->nameservers);
@@ -265,6 +265,7 @@ static gboolean dhcp_retry_cb(gpointer user_data)
 	struct connman_dhcp *dhcp = user_data;
 
 	dhcp->timeout = 0;
+
 #if defined TIZEN_EXT
 	DBG("dhcp %p", dhcp);
 	DBG("dhcp->timeout %d", dhcp->timeout);
@@ -849,6 +850,30 @@ void __connman_dhcp_stop(struct connman_ipconfig *ipconfig)
 	}
 }
 
+void __connman_dhcp_decline(struct connman_ipconfig *ipconfig)
+{
+	struct connman_dhcp *dhcp;
+	const char *address;
+	struct in_addr addr;
+
+	DBG("ipconfig_table %p ipconfig %p", ipconfig_table, ipconfig);
+
+	if (!ipconfig_table)
+		return;
+
+	dhcp = g_hash_table_lookup(ipconfig_table, ipconfig);
+	if (dhcp) {
+		address = __connman_ipconfig_get_local(ipconfig);
+		if (!address)
+			return;
+
+		if (inet_pton(AF_INET, address, &addr) != 1)
+			connman_error("Could not convert address %s", address);
+
+		g_dhcp_client_decline(dhcp->dhcp_client, htonl(addr.s_addr));
+	}
+}
+
 int __connman_dhcp_init(void)
 {
 	DBG("");
@@ -865,6 +890,4 @@ void __connman_dhcp_cleanup(void)
 
 	g_hash_table_destroy(ipconfig_table);
 	ipconfig_table = NULL;
-
-	dhcp_cleanup_random();
 }

@@ -177,12 +177,6 @@ typedef enum {
 	G_SUPPLICANT_PEER_GROUP_FAILED,
 } GSupplicantPeerState;
 
-enum GSupplicantAPHiddenSSID {
-	G_SUPPLICANT_AP_NO_SSID_HIDING,
-	G_SUPPLICANT_AP_HIDDEN_SSID_ZERO_LEN,
-	G_SUPPLICANT_AP_HIDDEN_SSID_ZERO_CONTENTS,
-};
-
 struct _GSupplicantSSID {
 #if defined TIZEN_EXT
 	void *ssid;
@@ -213,7 +207,6 @@ struct _GSupplicantSSID {
 	dbus_bool_t use_wps;
 	const char *pin_wps;
 	const char *bgscan;
-	int ignore_broadcast_ssid;
 #if defined TIZEN_EXT
 	unsigned char *bssid;
 	unsigned int bssid_for_connect_len;
@@ -494,8 +487,10 @@ struct _GSupplicantCallbacks {
 	void (*system_power_off) (void);
 	void (*assoc_failed) (void *user_data);
 #endif
-	void (*add_station) (const char *mac);
-	void (*remove_station) (const char *mac);
+	void (*sta_authorized) (GSupplicantInterface *interface,
+					const char *addr);
+	void (*sta_deauthorized) (GSupplicantInterface *interface,
+					const char *addr);
 	void (*peer_found) (GSupplicantPeer *peer);
 	void (*peer_lost) (GSupplicantPeer *peer);
 	void (*peer_changed) (GSupplicantPeer *peer,

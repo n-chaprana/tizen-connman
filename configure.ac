@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(connman, 1.35)
+AC_INIT(connman, 1.37)
 
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -20,6 +20,7 @@ AC_SUBST(abs_top_srcdir)
 AC_SUBST(abs_top_builddir)
 
 AC_LANG_C
+AC_USE_SYSTEM_EXTENSIONS
 
 AC_PROG_CC
 AM_PROG_CC_C_O
@@ -232,6 +233,11 @@ AC_CHECK_LIB(resolv, ns_initparse, dummy=yes, [
 		AC_MSG_ERROR(resolver library support is required))
 ])
 
+AC_CHECK_HEADERS([execinfo.h])
+AM_CONDITIONAL([BACKTRACE], [test "${ac_cv_header_execinfo_h}" = "yes"])
+
+AC_CHECK_MEMBERS([struct in6_pktinfo.ipi6_addr], [], [], [[#include <netinet/in.h>]])
+
 AC_CHECK_FUNC(signalfd, dummy=yes,
 			AC_MSG_ERROR(signalfd support is required))
 
@@ -265,8 +271,8 @@ fi
 
 AC_DEFINE_UNQUOTED([STATS_MAX_FILE_SIZE], (${stats_max_file_size}), [Maximal size of a statistics round robin file])
 
-PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.28, dummy=yes,
-				AC_MSG_ERROR(GLib >= 2.28 is required))
+PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.40, dummy=yes,
+				AC_MSG_ERROR(GLib >= 2.40 is required))
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
@@ -318,6 +324,14 @@ if (test -n "${path_systemdunit}"); then
 	AC_SUBST(SYSTEMD_UNITDIR)
 fi
 AM_CONDITIONAL(SYSTEMD, test -n "${path_systemdunit}")
+
+AC_ARG_WITH([tmpfilesdir], AC_HELP_STRING([--with-tmpfilesdir=DIR],
+	[path to systemd tmpfiles.d directory]), [path_tmpfiles=${withval}],
+		[path_tmpfiles="`$PKG_CONFIG --variable=tmpfilesdir systemd`"])
+if (test -n "${path_tmpfiles}"); then
+	SYSTEMD_TMPFILESDIR="${path_tmpfiles}"
+	AC_SUBST(SYSTEMD_TMPFILESDIR)
+fi
 
 AC_ARG_WITH(firewall, AC_HELP_STRING([--with-firewall=TYPE],
 			[specify which firewall type is used iptables or nftables [default=iptables]]),
@@ -429,19 +443,34 @@ AC_ARG_ENABLE(wispr, AC_HELP_STRING([--disable-wispr],
 					[enable_wispr=${enableval}])
 AM_CONDITIONAL(WISPR, test "${enable_wispr}" != "no")
 
+AC_ARG_ENABLE(backtrace, AC_HELP_STRING([--disable-backtrace],
+				[disable backtrace support]),
+					[enable_backtrace=${enableval}])
+AM_CONDITIONAL(BACKTRACE, test "${enable_backtrace}" != "no")
+
 AC_ARG_ENABLE(tools, AC_HELP_STRING([--disable-tools],
 				[disable testing tools]),
 					[enable_tools=${enableval}])
 AM_CONDITIONAL(TOOLS, test "${enable_tools}" != "no")
 
+AC_ARG_ENABLE(stats, AC_HELP_STRING([--disable-stats],
+				[disable statistics round robin file generation]),
+					[enable_stats=${enableval}])
+AM_CONDITIONAL(STATS, test "${enable_stats}" != "no")
+
 if (test "${enable_tools}" != "no"); then
 	AC_PATH_PROGS(IPTABLES_SAVE, [iptables-save], [],
 						$PATH:/bin:/usr/bin)
+	AC_PATH_PROGS(IP6TABLES_SAVE, [ip6tables-save], [],
+						$PATH:/bin:/usr/bin)
 	IPTABLES_SAVE=$ac_cv_path_IPTABLES_SAVE
+	IP6TABLES_SAVE=$ac_cv_path_IP6TABLES_SAVE
 else
 	IPTABLES_SAVE=""
+	IP6TABLES_SAVE=""
 fi
 AC_SUBST(IPTABLES_SAVE)
+AC_SUBST(IP6TABLES_SAVE)
 
 AC_ARG_ENABLE(client, AC_HELP_STRING([--disable-client],
 				[disable command line client]),
@@ -487,5 +516,19 @@ AM_CONDITIONAL(VPN, test "${enable_openconnect}" != "no" -o \
 			"${enable_vpnc}" != "no" -o \
 			"${enable_l2tp}" != "no" -o \
 			"${enable_pptp}" != "no")
+
+AC_MSG_CHECKING(which DNS backend to use)
+AC_ARG_WITH(dns-backend, AC_HELP_STRING([--with-dns-backend=TYPE],
+            [specify which DNS backend to use: internal or systemd-resolved [default=internal]]),
+		[dns_backend=${withval}],
+		[dns_backend="internal"])
+
+if (test "${dns_backend}" != "internal" -a \
+		"${dns_backend}" != "systemd-resolved"); then
+	AC_MSG_ERROR(no suitable DNS backend defined)
+fi
+AM_CONDITIONAL(INTERNAL_DNS_BACKEND, test "${dns_backend}" = "internal")
+AM_CONDITIONAL(SYSTEMD_RESOLVED_DNS_BACKEND, test "${dns_backend}" = "systemd-resolved")
+AC_MSG_RESULT(${dns_backend})
 
 AC_OUTPUT(Makefile include/version.h connman.pc src/connman.service src/connman_tv.service vpn/connman-vpn.service)

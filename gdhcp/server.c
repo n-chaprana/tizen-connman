@@ -66,7 +66,6 @@ struct _GDHCPServer {
 	GHashTable *option_hash; /* Options send to client */
 	GDHCPSaveLeaseFunc save_lease_func;
 	GDHCPLeaseAddedCb lease_added_cb;
-	GDHCPSaveACKLeaseFunc save_ack_lease_func;
 	GDHCPDebugFunc debug_func;
 	gpointer debug_data;
 };
@@ -397,10 +396,9 @@ GDHCPServer *g_dhcp_server_new(GDHCPType type,
 	dhcp_server->ref_count = 1;
 	dhcp_server->ifindex = ifindex;
 	dhcp_server->listener_sockfd = -1;
-	dhcp_server->listener_watch = -1;
+	dhcp_server->listener_watch = 0;
 	dhcp_server->listener_channel = NULL;
 	dhcp_server->save_lease_func = NULL;
-	dhcp_server->save_ack_lease_func = NULL;
 	dhcp_server->debug_func = NULL;
 	dhcp_server->debug_data = NULL;
 
@@ -652,11 +650,8 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 	struct dhcp_packet packet;
 	struct dhcp_lease *lease;
 	uint32_t requested_nip = 0;
-	uint8_t type, *server_id_option, *request_ip_option, *host_name;
+	uint8_t type, *server_id_option, *request_ip_option;
 	int re;
-
-	GDHCPOptionType option_type;
-	char *option_value;
 
 	if (condition & (G_IO_NVAL | G_IO_ERR | G_IO_HUP)) {
 		dhcp_server->listener_watch = 0;
@@ -696,28 +691,15 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 		debug(dhcp_server, "Received REQUEST NIP %d",
 							requested_nip);
 		if (requested_nip == 0) {
-			requested_nip = packet.ciaddr;
+			requested_nip = ntohl(packet.ciaddr);
 			if (requested_nip == 0)
 				break;
 		}
 
 		if (lease && requested_nip == lease->lease_nip) {
 			debug(dhcp_server, "Sending ACK");
-
-			host_name = dhcp_get_option(&packet, DHCP_HOST_NAME);
-			option_type = dhcp_get_code_type(DHCP_HOST_NAME);
-			option_value = malloc_option_value_string(host_name,
-								option_type);
 			send_ACK(dhcp_server, &packet,
 				lease->lease_nip);
-
-			if (dhcp_server->save_ack_lease_func)
-				dhcp_server->save_ack_lease_func(
-							option_value,
-							lease->lease_mac,
-							lease->lease_nip);
-			g_free(option_value);
-
 			break;
 		}
 
@@ -844,15 +826,6 @@ void g_dhcp_server_set_lease_added_cb(GDHCPServer *dhcp_server,
 		return;
 
 	dhcp_server->lease_added_cb = cb;
-}
-
-void g_dhcp_server_set_save_ack_lease(GDHCPServer *dhcp_server,
-				GDHCPSaveACKLeaseFunc func, gpointer user_data)
-{
-	if (dhcp_server == NULL)
-		return;
-
-	dhcp_server->save_ack_lease_func = func;
 }
 
 GDHCPServer *g_dhcp_server_ref(GDHCPServer *dhcp_server)

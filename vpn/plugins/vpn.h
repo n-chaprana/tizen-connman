@@ -55,9 +55,13 @@ struct vpn_driver {
 			vpn_provider_connect_cb_t cb, const char *dbus_sender,
 			void *user_data);
 	void (*disconnect) (struct vpn_provider *provider);
+	int (*remove) (struct vpn_provider *provider);
 	int (*error_code) (struct vpn_provider *provider, int exit_code);
 	int (*save) (struct vpn_provider *provider, GKeyFile *keyfile);
 	int (*device_flags) (struct vpn_provider *provider);
+	int (*route_env_parse) (struct vpn_provider *provider, const char *key,
+			int *family, unsigned long *idx,
+			enum vpn_provider_route_type *type);
 };
 
 int vpn_register(const char *name, struct vpn_driver *driver,

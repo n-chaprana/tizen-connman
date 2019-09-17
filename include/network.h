@@ -25,6 +25,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <dbus/dbus.h>
+
 #include <connman/device.h>
 #include <connman/ipconfig.h>
 
@@ -63,9 +65,10 @@ enum connman_network_error {
 	CONNMAN_NETWORK_ERROR_CONNECT_FAIL    = 4,
 #if defined TIZEN_EXT
 	CONNMAN_NETWORK_ERROR_DHCP_FAIL       = 5,
-#endif
 	CONNMAN_NETWORK_ERROR_BLOCKED	      = 6,
-
+#else
+	CONNMAN_NETWORK_ERROR_BLOCKED         = 5,
+#endif
 };
 
 #if defined TIZEN_EXT
@@ -144,6 +147,8 @@ void connman_network_set_error(struct connman_network *network,
 int connman_network_set_connected(struct connman_network *network,
 						bool connected);
 bool connman_network_get_connected(struct connman_network *network);
+void connman_network_set_connected_dhcp_later(struct connman_network *network,
+		uint32_t sec);
 
 bool connman_network_get_associating(struct connman_network *network);
 
@@ -265,6 +270,9 @@ struct connman_network_driver {
 
 int connman_network_driver_register(struct connman_network_driver *driver);
 void connman_network_driver_unregister(struct connman_network_driver *driver);
+
+void connman_network_append_acddbus(DBusMessageIter *dict,
+		struct connman_network *network);
 
 #ifdef __cplusplus
 }

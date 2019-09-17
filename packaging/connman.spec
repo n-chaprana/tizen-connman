@@ -4,7 +4,7 @@
 %bcond_without  connman_vpnd
 
 Name:           connman
-Version:        1.35
+Version:        1.37
 Release:        33
 License:        GPL-2.0+
 Summary:        Connection Manager
@@ -150,7 +150,7 @@ VPN_CFLAGS+=" -DTIZEN_EXT -lsmack -Werror"
 chmod +x bootstrap
 ./bootstrap
 %configure \
-            --sysconfdir=/etc \
+	    --sysconfdir=/etc \
 	    --enable-client \
 	    --enable-tizen-ext \
 	    --enable-pacrunner \
@@ -174,7 +174,9 @@ chmod +x bootstrap
 	    --enable-ethernet \
 	    --with-systemdunitdir=%{_libdir}/systemd/system \
 	    --enable-pie \
-	    --disable-wispr
+	    --disable-wispr \
+	    --disable-backtrace \
+	    --disable-tools
 
 make %{?_smp_mflags}
 

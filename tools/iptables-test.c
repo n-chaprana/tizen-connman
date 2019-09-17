@@ -108,30 +108,31 @@ out:
 
 	switch (cmd) {
 	case IPTABLES_COMMAND_APPEND:
-		err = __connman_iptables_append(table, chain, rule);
+		err = __connman_iptables_append(AF_INET, table, chain, rule);
 		break;
 	case IPTABLES_COMMAND_INSERT:
-		err = __connman_iptables_insert(table, chain, rule);
+		err = __connman_iptables_insert(AF_INET, table, chain, rule);
 		break;
 	case IPTABLES_COMMAND_DELETE:
-		err = __connman_iptables_delete(table, chain, rule);
+		err = __connman_iptables_delete(AF_INET, table, chain, rule);
 		break;
 	case IPTABLES_COMMAND_POLICY:
-		err = __connman_iptables_change_policy(table, chain, rule);
+		err = __connman_iptables_change_policy(AF_INET, table, chain,
+						rule);
 		break;
 	case IPTABLES_COMMAND_CHAIN_INSERT:
-		err = __connman_iptables_new_chain(table, chain);
+		err = __connman_iptables_new_chain(AF_INET, table, chain);
 		break;
 	case IPTABLES_COMMAND_CHAIN_DELETE:
-		err = __connman_iptables_delete_chain(table, chain);
+		err = __connman_iptables_delete_chain(AF_INET, table, chain);
 		break;
 	case IPTABLES_COMMAND_CHAIN_FLUSH:
-		err = __connman_iptables_flush_chain(table, chain);
+		err = __connman_iptables_flush_chain(AF_INET, table, chain);
 		break;
 	case IPTABLES_COMMAND_DUMP:
 		__connman_log_init(argv[0], "*", false, false,
 			"iptables-test", "1");
-		err = __connman_iptables_dump(table);
+		err = __connman_iptables_dump(AF_INET, table);
 		break;
 	case IPTABLES_COMMAND_UNKNOWN:
 		printf("Missing command\n");
@@ -147,7 +148,7 @@ out:
 		exit(err);
 	}
 
-	err = __connman_iptables_commit(table);
+	err = __connman_iptables_commit(AF_INET, table);
 	if (err < 0) {
 		printf("Failed to commit changes: %s\n", strerror(-err));
 		exit(err);

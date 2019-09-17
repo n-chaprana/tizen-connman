@@ -1,6 +1,11 @@
 [Unit]
 Description=Connection service
-After=net-config.service
+DefaultDependencies=false
+Conflicts=shutdown.target
+RequiresMountsFor=@localstatedir@/lib/connman
+After=dbus.service network-pre.target systemd-sysusers.service net-config.service
+Before=network.target multi-user.target shutdown.target
+Wants=network.target
 
 [Service]
 Type=dbus

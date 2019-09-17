@@ -1157,6 +1157,7 @@ static struct connman_ipconfig *create_ipv6config(int index)
 #else
 		ipv6config->ipv6_privacy_config = ipdevice->ipv6_privacy = 2;
 #endif
+
 	ipv6config->address = connman_ipaddress_alloc(AF_INET6);
 	if (!ipv6config->address) {
 		g_free(ipv6config);
@@ -2104,6 +2105,7 @@ int __connman_ipconfig_set_config(struct connman_ipconfig *ipconfig,
 		if (ipconfig->type == CONNMAN_IPCONFIG_TYPE_IPV6)
 			disable_ipv6(ipconfig);
 #endif
+
 		break;
 
 	case CONNMAN_IPCONFIG_METHOD_AUTO:
@@ -2116,6 +2118,7 @@ int __connman_ipconfig_set_config(struct connman_ipconfig *ipconfig,
 #if defined TIZEN_EXT
 		enable_ipv6(ipconfig);
 #endif
+
 		break;
 
 	case CONNMAN_IPCONFIG_METHOD_MANUAL:

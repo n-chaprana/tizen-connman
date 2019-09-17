@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -34,6 +33,19 @@
 #include <netdb.h>
 
 #include "connman.h"
+
+/*
+ * Just to avoid build failure due to missing STATEDIR
+ */
+#if defined TIZEN_EXT
+#ifdef STATEDIR
+#undef STATEDIR
+#endif
+#define STATEDIR "/etc"
+#endif
+
+#define RESOLV_CONF_STATEDIR STATEDIR"/resolv.conf"
+#define RESOLV_CONF_ETC "/etc/resolv.conf"
 
 #define RESOLVER_FLAG_PUBLIC (1 << 0)
 
@@ -130,11 +142,19 @@ static int resolvfile_export(void)
 
 	old_umask = umask(022);
 
-	fd = open("/etc/resolv.conf", O_RDWR | O_CREAT | O_CLOEXEC,
+	fd = open(RESOLV_CONF_STATEDIR, O_RDWR | O_CREAT | O_CLOEXEC,
 					S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	if (fd < 0) {
-		err = -errno;
-		goto done;
+		connman_warn_once("Cannot create "RESOLV_CONF_STATEDIR" "
+			"falling back to "RESOLV_CONF_ETC);
+
+		fd = open(RESOLV_CONF_ETC, O_RDWR | O_CREAT | O_CLOEXEC,
+					S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+		if (fd < 0) {
+			err = -errno;
+			goto done;
+		}
 	}
 
 	if (ftruncate(fd, 0) < 0) {
@@ -656,6 +676,14 @@ static void free_resolvfile(gpointer data)
 	g_free(entry->domain);
 	g_free(entry->server);
 	g_free(entry);
+}
+
+int __connman_resolver_set_mdns(int index, bool enabled)
+{
+	if (!dnsproxy_enabled)
+		return -ENOTSUP;
+
+	return __connman_dnsproxy_set_mdns(index, enabled);
 }
 
 int __connman_resolver_init(gboolean dnsproxy)

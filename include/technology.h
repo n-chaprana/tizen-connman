@@ -49,16 +49,14 @@ typedef struct {
 
 struct connman_technology;
 
-int connman_technology_tethering_add_station(enum connman_service_type type,
-					      const char *mac);
-int connman_technology_tethering_remove_station(const char *mac);
-
 int connman_technology_tethering_notify(struct connman_technology *technology,
 							bool enabled);
 int connman_technology_set_regdom(const char *alpha2);
 void connman_technology_regdom_notify(struct connman_technology *technology,
 							const char *alpha2);
 
+enum connman_service_type connman_technology_get_type
+				(struct connman_technology *technology);
 bool connman_technology_get_wifi_tethering(const char **ssid,
 							const char **psk);
 bool connman_technology_is_tethering_allowed(enum connman_service_type type);

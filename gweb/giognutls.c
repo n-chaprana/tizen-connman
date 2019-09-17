@@ -304,7 +304,7 @@ static gboolean g_io_gnutls_dispatch(GSource *source, GSourceFunc callback,
 							gpointer user_data)
 {
 	GIOGnuTLSWatch *watch = (GIOGnuTLSWatch *) source;
-	GIOFunc func = (GIOFunc) callback;
+	GIOFunc func = (GIOFunc) (void (*) (void)) callback;
 	GIOCondition condition = watch->pollfd.revents;
 
 	DBG("source %p condition %u", source, condition);
@@ -421,7 +421,7 @@ GIOChannel *g_io_channel_gnutls_new(int fd)
 
 	DBG("");
 
-	gnutls_channel = g_new(GIOGnuTLSChannel, 1);
+	gnutls_channel = g_new0(GIOGnuTLSChannel, 1);
 
 	channel = (GIOChannel *) gnutls_channel;
 
@@ -458,6 +458,7 @@ GIOChannel *g_io_channel_gnutls_new(int fd)
 	gnutls_priority_set_direct(gnutls_channel->session,
 		"NORMAL:-VERS-TLS-ALL:+VERS-TLS1.0:+VERS-SSL3.0:%COMPAT", NULL);
 #endif
+
 	gnutls_certificate_allocate_credentials(&gnutls_channel->cred);
 	gnutls_credentials_set(gnutls_channel->session,
 				GNUTLS_CRD_CERTIFICATE, gnutls_channel->cred);

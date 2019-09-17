@@ -122,13 +122,6 @@ Methods		dict GetProperties()  [deprecated]
 
 			Possible Errors: None
 
-		boolean GetUserFavorite() [experimental]
-
-			This function is used to check whether this service
-			is favorite to the current user.
-
-			Possible Errors: None
-
 Signals		PropertyChanged(string name, variant value)
 
 			This signal indicates a changed value of the given
@@ -194,8 +187,15 @@ Properties	string State [readonly]
 			present and contains the list of security methods
 			or key management settings.
 
-			Possible values are "none", "wep", "psk", "ieee8021x"
-			and also "wps".
+			Possible values are "none", "wep", "psk", "ieee8021x",
+			and also "wps" and "wps_advertising".
+
+			Value "wps" means that the service supports WPS. A
+			service advertising itself as WPS registrar contains
+			the additional value "wps_advertising" for as long as
+			it is advertising. That is, while "wps_advertising" is
+			listed, WPS is active and it should be possible to
+			connect to the corresponding service via WPS.
 
 			This property might be only present for WiFi
 			services.
@@ -533,3 +533,48 @@ Properties	string State [readonly]
 				Possible values are "half" and "full".
 
 				This information is not available.
+
+		bool mDNS [readonly]
+
+			Whether or not mDNS support is enabled. Note
+			that mDNS requires a DNS backend which
+			supports it. Currently the only DNS backend
+			which supports mDNS is systemd-resolved.
+
+		bool mDNS.Configuration [readwrite]
+
+			Same values as mDNS property. The mDNS
+			represents the actual system configuration
+			while this allows user configuration.
+
+		dict LastAddressConflict [readonly]
+
+			This property contains information about the previously detected
+			address conflict. If there has been no address conflict then
+			IPv4 Address is "0.0.0.0", Ethernet Address is "00:00:00:00:00:00",
+			Timestamp is zero and Resolved is true.
+
+			dict IPv4 [readonly]
+
+				string Address [readonly]
+
+				The IPv4 address which had a conflict.
+
+			dict Ethernet [readonly]
+
+				string Address [readonly]
+
+				The ethernet device address (MAC address) of the conflicting
+				host.
+
+			int64 Timestamp [readonly]
+
+				A timestamp when the conflict was detected in microseconds
+				since January 1, 1970 UTC.
+
+			bool Resolved [readonly]
+
+				Set to false when an address conflict occurs.
+				If a previous conflict could be resolved by probing another
+				IPv4 address (which is not an IPv4LL) then this boolean is set
+				to true.

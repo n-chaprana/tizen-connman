@@ -19,6 +19,7 @@
  *
  */
 
+#include <config.h>
 #include <netinet/udp.h>
 #include <netinet/ip.h>
 
@@ -170,15 +171,14 @@ static const uint8_t dhcp_option_lengths[] = {
 	[OPTION_U32]	= 4,
 };
 
-/* already defined within netinet/in.h if using GNU compiler */
-#ifndef __USE_GNU
+/* already defined within netinet/in.h if using glibc or musl */
+#ifndef HAVE_STRUCT_IN6_PKTINFO_IPI6_ADDR
 struct in6_pktinfo {
 	struct in6_addr ipi6_addr;  /* src/dst IPv6 address */
 	unsigned int ipi6_ifindex;  /* send/recv interface index */
 };
 #endif
 
-char *malloc_option_value_string(uint8_t *option, GDHCPOptionType type);
 uint8_t *dhcp_get_option(struct dhcp_packet *packet, int code);
 uint8_t *dhcpv6_get_option(struct dhcpv6_packet *packet, uint16_t pkt_len,
 			int code, uint16_t *option_len, int *option_count);

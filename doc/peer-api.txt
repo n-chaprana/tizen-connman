@@ -100,4 +100,3 @@ Properties	string State [readonly] [experimental]
 
 				The TLV formated byte array representing the
 				WiFi Display Informations Elements.
-

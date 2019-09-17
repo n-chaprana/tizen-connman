@@ -31,7 +31,6 @@ extern "C" {
 #define CONNMAN_SERVICE			"net.connman"
 #define CONNMAN_PATH			"/net/connman"
 
-#define CONNMAN_DEBUG_INTERFACE		CONNMAN_SERVICE ".Debug"
 #define CONNMAN_ERROR_INTERFACE		CONNMAN_SERVICE ".Error"
 #define CONNMAN_AGENT_INTERFACE		CONNMAN_SERVICE ".Agent"
 #define CONNMAN_COUNTER_INTERFACE	CONNMAN_SERVICE ".Counter"
@@ -42,7 +41,6 @@ extern "C" {
 #define CONNMAN_CLOCK_INTERFACE		CONNMAN_SERVICE ".Clock"
 #define CONNMAN_TASK_INTERFACE		CONNMAN_SERVICE ".Task"
 #define CONNMAN_SERVICE_INTERFACE	CONNMAN_SERVICE ".Service"
-#define CONNMAN_PROVIDER_INTERFACE	CONNMAN_SERVICE ".Provider"
 #define CONNMAN_TECHNOLOGY_INTERFACE	CONNMAN_SERVICE ".Technology"
 #define CONNMAN_SESSION_INTERFACE	CONNMAN_SERVICE ".Session"
 #define CONNMAN_NOTIFICATION_INTERFACE	CONNMAN_SERVICE ".Notification"
@@ -182,10 +180,6 @@ int connman_dbus_get_connection_unix_user(DBusConnection *connection,
                                const char *bus_name,
                                connman_dbus_get_connection_unix_user_cb_t func,
                                void *user_data);
-
-int connman_dbus_get_connection_unix_user_sync(DBusConnection *connection,
-				const char *bus_name,
-				unsigned int *user_id);
 
 typedef void (* connman_dbus_get_context_cb_t) (const unsigned char *context,
 						void *user_data, int err);

@@ -28,6 +28,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <resolv.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -511,7 +512,7 @@ static void sort_and_return_results(struct resolv_lookup *lookup)
 			status = lookup->ipv4_status;
 	}
 
-	debug(lookup->resolv, "lookup %p received %d results", lookup, n);
+	debug(lookup->resolv, "lookup %p received %d results", lookup, n-1);
 
 	g_queue_remove(lookup->resolv->lookup_queue, lookup);
 	destroy_lookup(lookup);
@@ -679,7 +680,10 @@ static void parse_response(struct resolv_nameserver *nameserver,
 
 	switch (rcode) {
 	case ns_r_noerror:
-		status = G_RESOLV_RESULT_STATUS_SUCCESS;
+		if (count > 0)
+			status = G_RESOLV_RESULT_STATUS_SUCCESS;
+		else
+			status = G_RESOLV_RESULT_STATUS_NO_ANSWER;
 		break;
 	case ns_r_formerr:
 		status = G_RESOLV_RESULT_STATUS_FORMAT_ERROR;
@@ -946,12 +950,10 @@ bool g_resolv_add_nameserver(GResolv *resolv, const char *address,
 	nameserver->flags = flags;
 	nameserver->resolv = resolv;
 
-	debug(resolv, "");
 	if (connect_udp_channel(nameserver) < 0) {
 		free_nameserver(nameserver);
 		return false;
 	}
-	debug(resolv, "");
 
 	resolv->nameserver_list = g_list_append(resolv->nameserver_list,
 								nameserver);
@@ -1053,16 +1055,12 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 	lookup->result_data = user_data;
 	lookup->id = resolv->next_lookup_id++;
 
-	debug(resolv, "");
-
 	if (resolv->result_family != AF_INET6) {
 		if (add_query(lookup, hostname, ns_t_a)) {
 			g_free(lookup);
 			return -EIO;
 		}
 	}
-
-	debug(resolv, "");
 
 	if (resolv->result_family != AF_INET) {
 		if (add_query(lookup, hostname, ns_t_aaaa)) {
@@ -1076,8 +1074,6 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 			return -EIO;
 		}
 	}
-
-	debug(resolv, "");
 
 	g_queue_push_tail(resolv->lookup_queue, lookup);
 

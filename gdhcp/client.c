@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
@@ -43,9 +42,10 @@
 
 #include <glib.h>
 
+#include "../src/connman.h"
+#include "../src/shared/arp.h"
 #include "gdhcp.h"
 #include "common.h"
-#include "ipv4ll.h"
 
 #define DISCOVER_TIMEOUT 5
 #define DISCOVER_RETRIES 6
@@ -86,6 +86,7 @@ typedef enum _dhcp_client_state {
 	REBOOTING,
 	REQUESTING,
 	BOUND,
+	DECLINED,
 	RENEWING,
 	REBINDING,
 	RELEASED,
@@ -130,6 +131,7 @@ struct _GDHCPClient {
 	GList *request_list;
 	GHashTable *code_value_hash;
 	GHashTable *send_value_hash;
+	GHashTable *secs_bcast_hash;
 	GDHCPClientEventFunc lease_available_cb;
 	gpointer lease_available_data;
 	GDHCPClientEventFunc ipv4ll_available_cb;
@@ -489,10 +491,40 @@ static int send_discover(GDHCPClient *dhcp_client, uint32_t requested)
 	 * versa. In the receiving side we then find out what kind of packet
 	 * the server can send.
 	 */
+	dhcp_client->request_bcast = dhcp_client->retry_times % 2;
+
+	if (dhcp_client->request_bcast)
+		g_hash_table_add(dhcp_client->secs_bcast_hash,
+				GINT_TO_POINTER(packet.secs));
+
 	return dhcp_send_raw_packet(&packet, INADDR_ANY, CLIENT_PORT,
 				INADDR_BROADCAST, SERVER_PORT,
 				MAC_BCAST_ADDR, dhcp_client->ifindex,
-				dhcp_client->retry_times % 2);
+				dhcp_client->request_bcast);
+}
+
+int g_dhcp_client_decline(GDHCPClient *dhcp_client, uint32_t requested)
+{
+	struct dhcp_packet packet;
+
+	dhcp_client->state = DECLINED;
+	dhcp_client->retry_times = 0;
+
+	debug(dhcp_client, "sending DHCP decline");
+
+	init_packet(dhcp_client, &packet, DHCPDECLINE);
+
+	packet.xid = dhcp_client->xid;
+	packet.secs = dhcp_attempt_secs(dhcp_client);
+
+	if (requested)
+		dhcp_add_option_uint32(&packet, DHCP_REQUESTED_IP, requested);
+
+	add_send_options(dhcp_client, &packet);
+
+	return dhcp_send_raw_packet(&packet, INADDR_ANY, CLIENT_PORT,
+				INADDR_BROADCAST, SERVER_PORT, MAC_BCAST_ADDR,
+				dhcp_client->ifindex, true);
 }
 
 static int send_request(GDHCPClient *dhcp_client)
@@ -547,7 +579,7 @@ static int send_release(GDHCPClient *dhcp_client,
 	debug(dhcp_client, "sending DHCP release request");
 
 	init_packet(dhcp_client, &packet, DHCPRELEASE);
-	dhcp_get_random(&rand);
+	__connman_util_get_random(&rand);
 	packet.xid = rand;
 	packet.ciaddr = htonl(ciaddr);
 
@@ -570,7 +602,7 @@ static gboolean send_probe_packet(gpointer dhcp_data)
 	/* if requested_ip is not valid, pick a new address*/
 	if (dhcp_client->requested_ip == 0) {
 		debug(dhcp_client, "pick a new random address");
-		dhcp_client->requested_ip = ipv4ll_random_ip();
+		dhcp_client->requested_ip = arp_random_ip();
 	}
 
 	debug(dhcp_client, "sending IPV4LL probe request");
@@ -579,12 +611,12 @@ static gboolean send_probe_packet(gpointer dhcp_data)
 		dhcp_client->state = IPV4LL_PROBE;
 		switch_listening_mode(dhcp_client, L_ARP);
 	}
-	ipv4ll_send_arp_packet(dhcp_client->mac_address, 0,
+	arp_send_packet(dhcp_client->mac_address, 0,
 			dhcp_client->requested_ip, dhcp_client->ifindex);
 
 	if (dhcp_client->retry_times < PROBE_NUM) {
 		/*add a random timeout in range of PROBE_MIN to PROBE_MAX*/
-		timeout = ipv4ll_random_delay_ms(PROBE_MAX-PROBE_MIN);
+		timeout = __connman_util_random_delay_ms(PROBE_MAX-PROBE_MIN);
 		timeout += PROBE_MIN*1000;
 	} else
 		timeout = (ANNOUNCE_WAIT * 1000);
@@ -608,7 +640,7 @@ static gboolean send_announce_packet(gpointer dhcp_data)
 
 	debug(dhcp_client, "sending IPV4LL announce request");
 
-	ipv4ll_send_arp_packet(dhcp_client->mac_address,
+	arp_send_packet(dhcp_client->mac_address,
 				dhcp_client->requested_ip,
 				dhcp_client->requested_ip,
 				dhcp_client->ifindex);
@@ -631,38 +663,6 @@ static gboolean send_announce_packet(gpointer dhcp_data)
 						dhcp_client,
 						NULL);
 	return TRUE;
-}
-
-static void get_interface_mac_address(int index, uint8_t *mac_address)
-{
-	struct ifreq ifr;
-	int sk, err;
-
-	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-	if (sk < 0) {
-		perror("Open socket error");
-		return;
-	}
-
-	memset(&ifr, 0, sizeof(ifr));
-	ifr.ifr_ifindex = index;
-
-	err = ioctl(sk, SIOCGIFNAME, &ifr);
-	if (err < 0) {
-		perror("Get interface name error");
-		goto done;
-	}
-
-	err = ioctl(sk, SIOCGIFHWADDR, &ifr);
-	if (err < 0) {
-		perror("Get mac address error");
-		goto done;
-	}
-
-	memcpy(mac_address, ifr.ifr_hwaddr.sa_data, 6);
-
-done:
-	close(sk);
 }
 
 void g_dhcpv6_client_set_retransmit(GDHCPClient *dhcp_client)
@@ -695,7 +695,7 @@ int g_dhcpv6_create_duid(GDHCPDuidType duid_type, int index, int type,
 
 		(*duid)[0] = 0;
 		(*duid)[1] = 1;
-		get_interface_mac_address(index, &(*duid)[2 + 2 + 4]);
+		__connman_inet_get_interface_mac_address(index, &(*duid)[2 + 2 + 4]);
 		(*duid)[2] = 0;
 		(*duid)[3] = type;
 		duid_time = time(NULL) - DUID_TIME_EPOCH;
@@ -714,7 +714,7 @@ int g_dhcpv6_create_duid(GDHCPDuidType duid_type, int index, int type,
 
 		(*duid)[0] = 0;
 		(*duid)[1] = 3;
-		get_interface_mac_address(index, &(*duid)[2 + 2]);
+		__connman_inet_get_interface_mac_address(index, &(*duid)[2 + 2]);
 		(*duid)[2] = 0;
 		(*duid)[3] = type;
 		break;
@@ -839,7 +839,7 @@ void g_dhcpv6_client_create_iaid(GDHCPClient *dhcp_client, int index,
 {
 	uint8_t buf[6];
 
-	get_interface_mac_address(index, buf);
+	__connman_inet_get_interface_mac_address(index, buf);
 
 	memcpy(iaid, &buf[2], 4);
 	dhcp_client->iaid = iaid[0] << 24 |
@@ -1206,7 +1206,7 @@ GDHCPClient *g_dhcp_client_new(GDHCPType type,
 		goto error;
 	}
 
-	get_interface_mac_address(ifindex, dhcp_client->mac_address);
+	__connman_inet_get_interface_mac_address(ifindex, dhcp_client->mac_address);
 
 	dhcp_client->listener_sockfd = -1;
 	dhcp_client->listen_mode = L_NONE;
@@ -1226,6 +1226,8 @@ GDHCPClient *g_dhcp_client_new(GDHCPType type,
 				g_direct_equal, NULL, remove_option_value);
 	dhcp_client->send_value_hash = g_hash_table_new_full(g_direct_hash,
 				g_direct_equal, NULL, g_free);
+	dhcp_client->secs_bcast_hash = g_hash_table_new(g_direct_hash,
+				g_direct_equal);
 	dhcp_client->request_list = NULL;
 	dhcp_client->require_list = NULL;
 	dhcp_client->duid = NULL;
@@ -1401,10 +1403,10 @@ static void ipv4ll_start(GDHCPClient *dhcp_client)
 	dhcp_client->retry_times = 0;
 	dhcp_client->requested_ip = 0;
 
-	dhcp_client->requested_ip = ipv4ll_random_ip();
+	dhcp_client->requested_ip = arp_random_ip();
 
 	/*first wait a random delay to avoid storm of arp request on boot*/
-	timeout = ipv4ll_random_delay_ms(PROBE_WAIT);
+	timeout = __connman_util_random_delay_ms(PROBE_WAIT);
 
 	dhcp_client->retry_times++;
 	dhcp_client->timeout = g_timeout_add_full(G_PRIORITY_HIGH,
@@ -1441,6 +1443,7 @@ static int ipv4ll_recv_arp_packet(GDHCPClient *dhcp_client)
 	uint32_t ip_requested;
 	int source_conflict;
 	int target_conflict;
+	guint timeout_ms;
 
 	memset(&arp, 0, sizeof(arp));
 	bytes = read(dhcp_client->listener_sockfd, &arp, sizeof(arp));
@@ -1450,6 +1453,9 @@ static int ipv4ll_recv_arp_packet(GDHCPClient *dhcp_client)
 	if (arp.arp_op != htons(ARPOP_REPLY) &&
 			arp.arp_op != htons(ARPOP_REQUEST))
 		return -EINVAL;
+
+	if (memcmp(arp.arp_sha, dhcp_client->mac_address, ETH_ALEN) == 0)
+		return 0;
 
 	ip_requested = htonl(dhcp_client->requested_ip);
 	source_conflict = !memcmp(arp.arp_spa, &ip_requested,
@@ -1486,23 +1492,20 @@ static int ipv4ll_recv_arp_packet(GDHCPClient *dhcp_client)
 
 	ipv4ll_stop(dhcp_client);
 
-	if (dhcp_client->conflicts < MAX_CONFLICTS) {
-		/*restart whole state machine*/
-		dhcp_client->retry_times++;
-		dhcp_client->timeout =
-			g_timeout_add_full(G_PRIORITY_HIGH,
-					ipv4ll_random_delay_ms(PROBE_WAIT),
-					send_probe_packet,
-					dhcp_client,
-					NULL);
-	}
-	/* Here we got a lot of conflicts, RFC3927 states that we have
+	/* If we got a lot of conflicts, RFC3927 states that we have
 	 * to wait RATE_LIMIT_INTERVAL before retrying,
-	 * but we just report failure.
 	 */
-	else if (dhcp_client->no_lease_cb)
-			dhcp_client->no_lease_cb(dhcp_client,
-						dhcp_client->no_lease_data);
+	if (dhcp_client->conflicts < MAX_CONFLICTS)
+		timeout_ms = __connman_util_random_delay_ms(PROBE_WAIT);
+	else
+		timeout_ms = RATE_LIMIT_INTERVAL * 1000;
+	dhcp_client->retry_times++;
+	dhcp_client->timeout =
+		g_timeout_add_full(G_PRIORITY_HIGH,
+				timeout_ms,
+				send_probe_packet,
+				dhcp_client,
+				NULL);
 
 	return 0;
 }
@@ -1569,6 +1572,12 @@ static gboolean request_timeout(gpointer user_data)
 	return FALSE;
 }
 
+static void listener_watch_destroy(gpointer user_data)
+{
+	GDHCPClient *dhcp_client = user_data;
+	g_dhcp_client_unref(dhcp_client);
+}
+
 static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 							gpointer user_data);
 
@@ -1607,7 +1616,7 @@ static int switch_listening_mode(GDHCPClient *dhcp_client,
 							dhcp_client->interface,
 							AF_INET);
 	} else if (listen_mode == L_ARP)
-		listener_sockfd = ipv4ll_arp_socket(dhcp_client->ifindex);
+		listener_sockfd = arp_socket(dhcp_client->ifindex);
 	else
 		return -EIO;
 
@@ -1628,8 +1637,8 @@ static int switch_listening_mode(GDHCPClient *dhcp_client,
 	dhcp_client->listener_watch =
 			g_io_add_watch_full(listener_channel, G_PRIORITY_HIGH,
 				G_IO_IN | G_IO_NVAL | G_IO_ERR | G_IO_HUP,
-						listener_event, dhcp_client,
-								NULL);
+						listener_event, g_dhcp_client_ref(dhcp_client),
+								listener_watch_destroy);
 	g_io_channel_unref(listener_channel);
 
 	return 0;
@@ -1727,7 +1736,7 @@ static gboolean continue_rebound(gpointer user_data)
 	/*recalculate remaining rebind time*/
 	dhcp_client->T2 >>= 1;
 	if (dhcp_client->T2 > 60) {
-		dhcp_get_random(&rand);
+		__connman_util_get_random(&rand);
 		dhcp_client->t2_timeout =
 			g_timeout_add_full(G_PRIORITY_HIGH,
 					dhcp_client->T2 * 1000 + (rand % 2000) - 1000,
@@ -1775,7 +1784,7 @@ static gboolean continue_renew (gpointer user_data)
 	dhcp_client->T1 >>= 1;
 
 	if (dhcp_client->T1 > 60) {
-		dhcp_get_random(&rand);
+		__connman_util_get_random(&rand);
 		dhcp_client->t1_timeout = g_timeout_add_full(G_PRIORITY_HIGH,
 				dhcp_client->T1 * 1000 + (rand % 2000) - 1000,
 				continue_renew,
@@ -1858,6 +1867,71 @@ static char *get_ip(uint32_t ip)
 	addr.s_addr = ip;
 
 	return g_strdup(inet_ntoa(addr));
+}
+
+/* get a rough idea of how long an option will be */
+static const uint8_t len_of_option_as_string[] = {
+	[OPTION_IP] = sizeof("255.255.255.255 "),
+	[OPTION_STRING] = 1,
+	[OPTION_U8] = sizeof("255 "),
+	[OPTION_U16] = sizeof("65535 "),
+	[OPTION_U32] = sizeof("4294967295 "),
+};
+
+static int sprint_nip(char *dest, const char *pre, const uint8_t *ip)
+{
+	return sprintf(dest, "%s%u.%u.%u.%u", pre, ip[0], ip[1], ip[2], ip[3]);
+}
+
+/* Create "opt_value1 option_value2 ..." string */
+static char *malloc_option_value_string(uint8_t *option, GDHCPOptionType type)
+{
+	unsigned upper_length;
+	int len, optlen;
+	char *dest, *ret;
+
+	len = option[OPT_LEN - OPT_DATA];
+	type &= OPTION_TYPE_MASK;
+	optlen = dhcp_option_lengths[type];
+	if (optlen == 0)
+		return NULL;
+	upper_length = len_of_option_as_string[type] *
+			((unsigned)len / (unsigned)optlen);
+	dest = ret = g_malloc(upper_length + 1);
+	if (!ret)
+		return NULL;
+
+	while (len >= optlen) {
+		switch (type) {
+		case OPTION_IP:
+			dest += sprint_nip(dest, "", option);
+			break;
+		case OPTION_U16: {
+			uint16_t val_u16 = get_be16(option);
+			dest += sprintf(dest, "%u", val_u16);
+			break;
+		}
+		case OPTION_U32: {
+			uint32_t val_u32 = get_be32(option);
+			dest += sprintf(dest, "%u", val_u32);
+			break;
+		}
+		case OPTION_STRING:
+			memcpy(dest, option, len);
+			dest[len] = '\0';
+			return ret;
+		default:
+			break;
+		}
+		option += optlen;
+		len -= optlen;
+		if (len <= 0)
+			break;
+		*dest++ = ' ';
+		*dest = '\0';
+	}
+
+	return ret;
 }
 
 static GList *get_option_value_list(char *value, GDHCPOptionType type)
@@ -2351,14 +2425,28 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 
 		dhcp_client->state = REQUESTING;
 
-		if (dst_addr.sin_addr.s_addr == INADDR_BROADCAST)
-			dhcp_client->request_bcast = true;
-		else
-			dhcp_client->request_bcast = false;
+		/*
+		 * RFC2131:
+		 *
+		 *   If unicasting is not possible, the message MAY be
+		 *   sent as an IP broadcast using an IP broadcast address
+		 *   (preferably 0xffffffff) as the IP destination address
+		 *   and the link-layer broadcast address as the link-layer
+		 *   destination address.
+		 *
+		 * For interoperability reasons, if the response is an IP
+		 * broadcast, let's reuse broadcast flag from DHCPDISCOVER
+		 * to which the server has responded. Some servers are picky
+		 * about this flag.
+		 */
+		dhcp_client->request_bcast =
+			dst_addr.sin_addr.s_addr == INADDR_BROADCAST &&
+			g_hash_table_contains(dhcp_client->secs_bcast_hash,
+				GINT_TO_POINTER(packet.secs));
 
-		debug(dhcp_client, "init ip %s -> %sadding broadcast flag",
-			inet_ntoa(dst_addr.sin_addr),
-			dhcp_client->request_bcast ? "" : "not ");
+		debug(dhcp_client, "init ip %s secs %hu -> broadcast flag %s",
+			inet_ntoa(dst_addr.sin_addr), packet.secs,
+			dhcp_client->request_bcast ? "on" : "off");
 
 		start_request(dhcp_client);
 
@@ -2715,6 +2803,7 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 	int re;
 	uint32_t addr;
 	uint64_t rand;
+	ClientState oldstate = dhcp_client->state;
 
 #if defined TIZEN_EXT
 	int discover_retry = 0;
@@ -2829,9 +2918,9 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 	}
 
 #if defined TIZEN_EXT
-		if (dhcp_client->retry_times == discover_retry) {
+	if (dhcp_client->retry_times == discover_retry) {
 #else
-		if (dhcp_client->retry_times == DISCOVER_RETRIES) {
+	if (dhcp_client->retry_times == DISCOVER_RETRIES) {
 #endif
 		if (dhcp_client->no_lease_cb)
 			dhcp_client->no_lease_cb(dhcp_client,
@@ -2849,12 +2938,13 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 		if (re != 0)
 			return re;
 
-		dhcp_get_random(&rand);
+		__connman_util_get_random(&rand);
 		dhcp_client->xid = rand;
 		dhcp_client->start = time(NULL);
+		g_hash_table_remove_all(dhcp_client->secs_bcast_hash);
 	}
 
-	if (!last_address) {
+	if (!last_address || oldstate == DECLINED) {
 		addr = 0;
 	} else {
 		addr = ntohl(inet_addr(last_address));
@@ -3073,6 +3163,7 @@ char *g_dhcp_client_get_netmask(GDHCPClient *dhcp_client)
 	case REBOOTING:
 	case REQUESTING:
 	case RELEASED:
+	case DECLINED:
 	case IPV4LL_PROBE:
 	case IPV4LL_ANNOUNCE:
 	case INFORMATION_REQ:
@@ -3270,6 +3361,7 @@ void g_dhcp_client_unref(GDHCPClient *dhcp_client)
 
 	g_hash_table_destroy(dhcp_client->code_value_hash);
 	g_hash_table_destroy(dhcp_client->send_value_hash);
+	g_hash_table_destroy(dhcp_client->secs_bcast_hash);
 
 	g_free(dhcp_client);
 #if defined TIZEN_EXT

@@ -50,11 +50,11 @@ static gint compare_priority(gconstpointer a, gconstpointer b)
  *
  * Returns: %0 on success
  */
-int connman_notifier_register(struct connman_notifier *notifier)
+int connman_notifier_register(const struct connman_notifier *notifier)
 {
 	DBG("notifier %p name %s", notifier, notifier->name);
 
-	notifier_list = g_slist_insert_sorted(notifier_list, notifier,
+	notifier_list = g_slist_insert_sorted(notifier_list, (void*)notifier,
 							compare_priority);
 
 	return 0;
@@ -66,7 +66,7 @@ int connman_notifier_register(struct connman_notifier *notifier)
  *
  * Remove a previously registered notifier module
  */
-void connman_notifier_unregister(struct connman_notifier *notifier)
+void connman_notifier_unregister(const struct connman_notifier *notifier)
 {
 	DBG("notifier %p name %s", notifier, notifier->name);
 
@@ -221,7 +221,7 @@ void __connman_notifier_default_changed(struct connman_service *service)
 	GSList *list;
 
 	for (list = notifier_list; list; list = list->next) {
-		struct connman_notifier *notifier = list->data;
+		const struct connman_notifier *notifier = list->data;
 
 		if (notifier->default_changed)
 			notifier->default_changed(service);
@@ -234,7 +234,7 @@ void __connman_notifier_service_add(struct connman_service *service,
 	GSList *list;
 
 	for (list = notifier_list; list; list = list->next) {
-		struct connman_notifier *notifier = list->data;
+		const struct connman_notifier *notifier = list->data;
 
 		if (notifier->service_add)
 			notifier->service_add(service, name);
@@ -257,7 +257,7 @@ void __connman_notifier_service_remove(struct connman_service *service)
 	}
 
 	for (list = notifier_list; list; list = list->next) {
-		struct connman_notifier *notifier = list->data;
+		const struct connman_notifier *notifier = list->data;
 
 		if (notifier->service_remove)
 			notifier->service_remove(service);
@@ -269,7 +269,7 @@ void __connman_notifier_proxy_changed(struct connman_service *service)
 	GSList *list;
 
 	for (list = notifier_list; list; list = list->next) {
-		struct connman_notifier *notifier = list->data;
+		const struct connman_notifier *notifier = list->data;
 
 		if (notifier->proxy_changed)
 			notifier->proxy_changed(service);
@@ -295,7 +295,7 @@ void __connman_notifier_offlinemode(bool enabled)
 	state_changed();
 
 	for (list = notifier_list; list; list = list->next) {
-		struct connman_notifier *notifier = list->data;
+		const struct connman_notifier *notifier = list->data;
 
 		if (notifier->offline_mode)
 			notifier->offline_mode(enabled);
@@ -309,7 +309,7 @@ static void notify_idle_state(bool idle)
 	DBG("idle %d", idle);
 
 	for (list = notifier_list; list; list = list->next) {
-		struct connman_notifier *notifier = list->data;
+		const struct connman_notifier *notifier = list->data;
 
 		if (notifier->idle_state)
 			notifier->idle_state(idle);
@@ -324,7 +324,7 @@ void __connman_notifier_service_state_changed(struct connman_service *service,
 	bool found;
 
 	for (list = notifier_list; list; list = list->next) {
-		struct connman_notifier *notifier = list->data;
+		const struct connman_notifier *notifier = list->data;
 
 		if (notifier->service_state_changed)
 			notifier->service_state_changed(service, state);
@@ -367,7 +367,7 @@ void __connman_notifier_ipconfig_changed(struct connman_service *service,
 	GSList *list;
 
 	for (list = notifier_list; list; list = list->next) {
-		struct connman_notifier *notifier = list->data;
+		const struct connman_notifier *notifier = list->data;
 
 		if (notifier->ipconfig_changed)
 			notifier->ipconfig_changed(service, ipconfig);

@@ -196,7 +196,7 @@ static int set_duid(struct connman_service *service,
 	unsigned char *duid;
 	int duid_len;
 
-	ident = __connman_service_get_ident(service);
+	ident = connman_service_get_identifier(service);
 #if defined TIZEN_EXT
 	if(ident != NULL)
 		DBG("ident : %s", ident);
@@ -342,8 +342,8 @@ static void info_req_cb(GDHCPClient *dhcp_client, gpointer user_data)
 						CONNMAN_IPCONFIG_TYPE_IPV6);
 #else
 				__connman_service_nameserver_remove(service,
-						dhcp->nameservers[i],
-						false);
+							dhcp->nameservers[i],
+							false);
 #endif
 #if defined TIZEN_EXT
 			}
@@ -579,8 +579,8 @@ static int set_other_addresses(GDHCPClient *dhcp_client,
 					false, CONNMAN_IPCONFIG_TYPE_IPV6);
 #else
 			__connman_service_nameserver_append(service,
-						dhcp->nameservers[i],
-						false);
+							dhcp->nameservers[i],
+							false);
 #endif
 #if defined TIZEN_EXT
 		}

@@ -25,7 +25,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
@@ -262,6 +261,40 @@ char *connman_inet_ifname2addr(const char *name)
 }
 #endif
 
+bool __connman_inet_is_any_addr(const char *address, int family)
+{
+	bool ret = false;
+	struct addrinfo hints;
+	struct addrinfo *result = NULL;
+	struct sockaddr_in6 *in6 = NULL;
+	struct sockaddr_in *in4 = NULL;
+
+	if (!address || !*address)
+		goto out;
+
+	memset(&hints, 0, sizeof(struct addrinfo));
+
+	hints.ai_family = family;
+
+	if (getaddrinfo(address, NULL, &hints, &result))
+		goto out;
+
+	if (result) {
+		if (result->ai_family == AF_INET6) {
+			in6 = (struct sockaddr_in6*)result->ai_addr;
+			ret = IN6_IS_ADDR_UNSPECIFIED(&in6->sin6_addr);
+		} else if (result->ai_family == AF_INET) {
+			in4 = (struct sockaddr_in*)result->ai_addr;
+			ret = in4->sin_addr.s_addr == INADDR_ANY;
+		}
+
+		freeaddrinfo(result);
+	}
+
+out:
+	return ret;
+}
+
 int connman_inet_ifindex(const char *name)
 {
 	struct ifreq ifr;
@@ -442,6 +475,40 @@ void connman_inet_update_device_ident(struct connman_device *device)
 }
 #endif
 
+bool connman_inet_is_ifup(int index)
+{
+	int sk;
+	struct ifreq ifr;
+	bool ret = false;
+
+	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	if (sk < 0) {
+		connman_warn("Failed to open socket");
+		return false;
+	}
+
+	memset(&ifr, 0, sizeof(ifr));
+	ifr.ifr_ifindex = index;
+
+	if (ioctl(sk, SIOCGIFNAME, &ifr) < 0) {
+		connman_warn("Failed to get interface name for interface %d", index);
+		goto done;
+	}
+
+	if (ioctl(sk, SIOCGIFFLAGS, &ifr) < 0) {
+		connman_warn("Failed to get interface flags for index %d", index);
+		goto done;
+	}
+
+	if (ifr.ifr_flags & IFF_UP)
+		ret = true;
+
+done:
+	close(sk);
+
+	return ret;
+}
+
 struct in6_ifreq {
 	struct in6_addr ifr6_addr;
 	__u32 ifr6_prefixlen;
@@ -590,7 +657,17 @@ int connman_inet_add_network_route(int index, const char *host,
 
 	memset(&rt, 0, sizeof(rt));
 	rt.rt_flags = RTF_UP;
-	if (gateway)
+
+	/*
+	 * Set RTF_GATEWAY only when gateway is set and the gateway IP address
+	 * is not IPv4 any address (0.0.0.0). If the given gateway IP address is
+	 * any address adding of route will fail when RTF_GATEWAY set. Passing
+	 * gateway as NULL or INADDR_ANY should have the same effect. Setting
+	 * the gateway address later to the struct is not affected by this,
+	 * since given IPv4 any address (0.0.0.0) equals the value set with
+	 * INADDR_ANY.
+	 */
+	if (gateway && !__connman_inet_is_any_addr(gateway, AF_INET))
 		rt.rt_flags |= RTF_GATEWAY;
 	if (!netmask)
 		rt.rt_flags |= RTF_HOST;
@@ -753,10 +830,17 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 
 	rt.rtmsg_flags = RTF_UP | RTF_HOST;
 
-	if (gateway) {
+	/*
+	 * Set RTF_GATEWAY only when gateway is set, the gateway IP address is
+	 * not IPv6 any address (e.g., ::) and the address is valid (conversion
+	 * succeeds). If the given gateway IP address is any address then
+	 * adding of route will fail when RTF_GATEWAY set. Passing gateway as
+	 * NULL or IPv6 any address should have the same effect.
+	 */
+
+	if (gateway && !__connman_inet_is_any_addr(gateway, AF_INET6) &&
+		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) > 0)
 		rt.rtmsg_flags |= RTF_GATEWAY;
-		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway);
-	}
 
 	rt.rtmsg_metric = 1;
 	rt.rtmsg_ifindex = index;
@@ -2433,6 +2517,7 @@ static gboolean inet_rtnl_event(GIOChannel *chan, GIOCondition cond,
 		return TRUE;
 
 cleanup:
+	rtnl_data->callback(NULL, rtnl_data->user_data);
 	inet_rtnl_cleanup(rtnl_data);
 	return TRUE;
 }
@@ -2585,8 +2670,6 @@ out:
 		data->callback(addr, index, data->user_data);
 
 	g_free(data);
-
-	return;
 }
 
 /*
@@ -2678,9 +2761,10 @@ int connman_inet_check_ipaddress(const char *host)
 	addr = NULL;
 
 	result = getaddrinfo(host, NULL, &hints, &addr);
-	if (result == 0)
+	if (result == 0) {
 		result = addr->ai_family;
-	freeaddrinfo(addr);
+		freeaddrinfo(addr);
+	}
 
 	return result;
 }
@@ -2799,8 +2883,7 @@ char **__connman_inet_get_running_interfaces(void)
 
 	g_free(ifr);
 
-	if (count < numif)
-	{
+	if (count < numif) {
 		char **prev_result = result;
 		result = g_try_realloc(result, (count + 1) * sizeof(char *));
 		if (!result) {
@@ -2883,6 +2966,41 @@ out:
 	return err;
 }
 
+int __connman_inet_get_interface_mac_address(int index, uint8_t *mac_address)
+{
+	struct ifreq ifr;
+	int sk, err;
+	int ret = -EINVAL;
+
+	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	if (sk < 0) {
+		DBG("Open socket error");
+		return ret;
+	}
+
+	memset(&ifr, 0, sizeof(ifr));
+	ifr.ifr_ifindex = index;
+
+	err = ioctl(sk, SIOCGIFNAME, &ifr);
+	if (err < 0) {
+		DBG("Get interface name error");
+		goto done;
+	}
+
+	err = ioctl(sk, SIOCGIFHWADDR, &ifr);
+	if (err < 0) {
+		DBG("Get MAC address error");
+		goto done;
+	}
+
+	memcpy(mac_address, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
+	ret = 0;
+
+done:
+	close(sk);
+	return ret;
+}
+
 static int iprule_modify(int cmd, int family, uint32_t table_id,
 			uint32_t fwmark)
 {
@@ -2945,12 +3063,15 @@ int __connman_inet_del_fwmark_rule(uint32_t table_id, int family, uint32_t fwmar
 }
 
 static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
-			const char *gateway)
+			const char *gateway, unsigned char prefixlen)
 {
 	struct __connman_inet_rtnl_handle rth;
 	unsigned char buf[sizeof(struct in6_addr)];
 	int ret, len;
 	int family = connman_inet_check_ipaddress(gateway);
+	char *dst = NULL;
+
+	DBG("gateway %s/%u table %u", gateway, prefixlen, table_id);
 
 	switch (family) {
 	case AF_INET:
@@ -2963,7 +3084,19 @@ static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
 		return -EINVAL;
 	}
 
-	ret = inet_pton(family, gateway, buf);
+	if (prefixlen) {
+		struct in_addr ipv4_subnet_addr, ipv4_mask;
+
+		memset(&ipv4_subnet_addr, 0, sizeof(ipv4_subnet_addr));
+		ipv4_mask.s_addr = htonl((0xffffffff << (32 - prefixlen)) & 0xffffffff);
+		ipv4_subnet_addr.s_addr = inet_addr(gateway);
+		ipv4_subnet_addr.s_addr &= ipv4_mask.s_addr;
+
+		dst = g_strdup(inet_ntoa(ipv4_subnet_addr));
+	}
+
+	ret = inet_pton(family, dst ? dst : gateway, buf);
+	g_free(dst);
 	if (ret <= 0)
 		return -EINVAL;
 
@@ -2978,9 +3111,11 @@ static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
 	rth.req.u.r.rt.rtm_protocol = RTPROT_BOOT;
 	rth.req.u.r.rt.rtm_scope = RT_SCOPE_UNIVERSE;
 	rth.req.u.r.rt.rtm_type = RTN_UNICAST;
+	rth.req.u.r.rt.rtm_dst_len = prefixlen;
 
-	__connman_inet_rtnl_addattr_l(&rth.req.n, sizeof(rth.req), RTA_GATEWAY,
-								buf, len);
+	__connman_inet_rtnl_addattr_l(&rth.req.n, sizeof(rth.req),
+		prefixlen > 0 ? RTA_DST : RTA_GATEWAY, buf, len);
+
 	if (table_id < 256) {
 		rth.req.u.r.rt.rtm_table = table_id;
 	} else {
@@ -3009,7 +3144,14 @@ int __connman_inet_add_default_to_table(uint32_t table_id, int ifindex,
 {
 	/* ip route add default via 1.2.3.4 dev wlan0 table 1234 */
 
-	return iproute_default_modify(RTM_NEWROUTE, table_id, ifindex, gateway);
+	return iproute_default_modify(RTM_NEWROUTE, table_id, ifindex, gateway, 0);
+}
+
+int __connman_inet_add_subnet_to_table(uint32_t table_id, int ifindex,
+						const char *gateway, unsigned char prefixlen)
+{
+	/* ip route add 1.2.3.4/24 dev eth0 table 1234 */
+	return iproute_default_modify(RTM_NEWROUTE, table_id, ifindex, gateway, prefixlen);
 }
 
 int __connman_inet_del_default_from_table(uint32_t table_id, int ifindex,
@@ -3017,7 +3159,14 @@ int __connman_inet_del_default_from_table(uint32_t table_id, int ifindex,
 {
 	/* ip route del default via 1.2.3.4 dev wlan0 table 1234 */
 
-	return iproute_default_modify(RTM_DELROUTE, table_id, ifindex, gateway);
+	return iproute_default_modify(RTM_DELROUTE, table_id, ifindex, gateway, 0);
+}
+
+int __connman_inet_del_subnet_from_table(uint32_t table_id, int ifindex,
+						const char *gateway, unsigned char prefixlen)
+{
+	/* ip route del 1.2.3.4/24 dev eth0 table 1234 */
+	return iproute_default_modify(RTM_DELROUTE, table_id, ifindex, gateway, prefixlen);
 }
 
 int __connman_inet_get_interface_ll_address(int index, int family,
@@ -3152,10 +3301,8 @@ static int get_nfs_server_ip(const char *cmdline_file, const char *pnp_file,
 						  pnp_file, error->message);
 			goto out;
 		}
-	} else {
-		connman_error("%s: File %s doesn't exist\n", __func__, pnp_file);
+	} else
 		goto out;
-	}
 
 	len = strlen(cmdline);
 	if (len <= 1) {
@@ -3350,6 +3497,9 @@ char **__connman_inet_get_pnp_nameservers(const char *pnp_file)
 
 	if (!pnp_file)
 		pnp_file = "/proc/net/pnp";
+
+	if (!g_file_test(pnp_file, G_FILE_TEST_EXISTS))
+		goto out;
 
 	if (!g_file_get_contents(pnp_file, &pnp, NULL, &error)) {
 		connman_error("%s: Cannot read %s %s\n", __func__,

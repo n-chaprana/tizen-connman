@@ -556,7 +556,6 @@ static void device_enable_cb(const DBusError *error, void *user_data)
 #if !defined TIZEN_EXT
 	enable_device(device, path);
 #endif
-
 out:
 	g_free(path);
 }

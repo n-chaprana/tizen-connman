@@ -67,7 +67,7 @@
 #define CONNMAN_CHAIN_NAT_POST "nat-postrouting"
 #define CONNMAN_CHAIN_ROUTE_OUTPUT "route-output"
 
-static bool debug_enabled = true;
+static bool debug_enabled = false;
 
 struct firewall_handle {
 	uint64_t handle;
@@ -402,6 +402,8 @@ static int table_cmd(struct mnl_socket *nl, struct nftnl_table *t,
         uint32_t seq = 0;
         int err;
 
+	bzero(buf, sizeof(buf));
+
         batch = mnl_nlmsg_batch_start(buf, sizeof(buf));
         nftnl_batch_begin(mnl_nlmsg_batch_current(batch), seq++);
         mnl_nlmsg_batch_next(batch);
@@ -432,6 +434,8 @@ static int chain_cmd(struct mnl_socket *nl, struct nftnl_chain *chain,
         struct nlmsghdr *nlh;
         uint32_t seq = 0;
         int err;
+
+	bzero(buf, sizeof(buf));
 
         batch = mnl_nlmsg_batch_start(buf, sizeof(buf));
         nftnl_batch_begin(mnl_nlmsg_batch_current(batch), seq++);
@@ -464,6 +468,8 @@ static int rule_cmd(struct mnl_socket *nl, struct nftnl_rule *rule,
         struct nlmsghdr *nlh;
         uint32_t seq = 0;
         int err;
+
+	bzero(buf, sizeof(buf));
 
 	debug_netlink_dump_rule(rule);
 
@@ -670,7 +676,7 @@ static int build_rule_snat(int index, const char *address,
 	nftnl_rule_set(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
 	nftnl_rule_set(rule, NFTNL_RULE_CHAIN, CONNMAN_CHAIN_NAT_POST);
 
-	/* IOF */
+	/* OIF */
 	expr = nftnl_expr_alloc("meta");
 	if (!expr)
 		goto err;
@@ -1003,7 +1009,7 @@ static int create_table_and_chains(struct nftables_info *nft_info)
 
 	/*
 	 * # nft add chain connman nat-prerouting		\
-	 *	{ type nat hook prerouting priortiy 0 ; }
+	 *	{ type nat hook prerouting priority 0 ; }
 	 */
 	chain = build_chain(CONNMAN_CHAIN_NAT_PRE, CONNMAN_TABLE,
 				"nat", NF_INET_PRE_ROUTING, 0);
@@ -1020,7 +1026,7 @@ static int create_table_and_chains(struct nftables_info *nft_info)
 
 	/*
 	 * # nft add chain connman nat-postrouting		\
-	 *	{ type nat hook postrouting priortiy 0 ; }
+	 *	{ type nat hook postrouting priority 0 ; }
 	 */
 	chain = build_chain(CONNMAN_CHAIN_NAT_POST, CONNMAN_TABLE,
 				"nat", NF_INET_POST_ROUTING, 0);

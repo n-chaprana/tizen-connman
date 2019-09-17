@@ -38,6 +38,7 @@ char *connman_inet_ifname(int index);
 
 int connman_inet_ifup(int index);
 int connman_inet_ifdown(int index);
+bool connman_inet_is_ifup(int index);
 
 #if defined TIZEN_EXT
 void connman_inet_update_device_ident(struct connman_device *device);

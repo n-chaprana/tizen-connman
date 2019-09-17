@@ -23,11 +23,11 @@
 #include <config.h>
 #endif
 
-#include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <stdio.h>
 
 #include <connman/storage.h>
 
