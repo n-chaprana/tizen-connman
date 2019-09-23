@@ -284,6 +284,14 @@ static void no_lease_cb(GDHCPClient *dhcp_client, gpointer user_data)
 	DBG("No lease available ipv4ll %d client %p", dhcp->ipv4ll_running,
 		dhcp->ipv4ll_client);
 
+#if defined TIZEN_EXT
+	if (connman_setting_get_bool("EnableAutoIp") == false) {
+		DBG("link-local address autoconfiguration is disabled.");
+		if (dhcp->network)
+			__connman_network_disconnect(dhcp->network);
+		return;
+	}
+#endif
 	if (dhcp->timeout > 0)
 		g_source_remove(dhcp->timeout);
 

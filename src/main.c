@@ -96,6 +96,7 @@ static struct {
 #if defined TIZEN_EXT
 	char **cellular_interfaces;
 	bool tizen_tv_extension;
+	bool auto_ip;
 #endif
 } connman_settings  = {
 	.bg_scan = true,
@@ -122,6 +123,7 @@ static struct {
 #if defined TIZEN_EXT
 	.cellular_interfaces = NULL,
 	.tizen_tv_extension = false,
+	.auto_ip = true,
 #endif
 };
 
@@ -149,6 +151,7 @@ static struct {
 #if defined TIZEN_EXT
 #define CONF_CELLULAR_INTERFACE         "NetworkCellularInterfaceList"
 #define CONF_TIZEN_TV_EXT		"TizenTVExtension"
+#define CONF_ENABLE_AUTO_IP		"EnableAutoIp"
 #endif
 
 static const char *supported_options[] = {
@@ -310,6 +313,13 @@ static void check_Tizen_configuration(GKeyFile *config)
 			CONF_TIZEN_TV_EXT, &error);
 	if (!error)
 		connman_settings.tizen_tv_extension = boolean;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
+			CONF_ENABLE_AUTO_IP, &error);
+	if (!error)
+		connman_settings.auto_ip = boolean;
 
 	g_clear_error(&error);
 }
@@ -759,6 +769,11 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_USE_GATEWAYS_AS_TIMESERVERS))
 		return connman_settings.use_gateways_as_timeservers;
+
+#if defined TIZEN_EXT
+	if (g_str_equal(key, CONF_ENABLE_AUTO_IP))
+		return connman_settings.auto_ip;
+#endif
 
 	return false;
 }
