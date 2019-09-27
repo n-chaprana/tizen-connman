@@ -97,6 +97,7 @@ static struct {
 	char **cellular_interfaces;
 	bool tizen_tv_extension;
 	bool auto_ip;
+	char *global_nameserver;
 #endif
 } connman_settings  = {
 	.bg_scan = true,
@@ -124,6 +125,7 @@ static struct {
 	.cellular_interfaces = NULL,
 	.tizen_tv_extension = false,
 	.auto_ip = true,
+	.global_nameserver = NULL,
 #endif
 };
 
@@ -152,6 +154,7 @@ static struct {
 #define CONF_CELLULAR_INTERFACE         "NetworkCellularInterfaceList"
 #define CONF_TIZEN_TV_EXT		"TizenTVExtension"
 #define CONF_ENABLE_AUTO_IP		"EnableAutoIp"
+#define CONF_GLOBAL_NAMESERVER          "GlobalNameserver"
 #endif
 
 static const char *supported_options[] = {
@@ -178,6 +181,8 @@ static const char *supported_options[] = {
 #if defined TIZEN_EXT
 	CONF_CELLULAR_INTERFACE,
 	CONF_TIZEN_TV_EXT,
+	CONF_ENABLE_AUTO_IP,
+	CONF_GLOBAL_NAMESERVER,
 #endif
 	NULL
 };
@@ -298,6 +303,7 @@ static void check_Tizen_configuration(GKeyFile *config)
 {
 	GError *error = NULL;
 	char **cellular_interfaces;
+	char *global_nameserver;
 	bool boolean;
 	gsize len;
 
@@ -320,6 +326,13 @@ static void check_Tizen_configuration(GKeyFile *config)
 			CONF_ENABLE_AUTO_IP, &error);
 	if (!error)
 		connman_settings.auto_ip = boolean;
+
+	g_clear_error(&error);
+
+	global_nameserver = __connman_config_get_string(config, "General",
+					CONF_GLOBAL_NAMESERVER, &error);
+	if (!error)
+		connman_settings.global_nameserver = global_nameserver;
 
 	g_clear_error(&error);
 }
@@ -735,6 +748,10 @@ const char *connman_option_get_string(const char *key)
 			return option_wifi;
 	}
 
+#if defined TIZEN_EXT
+	if (g_str_equal(key, CONF_GLOBAL_NAMESERVER))
+		return connman_settings.global_nameserver;
+#endif
 	return NULL;
 }
 

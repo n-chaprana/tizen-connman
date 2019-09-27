@@ -1543,6 +1543,12 @@ static int nameserver_add_all(struct connman_service *service,
 	if (!i)
 		__connman_resolver_append_fallback_nameservers();
 
+#if defined TIZEN_EXT
+	const char *global_dns = connman_option_get_string("GlobalNameserver");
+	if (global_dns)
+		nameserver_add(service, type, global_dns);
+#endif
+
 	searchdomain_add_all(service);
 
 	return 0;
@@ -1712,6 +1718,11 @@ static int nameserver_remove_all(struct connman_service *service,
 		i++;
 	}
 
+#if defined TIZEN_EXT
+	const char *global_dns = connman_option_get_string("GlobalNameserver");
+	if (global_dns)
+		nameserver_remove(service, type, global_dns);
+#endif
 	searchdomain_remove_all(service);
 
 	return 0;
