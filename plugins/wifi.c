@@ -2479,7 +2479,9 @@ static int wifi_disable(struct connman_device *device)
 	if (wifi->pending_network)
 		wifi->pending_network = NULL;
 
+#if !defined TIZEN_EXT
 	stop_autoscan(device);
+#endif
 
 	if (connman_device_get_scanning(device, CONNMAN_SERVICE_TYPE_P2P)) {
 		g_source_remove(wifi->p2p_find_timeout);
@@ -2501,6 +2503,10 @@ static int wifi_disable(struct connman_device *device)
 				CONNMAN_SERVICE_TYPE_WIFI, false);
 		connman_device_unref(wifi->device);
 	}
+
+#if defined TIZEN_EXT
+	stop_autoscan(device);
+#endif
 
 	remove_networks(device, wifi);
 	remove_peers(wifi);
