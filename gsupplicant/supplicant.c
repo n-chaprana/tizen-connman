@@ -4914,7 +4914,7 @@ static void interface_create_result(const char *error,
 	SUPPLICANT_DBG("");
 
 	if (error) {
-		g_warning("error %s", error);
+		g_message("error %s", error);
 		err = -EIO;
 		goto done;
 	}
