@@ -3446,18 +3446,16 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 
 #if defined TIZEN_EXT
 	unsigned int frequency = 0U;
-	if (service && service->network) {
-		frequency = connman_network_get_frequency(service->network);
-		connman_dbus_dict_append_basic(dict, "Frequency",
-				DBUS_TYPE_UINT16, &frequency);
-	}
-
 	unsigned char *wifi_vsie;
 	unsigned int wifi_vsie_len;
 	GSList *vsie_list = NULL;
 
-	if (service->network)
+	if (service->network) {
+		frequency = connman_network_get_frequency(service->network);
+		connman_dbus_dict_append_basic(dict, "Frequency",
+				DBUS_TYPE_UINT16, &frequency);
 		vsie_list = (GSList *)connman_network_get_vsie_list(service->network);
+	}
 
 	if (vsie_list) {
 		GSList *list;
