@@ -3793,7 +3793,7 @@ static void set_connection_mode(struct connman_network *network,
 	connman_network_set_connection_mode(network, conn_mode);
 }
 
-static void signalpoll_callback(int result, int maxspeed, uint8_t strength,
+static void signalpoll_callback(int result, int maxspeed, int strength,
 				void *user_data)
 {
 	struct connman_network *network = user_data;
@@ -3809,7 +3809,7 @@ static void signalpoll_callback(int result, int maxspeed, uint8_t strength,
 
 	DBG("maxspeed = %d, strength = %d", maxspeed, strength);
 	if (network) {
-		connman_network_set_strength(network, strength);
+		connman_network_set_strength(network, (uint8_t)strength);
 		connman_network_set_maxspeed(network, maxspeed);
 		set_connection_mode(network, maxspeed);
 	}

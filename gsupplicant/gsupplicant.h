@@ -296,7 +296,7 @@ typedef void (*GSupplicantInterfaceCallback) (int result,
 
 #if defined TIZEN_EXT
 typedef void (*GSupplicantMaxSpeedCallback) (int result, int maxspeed,
-					     uint8_t strength, void *user_data);
+					     int strength, void *user_data);
 #endif
 
 void g_supplicant_interface_cancel(GSupplicantInterface *interface);

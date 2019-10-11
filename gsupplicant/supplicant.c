@@ -5594,7 +5594,7 @@ static void interface_signalpoll_result(const char *error,
 	struct interface_signalpoll_data *data = user_data;
 	int err = 0;
 	dbus_int32_t maxspeed = 0;
-	unsigned char strength = 0;
+	dbus_int32_t strength = 0;
 	DBusMessageIter sub_iter, dict;
 
 	if (error) {
@@ -5622,9 +5622,7 @@ static void interface_signalpoll_result(const char *error,
 				dbus_message_iter_get_basic(&value, &maxspeed);
 				SUPPLICANT_DBG("linkspeed = %d", maxspeed);
 				break;
-			}
-		case DBUS_TYPE_BYTE:
-			if (g_strcmp0(key, "rssi") == 0) {
+			} else if (g_strcmp0(key, "rssi") == 0) {
 				dbus_message_iter_get_basic(&value, &strength);
 				SUPPLICANT_DBG("Strength = %d", strength);
 				break;
