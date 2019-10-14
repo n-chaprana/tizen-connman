@@ -2091,6 +2091,12 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 	struct connman_device *device = user_data;
 	struct wifi_data *wifi = connman_device_get_data(device);
 	bool scanning;
+#if defined TIZEN_EXT
+	GSList *list = NULL;
+	bool favorite_exists = false;
+	struct connman_network *network = NULL;
+	struct connman_service *service = NULL;
+#endif
 
 	DBG("result %d wifi %p", result, wifi);
 
@@ -2138,18 +2144,35 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 	}
 
 #if defined TIZEN_EXT
-	if (wifi && wifi->allow_full_scan) {
-		int ret;
-		DBG("Trigger Full Channel Scan");
-		wifi->allow_full_scan = FALSE;
+	if (wifi) {
+		for (list = wifi->networks; list; list = list->next) {
+			network = list->data;
+			service = connman_service_lookup_from_network(network);
 
-		ret = g_supplicant_interface_scan(wifi->interface, NULL,
-							scan_callback_hidden, device);
-		if (ret == 0)
-			return;
+			if (service != NULL &&
+				(connman_service_get_favorite(service) == true) &&
+				(connman_service_get_autoconnect(service) == true)) {
+				DBG("Favorite service exists [%s]", connman_network_get_string(network, "Name"));
+				favorite_exists = true;
+				break;
+			}
+		}
+	}
 
-		/* On error, let's recall scan_callback, which will cleanup */
-		return scan_callback(ret, interface, user_data);
+	if (favorite_exists == false) {
+		if (wifi && wifi->allow_full_scan) {
+			int ret;
+			DBG("Trigger full channel scan");
+			wifi->allow_full_scan = false;
+
+			ret = g_supplicant_interface_scan(wifi->interface, NULL,
+								scan_callback_hidden, device);
+			if (ret == 0)
+				return;
+
+			/* On error, let's recall scan_callback, which will cleanup */
+			return scan_callback(ret, interface, user_data);
+		}
 	}
 #endif
 
