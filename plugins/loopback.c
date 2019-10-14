@@ -58,54 +58,64 @@ static void create_hostname(void)
 	strncpy(system_hostname, name, HOST_NAME_MAX);
 }
 
+#if defined TIZEN_EXT
+static void _create_hostname(void)
+{
+	FILE *fp = NULL;
+#define WIFI_MAC "/opt/etc/.mac.info"
+
+	memset(system_hostname, 0, sizeof(system_hostname));
+
+	char* rv = 0;
+	gchar* dev_id = "TIZEN";
+	char wifi_mac[HOST_NAME_MAX + 1];
+
+	fp = fopen(WIFI_MAC, "r");
+	if(!fp){
+		connman_error("Failed to get current hostname");
+		strncpy(system_hostname, dev_id, strlen(dev_id));
+		return;
+	}
+
+	rv = fgets(wifi_mac, HOST_NAME_MAX, fp);
+	if(!rv){
+		connman_error("Failed to get current hostname");
+		strncpy(system_hostname, dev_id, strlen(dev_id));
+		fclose(fp);
+		return;
+	}
+
+	dev_id = g_base64_encode((const guchar *)wifi_mac, strlen(wifi_mac));
+	g_sprintf(system_hostname, "TIZEN-%s", dev_id);
+	g_free(dev_id);
+	fclose(fp);
+}
+#endif
+
 static int setup_hostname(void)
 {
 	char name[HOST_NAME_MAX + 1];
 
 	memset(system_hostname, 0, sizeof(system_hostname));
 
-#if defined TIZEN_EXT
-	FILE *fp = NULL;
-#define WIFI_MAC "/opt/etc/.mac.info"
-	{
-		char* rv = 0;
-		gchar* dev_id = "TIZEN";
-		char wifi_mac[HOST_NAME_MAX + 1];
-
-		fp = fopen(WIFI_MAC, "r");
-		if(!fp){
-			connman_error("Failed to get current hostname");
-			strncpy(system_hostname, dev_id, strlen(dev_id));
-			goto host_name_end;
-		}
-
-		rv = fgets(wifi_mac, HOST_NAME_MAX, fp);
-		if(!rv){
-			connman_error("Failed to get current hostname");
-			strncpy(system_hostname, dev_id, strlen(dev_id));
-			fclose(fp);
-			goto host_name_end;
-		}
-
-		dev_id = g_base64_encode((const guchar *)wifi_mac, strlen(wifi_mac));
-		g_sprintf(system_hostname, "TIZEN-%s", dev_id);
-		g_free(dev_id);
-		fclose(fp);
-	}
-
-host_name_end:
-#else
 	if (gethostname(system_hostname, HOST_NAME_MAX) < 0) {
 		connman_error("Failed to get current hostname");
 		return -EIO;
 	}
-#endif
-
+#if defined TIZEN_EXT
+	if (strlen(system_hostname) > 0 &&
+			strcmp(system_hostname, "(none)") != 0 &&
+			strcmp(system_hostname, "localhost") != 0)
+		connman_info("System hostname is %s", system_hostname);
+	else
+		_create_hostname();
+#else
 	if (strlen(system_hostname) > 0 &&
 				strcmp(system_hostname, "(none)") != 0)
 		connman_info("System hostname is %s", system_hostname);
 	else
 		create_hostname();
+#endif
 
 	memset(name, 0, sizeof(name));
 
