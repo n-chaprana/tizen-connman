@@ -381,10 +381,10 @@ static void decode_msg(struct ntp_data *nd, void *base, size_t len,
 		clock_gettime(CLOCK_REALTIME, &req);
 		msg = dbus_message_new_method_call(TIME_BUS_NAME, TIME_PATH,
 			TIME_INTERFACE, TIME_METHOD);
-		dbus_message_append_args(msg, DBUS_TYPE_UINT32, &(cur.tv_sec),
-			DBUS_TYPE_UINT32, &(cur.tv_nsec),
-			DBUS_TYPE_UINT32, &(req.tv_sec),
-			DBUS_TYPE_UINT32, &(req.tv_nsec), DBUS_TYPE_INVALID);
+		dbus_message_append_args(msg, DBUS_TYPE_INT64, &(cur.tv_sec),
+			DBUS_TYPE_INT64, &(cur.tv_nsec),
+			DBUS_TYPE_INT64, &(req.tv_sec),
+			DBUS_TYPE_INT64, &(req.tv_nsec), DBUS_TYPE_INVALID);
 		reply = dbus_connection_send_with_reply_and_block(connection, msg,
 				DBUS_TIMEOUT_USE_DEFAULT, &error);
 		if(reply == NULL){
