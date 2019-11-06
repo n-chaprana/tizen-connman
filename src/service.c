@@ -41,6 +41,7 @@
 
 #if defined TIZEN_EXT
 #define WIFI_BSSID_STR_LEN	18
+#define MAX_WIFI_PROFILES	200
 #endif
 
 static DBusConnection *connection = NULL;
@@ -55,6 +56,12 @@ static bool services_dirty = false;
 
 #if defined TIZEN_EXT
 static bool auto_connect_mode = TRUE;
+
+struct saved_profiles {
+	GTimeVal modified;
+	gchar *profile_name;
+};
+
 #endif
 
 struct connman_stats {
@@ -1152,12 +1159,108 @@ done:
 	return err;
 }
 
+#if defined TIZEN_EXT
+static gint sort_entry(gconstpointer a, gconstpointer b, gpointer user_data)
+{
+	GTimeVal *aval = (GTimeVal *)a;
+	GTimeVal *bval = (GTimeVal *)b;
+
+	/* Note that the sort order is ascending */
+	if (aval->tv_sec > bval->tv_sec)
+		return 1;
+
+	if (aval->tv_sec < bval->tv_sec)
+		return -1;
+
+	return 0;
+}
+
+static void free_entry(gpointer data)
+{
+	struct saved_profiles *entry = data;
+	g_free(entry->profile_name);
+	g_free(entry);
+}
+
+static void __connman_manage_saved_profiles()
+{
+	GKeyFile *keyfile;
+	gchar **services = NULL;
+	GTimeVal modified;
+	int i, num_profiles = 0;
+	GSequenceIter *iter;
+	GSequence *profile_list;
+	struct saved_profiles *entry;
+
+	profile_list = g_sequence_new(free_entry);
+	if (!profile_list)
+		return;
+
+	services = connman_storage_get_services();
+
+	/* Check the count of saved profiles */
+	for (i = 0; services && services[i]; i++) {
+		if (strncmp(services[i], "wifi_", 5) != 0)
+			continue;
+
+		keyfile = connman_storage_load_service(services[i]);
+		if (!keyfile)
+			continue;
+
+		gchar *str = g_key_file_get_string(keyfile,
+				services[i], "Modified", NULL);
+		if (!str) {
+			g_key_file_free(keyfile);
+			continue;
+		}
+
+		g_time_val_from_iso8601(str, &modified);
+		g_free(str);
+
+		entry = g_try_new(struct saved_profiles, 1);
+		if (!entry) {
+			g_sequence_free(profile_list);
+			g_key_file_free(keyfile);
+			return;
+		}
+
+		entry->modified = modified;
+		entry->profile_name = g_strdup(services[i]);
+
+		g_sequence_insert_sorted(profile_list, entry,
+				sort_entry, NULL);
+
+		num_profiles++;
+	}
+	DBG("number of profiles: %d", num_profiles);
+
+	if (num_profiles > MAX_WIFI_PROFILES) {
+		iter = g_sequence_get_begin_iter(profile_list);
+
+		entry = g_sequence_get(iter);
+
+		if (__connman_storage_remove_service(entry->profile_name) == false)
+			DBG("Failed to remove service profile: %s", entry->profile_name);
+	}
+
+	g_sequence_free(profile_list);
+}
+#endif
+
 void __connman_service_save(struct connman_service *service)
 {
 	if (!service)
 		return;
 
 	service_save(service);
+#if defined TIZEN_EXT
+	/*
+	 * Description: Manage the wireless profiles saved in connman.
+	 * If the number of saved profiles is more than 200, remove the
+	 * profile that is not updated for longer duration.
+	 */
+	__connman_manage_saved_profiles();
+#endif
 }
 
 static enum connman_service_state combine_state(
