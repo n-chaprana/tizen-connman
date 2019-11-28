@@ -5521,24 +5521,16 @@ static void sta_remove_callback(int result,
 	if ((result < 0) || (info->wifi->ap_supported != WIFI_AP_SUPPORTED)) {
 		info->wifi->tethering = false;
 		connman_technology_tethering_notify(info->technology, false);
-#if !defined TIZEN_EXT
-
-		g_free(info->ifname);
-		g_free(info->ssid);
-		g_free(info);
-#endif /* !defined TIZEN_EXT */
 
 		if (info->wifi->ap_supported == WIFI_AP_SUPPORTED) {
 			g_free(info->wifi->tethering_param->ssid);
 			g_free(info->wifi->tethering_param);
 			info->wifi->tethering_param = NULL;
 		}
-#if defined TIZEN_EXT
 
 		g_free(info->ifname);
 		g_free(info->ssid);
 		g_free(info);
-#endif /* defined TIZEN_EXT */
 		return;
 	}
 
