@@ -2269,6 +2269,11 @@ static gboolean autoscan_timeout(gpointer data)
 
 	autoscan = wifi->autoscan;
 
+#if defined TIZEN_EXT
+	if (!autoscan)
+		return FALSE;
+#endif
+
 	if (autoscan->interval <= 0) {
 		interval = autoscan->base;
 		goto set_interval;
