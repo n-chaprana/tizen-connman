@@ -41,6 +41,13 @@ typedef enum {
 	CONNMAN_MULTI_SCAN_SSID_FREQ,
 } connman_multi_scan_type_e;
 
+typedef enum {
+	CONNMAN_SCAN_TYPE_FULL_CHANNEL = 0x00,
+	CONNMAN_SCAN_TYPE_SPECIFIC_AP,
+	CONNMAN_SCAN_TYPE_MULTI_AP,
+	CONNMAN_SCAN_TYPE_WPA_SUPPLICANT,
+} connman_scan_type_e;
+
 typedef struct {
 	char str[128];
 	gboolean flag;
@@ -86,6 +93,7 @@ void connman_techonology_wifi_set_5ghz_supported(struct connman_technology *tech
 		bool is_5_0_Ghz_supported);
 void connman_techonology_set_max_scan_ssids(struct connman_technology *technology,
 		int max_scan_ssids);
+void __connman_technology_notify_scan_done(int val);
 #endif
 
 #ifdef __cplusplus

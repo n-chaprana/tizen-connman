@@ -778,6 +778,17 @@ static void callback_assoc_failed(void *user_data)
 
 	callbacks_pointer->assoc_failed(user_data);
 }
+
+static void callback_scan_done(GSupplicantInterface *interface)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->scan_done)
+		return;
+
+	callbacks_pointer->scan_done(interface);
+}
 #endif
 
 static void callback_network_changed(GSupplicantNetwork *network,
@@ -3146,7 +3157,8 @@ static void scan_bss_data(const char *key, DBusMessageIter *iter,
 
 /*Fixed : stucking in scanning state when scan failed*/
 #if defined TIZEN_EXT
-		GSupplicantInterfaceCallback scan_callback;
+	GSupplicantInterfaceCallback scan_callback;
+	SUPPLICANT_DBG("");
 #endif
 
 	if (iter)
@@ -3154,14 +3166,15 @@ static void scan_bss_data(const char *key, DBusMessageIter *iter,
 						interface);
 
 #if defined TIZEN_EXT
-		scan_callback = interface->scan_callback;
+	scan_callback = interface->scan_callback;
+	callback_scan_done(interface);
 #endif
 
 	if (interface->scan_callback)
 		interface->scan_callback(0, interface, interface->scan_data);
 
 #if defined TIZEN_EXT
-		if (interface->scan_callback == scan_callback) {
+	if (interface->scan_callback == scan_callback) {
 #endif
 	interface->scan_callback = NULL;
 	interface->scan_data = NULL;

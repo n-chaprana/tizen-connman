@@ -491,6 +491,7 @@ struct _GSupplicantCallbacks {
 #if defined TIZEN_EXT
 	void (*system_power_off) (void);
 	void (*assoc_failed) (void *user_data);
+	void (*scan_done) (GSupplicantInterface *interface);
 #endif
 	void (*sta_authorized) (GSupplicantInterface *interface,
 					const char *addr);

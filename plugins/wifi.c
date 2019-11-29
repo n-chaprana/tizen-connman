@@ -5344,6 +5344,26 @@ static void assoc_failed(void *user_data)
 	struct connman_network *network = user_data;
 	connman_network_set_associating(network, false);
 }
+
+static void scan_done(GSupplicantInterface *interface)
+{
+	GList *list;
+	int scan_type = CONNMAN_SCAN_TYPE_WPA_SUPPLICANT;
+	struct wifi_data *wifi;
+	bool scanning;
+
+	for (list = iface_list; list; list = list->next) {
+		wifi = list->data;
+
+		if (interface == wifi->interface) {
+			scanning = connman_device_get_scanning(wifi->device,
+					CONNMAN_SERVICE_TYPE_WIFI);
+			if (!scanning)
+				__connman_technology_notify_scan_done(scan_type);
+			break;
+		}
+	}
+}
 #endif
 
 static void debug(const char *str)
@@ -5393,8 +5413,9 @@ static const GSupplicantCallbacks callbacks = {
 	.peer_request		= peer_request,
 #if defined TIZEN_EXT
 	.system_power_off	= system_power_off,
-	.network_merged	= network_merged,
+	.network_merged		= network_merged,
 	.assoc_failed		= assoc_failed,
+	.scan_done		= scan_done,
 #endif
 	.debug			= debug,
 	.disconnect_reasoncode  = disconnect_reasoncode,

@@ -48,12 +48,6 @@ static GHashTable *rfkill_list;
 static bool global_offlinemode;
 
 #if defined TIZEN_EXT
-typedef enum {
-	CONNMAN_SCAN_TYPE_FULL_CHANNEL = 0x00,
-	CONNMAN_SCAN_TYPE_SPECIFIC_AP,
-	CONNMAN_SCAN_TYPE_MULTI_AP,
-} connman_scan_type_e;
-
 static connman_scan_type_e g_scan_type = -1;
 #endif
 
@@ -1123,6 +1117,27 @@ dbus_bool_t __connman_technology_notify_scan_changed(const char *key, void *val)
 
 	return result;
 }
+
+void __connman_technology_notify_scan_done(int val)
+{
+	DBG("");
+	DBusMessage *signal;
+	DBusMessageIter iter;
+
+	signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
+			CONNMAN_MANAGER_INTERFACE, "ScanDone");
+	if (!signal)
+		return;
+
+	dbus_message_iter_init_append(signal, &iter);
+	connman_dbus_property_append_basic(&iter, "Scantype",
+			DBUS_TYPE_INT32, &val);
+
+	dbus_connection_send(connection, signal, NULL);
+	dbus_message_unref(signal);
+
+	DBG("Successfuly sent signal");
+}
 #endif
 
 void __connman_technology_scan_started(struct connman_device *device)
@@ -1160,22 +1175,10 @@ void __connman_technology_scan_stopped(struct connman_device *device,
 
 #if defined TIZEN_EXT
 	if (count == 0) {
-		DBusMessage *signal;
-		DBusMessageIter iter;
 		dbus_bool_t status = 0;
+
 		__connman_technology_notify_scan_changed("scan_done", &status);
-
-		signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
-				CONNMAN_MANAGER_INTERFACE, "ScanDone");
-		if (!signal)
-			return;
-
-		dbus_message_iter_init_append(signal, &iter);
-		connman_dbus_property_append_basic(&iter, "Scantype",
-				DBUS_TYPE_INT32, &g_scan_type);
-
-		dbus_connection_send(connection, signal, NULL);
-		dbus_message_unref(signal);
+		__connman_technology_notify_scan_done((int)g_scan_type);
 		reply_scan_pending(technology, 0);
 
 		DBG("Successfuly sent ScanDone signal");
