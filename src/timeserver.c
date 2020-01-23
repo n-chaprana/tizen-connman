@@ -359,8 +359,10 @@ int __connman_timeserver_sync(struct connman_service *default_service)
 	if (!service)
 		return -EINVAL;
 
+#if !defined TIZEN_EXT
 	if (service == ts_service)
 		return -EALREADY;
+#endif
 
 	if (!resolv)
 		return 0;
