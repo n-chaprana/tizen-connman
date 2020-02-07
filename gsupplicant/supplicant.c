@@ -2775,7 +2775,15 @@ static void interface_bss_added_with_keys(DBusMessageIter *iter,
 	dbus_message_iter_next(iter);
 
 	if (dbus_message_iter_get_arg_type(iter) == DBUS_TYPE_INVALID)
+#if defined TIZEN_EXT
+	{
+		g_free(bss->path);
+		g_free(bss);
 		return;
+	}
+#else
+		return;
+#endif
 
 	supplicant_dbus_property_foreach(iter, bss_property, bss);
 
