@@ -217,18 +217,6 @@ static void pan_connect_cb(DBusMessage *message, void *user_data)
 		return;
 	}
 
-#ifdef TIZEN_EXT
-	/*
-	 * Network could be removed because of BT adapter power off
-	 * This is to handle the scenario where network is removed
-	 * before the connect_cb is called
-	 */
-	if (!pan->network) {
-		DBG("network already removed");
-		return;
-	}
-#endif
-
 	if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
 		const char *dbus_error = dbus_message_get_error_name(message);
 
