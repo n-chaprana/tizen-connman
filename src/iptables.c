@@ -452,7 +452,7 @@ static struct connman_iptables *hash_table_lookup(int type,
 	case AF_INET6:
 		return g_hash_table_lookup(table_hash_ipv6, table_name);
 	}
-	
+
 	return NULL;
 }
 
@@ -466,7 +466,7 @@ static bool hash_table_replace(int type,
 	case AF_INET6:
 		return g_hash_table_replace(table_hash_ipv6, table_name, table);
 	}
-	
+
 	return false;
 }
 
@@ -478,7 +478,7 @@ static bool hash_table_remove(int type, const char *table_name)
 	case AF_INET6:
 		return g_hash_table_remove(table_hash_ipv6, table_name);
 	}
-	
+
 	return false;
 }
 
@@ -534,7 +534,7 @@ static int iterate_entries(struct connman_iptables_entry *entries,
 	for (offset = 0; offset < size;
 			offset += iptables_entry_get_next_offset(&entry)) {
 		builtin = -1;
-		
+
 		switch (entries->type) {
 		case AF_INET:
 			entry.entry = (void* )entries->entry + offset;
@@ -682,7 +682,7 @@ static bool is_chain(struct connman_iptables *table,
 		return true;
 
 	target = iptables_entry_get_target(e);
-	
+
 	if (!target)
 		return false;
 
@@ -699,7 +699,7 @@ static GList *find_chain_head(struct connman_iptables *table,
 	struct connman_iptables_entry *head;
 	struct xt_entry_target *target;
 	int builtin;
-	
+
 	switch (table->type) {
 	case AF_INET:
 	case AF_INET6:
@@ -719,7 +719,7 @@ static GList *find_chain_head(struct connman_iptables *table,
 
 		/* User defined chain */
 		target = iptables_entry_get_target(head);
-		
+
 		if (!target)
 			continue;
 
@@ -813,7 +813,7 @@ static void update_targets_reference(struct connman_iptables *table,
 	if (is_fallthrough(modified_entry)) {
 		t = (struct xt_standard_target *)
 			iptables_entry_get_target(modified_entry);
-		
+
 		if (!t)
 			return;
 
@@ -2095,7 +2095,7 @@ static void dump_table(struct connman_iptables *table)
 	underflow = iptables_table_get_info_underflow(table);
 	valid_hooks = iptables_table_get_info_valid_hooks(table);
 	size = iptables_table_get_info_size(table);
-	
+
 	DBG("%s valid_hooks=0x%08x, num_entries=%u, size=%u",
 		iptables_table_get_info_name(table),
 		valid_hooks,
@@ -2234,7 +2234,7 @@ static void dump_replace(struct iptables_replace *repl)
 	unsigned int *underflow;
 	unsigned int valid_hooks;
 	unsigned int size;
-	
+
 	hook_entry = iptables_replace_get_hook_entry(repl);
 	underflow = iptables_replace_get_underflow(repl);
 	valid_hooks = iptables_replace_get_valid_hooks(repl);
@@ -2372,7 +2372,7 @@ static int add_entry(struct connman_iptables_entry *entry, int builtin,
 	struct connman_iptables *table = user_data;
 	struct connman_iptables_entry new_entry = { 0 };
 	u_int16_t next_offset;
-	
+
 	new_entry.type = entry->type;
 	next_offset = iptables_entry_get_next_offset(entry);
 
@@ -2394,7 +2394,7 @@ static int add_entry(struct connman_iptables_entry *entry, int builtin,
 	default:
 		return -EINVAL;
 	}
-	
+
 	return iptables_add_entry(table, &new_entry, NULL, builtin,
 				table->num_entries);
 }
@@ -2418,7 +2418,7 @@ static void table_cleanup(struct connman_iptables *table)
 
 	g_list_free(table->entries);
 	g_free(table->name);
-	
+
 	if (table->type == AF_INET) {
 		g_free(table->info);
 		g_free(table->blob_entries);
@@ -2690,9 +2690,9 @@ static struct xtables_target *prepare_target(struct connman_iptables *table,
 
 	is_builtin = false;
 	is_user_defined = false;
-	
+
 	DBG("target %s", target_name);
-	
+
 	if (!table)
 		return NULL;
 
@@ -2715,7 +2715,7 @@ static struct xtables_target *prepare_target(struct connman_iptables *table,
 	if (is_builtin || is_user_defined)
 		xt_t = xtables_find_target(get_standard_target(table->type),
 						XTF_LOAD_MUST_SUCCEED);
-	else 
+	else
 		xt_t = xtables_find_target(target_name, XTF_TRY_LOAD);
 
 	disable_jmp();
@@ -3033,7 +3033,7 @@ static struct connman_iptables *get_table(int type, const char *table_name)
 		g_free(table->name);
 
 	table->name = g_strdup(table_name);
-	
+
 	hash_table_replace(type, table->name, table);
 
 	return table;
@@ -3385,7 +3385,7 @@ static int parse_rule_spec(struct connman_iptables *table,
 				if (invert)
 					ctx->ip->invflags |= IP6T_INV_DSTIP;
 			}
-			
+
 			break;
 		case 'i':
 			/* In interface specification */
@@ -3401,7 +3401,7 @@ static int parse_rule_spec(struct connman_iptables *table,
 				if (invert)
 					ctx->ip->invflags |= IPT_INV_VIA_IN;
 			}
-			
+
 			if (ctx->type == AF_INET6) {
 				g_stpcpy(ctx->ipv6->iniface, optarg);
 				memset(ctx->ipv6->iniface_mask, 0xff, len + 1);
@@ -3549,7 +3549,7 @@ static int setup_xtables(int type)
 	default:
 		return -1;
 	}
-	
+
 	if (!err) {
 		current_type = type;
 	} else {
@@ -3712,7 +3712,7 @@ int __connman_iptables_find_chain(int type,
 
 	if(!find_chain_head(table, chain))
 		return -ENOENT; // Not Found
-	
+
 	return 0; // Found
 }
 
@@ -3754,7 +3754,7 @@ int __connman_iptables_append(int type,
 	int err;
 
 	err = setup_xtables(type);
-	
+
 	if (err < 0)
 		return err;
 
@@ -3808,14 +3808,14 @@ int __connman_iptables_insert(int type,
 	int err;
 
 	err = setup_xtables(type);
-	
+
 	if (err < 0)
 		return err;
 
 	ctx = g_try_new0(struct parse_context, 1);
 	if (!ctx)
 		return -ENOMEM;
-	
+
 	ctx->type = type;
 
 	DBG("%d -t %s -I %s %s", type, table_name, chain, rule_spec);
@@ -3862,14 +3862,14 @@ int __connman_iptables_delete(int type,
 	int err;
 
 	err = setup_xtables(type);
-	
+
 	if (err < 0)
 		return err;
 
 	ctx = g_try_new0(struct parse_context, 1);
 	if (!ctx)
 		return -ENOMEM;
-	
+
 	ctx->type = type;
 
 	DBG("%d -t %s -D %s %s", type, table_name, chain, rule_spec);
@@ -3915,7 +3915,7 @@ int __connman_iptables_commit(int type, const char *table_name)
 	unsigned int cnt;
 
 	err = setup_xtables(type);
-	
+
 	if (err < 0)
 		return err;
 
@@ -3932,7 +3932,7 @@ int __connman_iptables_commit(int type, const char *table_name)
 		repl.r = iptables_blob(table);
 		if (!repl.r)
 			return -ENOMEM;
-		
+
 		break;
 	case AF_INET6:
 		repl.r6 = ip6tables_blob(table);
@@ -3959,7 +3959,7 @@ int __connman_iptables_commit(int type, const char *table_name)
 	for (list = table->entries, cnt = 0; list; list = list->next, cnt++) {
 		e = list->data;
 		if (e->counter_idx >= 0) {
-		
+
 			switch (type) {
 			case AF_INET:
 				counters->counters[cnt] =
@@ -3991,7 +3991,7 @@ out_free:
 
 	g_free(repl.r);
 	g_free(repl.r6);
-	
+
 	reset_xtables();
 
 	return err;
@@ -4036,9 +4036,15 @@ int __connman_iptables_iterate_chains(int type, const char *table_name,
 	int err;
 
 	err = setup_xtables(type);
-	
+#if defined TIZEN_EXT
+	if (err < 0) {
+		g_free(cbd);
+		return err;
+	}
+#else
 	if (err < 0)
 		return err;
+#endif
 
 	table = get_table(type, table_name);
 	if (!table) {
@@ -4062,7 +4068,7 @@ int __connman_iptables_iterate_chains(int type, const char *table_name,
 			iterate_chains_cb, cbd);
 
 	g_free(cbd);
-	
+
 	reset_xtables();
 
 	return 0;
