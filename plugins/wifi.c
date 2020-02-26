@@ -3217,19 +3217,31 @@ static int wifi_scan(struct connman_device *device,
 	connman_device_ref(device);
 
 	reset_autoscan(device);
-
+#if defined TIZEN_EXT
+	/*
+	 * When doing a full scan, stored hidden networks also need to be scanned
+	 * so that we can autoconnect to them.
+	 */
+	if (params->force_full_scan)
+		ret = g_supplicant_interface_scan(wifi->interface, scan_params,
+							scan_callback_hidden, device);
+	else
+#endif
 	ret = g_supplicant_interface_scan(wifi->interface, scan_params,
 						scan_callback, device);
 	if (ret == 0) {
 		connman_device_set_scanning(device,
 				CONNMAN_SERVICE_TYPE_WIFI, true);
 #if defined TIZEN_EXT
-		/*To allow the Full Scan after ssid based scan, set the flag here
-		  It is required because Tizen does not use the ConnMan specific
-		  backgroung Scan feature.Tizen has added the BG Scan feature in
-		  net-config. To sync with up ConnMan, we need to issue the Full Scan
-		  after SSID specific scan.*/
-		wifi->allow_full_scan = TRUE;
+		/*
+		 * To allow the Full Scan after ssid based scan, set the flag here
+		 * It is required because Tizen does not use the ConnMan specific
+		 * backgroung Scan feature.Tizen has added the BG Scan feature in
+		 * net-config. To sync with up ConnMan, we need to issue the Full Scan
+		 * after SSID specific scan.
+		 */
+		if (!params->force_full_scan && !do_hidden)
+			wifi->allow_full_scan = TRUE;
 #endif
 	} else {
 		g_supplicant_free_scan_params(scan_params);
