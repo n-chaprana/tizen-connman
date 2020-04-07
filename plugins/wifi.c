@@ -4305,7 +4305,18 @@ static void interface_state(GSupplicantInterface *interface)
 #if defined TIZEN_EXT
 		if (handle_assoc_status_code(interface, wifi)) {
 			GSList *bssid_list = (GSList *)connman_network_get_bssid_list(network);
+			const char *group = connman_network_get_group(network);
+			GSupplicantNetwork *supplicant_network;
 			guint bssid_length = 0;
+
+			if (group) {
+				supplicant_network = g_supplicant_interface_get_network(interface, group);
+
+				connman_network_set_assoc_reject_table(network,
+					g_supplicant_network_get_assoc_reject_table(supplicant_network));
+
+				g_supplicant_network_update_assoc_reject(interface, supplicant_network);
+			}
 
 			if (bssid_list)
 				bssid_length = g_slist_length(bssid_list);
@@ -4817,6 +4828,10 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 			g_supplicant_network_is_hs20AP(supplicant_network));
 	connman_network_set_bssid_list(network,
 			(GSList *)g_supplicant_network_get_bssid_list(supplicant_network));
+	connman_network_set_last_connected_bssid(network,
+			g_supplicant_network_get_last_connected_bssid(supplicant_network));
+	connman_network_set_assoc_reject_table(network,
+			g_supplicant_network_get_assoc_reject_table(supplicant_network));
 #endif
 	connman_network_set_available(network, true);
 	connman_network_set_string(network, "WiFi.Mode", mode);
@@ -4827,6 +4842,11 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 	if (ssid)
 #endif
 		connman_network_set_group(network, group);
+
+#if defined TIZEN_EXT
+	g_supplicant_network_set_last_connected_bssid(supplicant_network,
+			connman_network_get_last_connected_bssid(network));
+#endif
 
 #if defined TIZEN_EXT
 	if (wifi_first_scan == true)
@@ -4924,7 +4944,11 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	identifier = g_supplicant_network_get_identifier(network);
 	name = g_supplicant_network_get_name(network);
 
+#if defined TIZEN_EXT
+	DBG("name %s property %s", name, property);
+#else
 	DBG("name %s", name);
+#endif
 
 	if (!wifi)
 		return;
@@ -4964,7 +4988,35 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 		connman_network_set_strength(connman_network,
 					calculate_strength(network));
 		update_needed = true;
-	} else
+	}
+#if defined TIZEN_EXT
+	else if (g_str_equal(property, "LastConnectedBSSID")) {
+		const char *ident, *group;
+		char *service_ident;
+		bool need_save;
+
+		ident = connman_device_get_ident(wifi->device);
+		group = connman_network_get_group(connman_network);
+		if (ident && group) {
+			service_ident = g_strdup_printf("%s_%s_%s",
+				__connman_network_get_type(connman_network), ident, group);
+
+			need_save = connman_device_set_last_connected_ident(wifi->device, service_ident);
+			if (need_save)
+				connman_device_save_last_connected(wifi->device);
+		}
+
+		connman_network_set_last_connected_bssid(connman_network,
+					g_supplicant_network_get_last_connected_bssid(network));
+
+		update_needed = true;
+	} else if (g_str_equal(property, "UpdateAssocReject")) {
+		connman_network_set_assoc_reject_table(connman_network,
+					g_supplicant_network_get_assoc_reject_table(network));
+		update_needed = true;
+	}
+#endif
+	else
 		update_needed = false;
 
 	if (update_needed)
@@ -5380,7 +5432,11 @@ static void scan_done(GSupplicantInterface *interface)
 
 static void debug(const char *str)
 {
+#if defined TIZEN_EXT
+	if (connman_setting_get_bool("ConnmanSupplicantDebug"))
+#else
 	if (getenv("CONNMAN_SUPPLICANT_DEBUG"))
+#endif
 		connman_debug("%s", str);
 }
 
@@ -5741,6 +5797,33 @@ static int tech_set_regdom(struct connman_technology *technology, const char *al
 	return g_supplicant_set_country(alpha2, regdom_callback, NULL);
 }
 
+#if defined TIZEN_EXT
+static void supp_ins_init(void)
+{
+	const char *string;
+	GSupplicantINSPreferredFreq preferred_freq;
+
+	string = connman_option_get_string("INSPreferredFreqBSSID");
+	if (g_strcmp0(string, "5GHz") == 0)
+		preferred_freq = G_SUPPLICANT_INS_PREFERRED_FREQ_5GHZ;
+	else if (g_strcmp0(string, "2.4GHz") == 0)
+		preferred_freq = G_SUPPLICANT_INS_PREFERRED_FREQ_24GHZ;
+	else
+		preferred_freq = G_SUPPLICANT_INS_PREFERRED_FREQ_UNKNOWN;
+
+	g_supplicant_set_ins_settings(preferred_freq,
+		connman_setting_get_bool("INSLastConnectedBSSID"),
+		connman_setting_get_bool("INSAssocReject"),
+		connman_setting_get_bool("INSSignalBSSID"),
+		connman_setting_get_uint("INSPreferredFreqBSSIDScore"),
+		connman_setting_get_uint("INSLastConnectedBSSIDScore"),
+		connman_setting_get_uint("INSAssocRejectScore"),
+		connman_setting_get_int("INSSignalLevel3_5GHz"),
+		connman_setting_get_int("INSSignalLevel3_24GHz")
+	);
+}
+#endif
+
 static struct connman_technology_driver tech_driver = {
 	.name		= "wifi",
 	.type		= CONNMAN_SERVICE_TYPE_WIFI,
@@ -5773,6 +5856,10 @@ static int wifi_init(void)
 
 #if defined TIZEN_EXT
 	failed_bssids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+#endif
+
+#if defined TIZEN_EXT
+	supp_ins_init();
 #endif
 	return 0;
 }

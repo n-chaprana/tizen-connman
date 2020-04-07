@@ -211,6 +211,14 @@ unsigned char *connman_network_get_countrycode(struct connman_network *network);
 int connman_network_set_bssid_list(struct connman_network *network,
 					GSList *bssids);
 void *connman_network_get_bssid_list(struct connman_network *network);
+#if defined TIZEN_EXT
+int connman_network_set_last_connected_bssid(struct connman_network *network,
+				const unsigned char *bssid);
+unsigned char *connman_network_get_last_connected_bssid(struct connman_network *network);
+void connman_network_set_assoc_reject_table(struct connman_network *network,
+		GHashTable *assoc_reject_table);
+GHashTable *connman_network_get_assoc_reject_table(struct connman_network *network);
+#endif
 int connman_network_set_phy_mode(struct connman_network *network,
 				ieee80211_modes_e mode);
 ieee80211_modes_e connman_network_get_phy_mode(struct connman_network *network);

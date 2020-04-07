@@ -53,6 +53,15 @@
 #define WIFI_BSSID_LEN_MAX 6
 #endif
 
+#if defined TIZEN_EXT
+#define LAST_CONNECTED_TIMEOUT       (5 * 60)
+#define ASSOC_REJECT_TIMEOUT         10
+#define FREQ_RANGE_24GHZ_CHANNEL_1   2412
+#define FREQ_RANGE_24GHZ_CHANNEL_14  2484
+#define FREQ_RANGE_5GHZ_CHANNEL_32   5160
+#define FREQ_RANGE_5GHZ_CHANNEL_165  5825
+#endif
+
 #define BSS_UNKNOWN_STRENGTH    -90
 
 static DBusConnection *connection;
@@ -155,6 +164,26 @@ static struct strvalmap mode_capa_map[] = {
 	{ }
 };
 
+#if defined TIZEN_EXT
+struct _GSupplicantINSSettings {
+	GSupplicantINSPreferredFreq preferred_freq_bssid;
+	unsigned int preferred_freq_bssid_score;
+	bool last_connected_bssid;
+	unsigned int last_connected_bssid_score;
+	bool assoc_reject;
+	unsigned int assoc_reject_score;
+	bool signal_bssid;
+	int signal_level3_5ghz;
+	int signal_level3_24ghz;
+};
+
+static struct _GSupplicantINSSettings ins_settings;
+
+static unsigned char invalid_bssid[WIFI_BSSID_LEN_MAX] = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+#endif
+
 static GHashTable *interface_table;
 static GHashTable *bss_mapping;
 static GHashTable *peer_mapping;
@@ -225,6 +254,10 @@ struct _GSupplicantInterface {
 	dbus_bool_t is_5_0_Ghz_supported;
 	int disconnect_reason;
 #endif
+#if defined TIZEN_EXT
+	unsigned char add_network_bssid[WIFI_BSSID_LEN_MAX];
+	unsigned char connected_bssid[WIFI_BSSID_LEN_MAX];
+#endif
 #if defined TIZEN_EXT_WIFI_MESH
 	bool mesh_support;
 	struct _GSupplicantMeshGroupInfo group_info;
@@ -294,6 +327,10 @@ struct _GSupplicantNetwork {
 	GSList *vsie_list;
 	unsigned char country_code[COUNTRY_CODE_LENGTH];
 	GSupplicantPhy_mode phy_mode;
+#endif
+#if defined TIZEN_EXT
+	unsigned char last_connected_bssid[WIFI_BSSID_LEN_MAX];
+	GHashTable *assoc_reject_table;
 #endif
 };
 
@@ -377,7 +414,29 @@ struct g_connman_bssids {
 	unsigned char bssid[WIFI_BSSID_LEN_MAX];
 	uint16_t strength;
 	uint16_t frequency;
+	uint16_t assoc_reject_cnt;
+	bool is_last_connected;
+	int ins_score;
 };
+
+struct update_bssid_data {
+	GSupplicantNetwork *network;
+	unsigned char last_connected_bssid[WIFI_BSSID_LEN_MAX];
+	GHashTable *assoc_reject_table;
+	GSList *bssid_list;
+};
+
+struct assoc_reject_data {
+	char *bssid;
+	GSList *reject_time_list;
+};
+
+struct assoc_count_data {
+	time_t ref_time;
+	int assoc_count;
+};
+
+static unsigned int last_connected_bss_timeout = 0;
 #endif
 
 static int network_remove(struct interface_data *data);
@@ -971,6 +1030,9 @@ static void remove_network(gpointer data)
 	callback_network_removed(network);
 
 	g_hash_table_destroy(network->config_table);
+#if defined TIZEN_EXT
+	g_hash_table_destroy(network->assoc_reject_table);
+#endif
 
 	g_free(network->path);
 	g_free(network->group);
@@ -1022,6 +1084,18 @@ static void remove_peer(gpointer data)
 
 	g_free(peer);
 }
+
+#if defined TIZEN_EXT
+static void remove_assoc_data(gpointer data)
+{
+	struct assoc_reject_data *assoc_data = data;
+
+	g_free(assoc_data->bssid);
+	g_slist_free(assoc_data->reject_time_list);
+
+	g_free(assoc_data);
+}
+#endif
 
 static void debug_strvalmap(const char *label, struct strvalmap *map,
 							unsigned int val)
@@ -1807,11 +1881,92 @@ void *g_supplicant_network_get_wifi_vsie(GSupplicantNetwork *network)
 	return vsie_list;
 }
 
+static bool compare_bssid(unsigned char *bssid_a, unsigned char *bssid_b)
+{
+	if (!memcmp(bssid_a, bssid_b, WIFI_BSSID_LEN_MAX))
+		return true;
+
+	return false;
+}
+
+static gchar *convert_bssid_to_str(unsigned char *bssid)
+{
+	GString *bssid_str;
+	unsigned int i;
+
+	bssid_str = g_string_sized_new(18);
+	if (!bssid_str)
+		return NULL;
+
+	for (i = 0; i < WIFI_BSSID_LEN_MAX; i++) {
+		g_string_append_printf(bssid_str, "%02x", bssid[i]);
+		if (i < WIFI_BSSID_LEN_MAX - 1)
+			g_string_append(bssid_str, ":");
+	}
+
+	return g_string_free(bssid_str, FALSE);
+}
+
+static void count_assoc_reject(gpointer data, gpointer user_data)
+{
+	time_t assoc_reject_time = GPOINTER_TO_INT(data);
+	struct assoc_count_data *assoc_count = user_data;
+
+	if (assoc_reject_time > assoc_count->ref_time)
+		assoc_count->assoc_count++;
+}
+
+static uint16_t get_assoc_reject_cnt(GHashTable *assoc_reject_table, unsigned char *bssid)
+{
+	gchar *bssid_str;
+	struct assoc_reject_data *assoc_data;
+	struct assoc_count_data assoc_count;
+	time_t curr_time;
+	struct tm* timeinfo;
+
+	if (g_hash_table_size(assoc_reject_table) < 1)
+		return 0;
+
+	if (!bssid)
+		return 0;
+
+	if (!memcmp(bssid, invalid_bssid, WIFI_BSSID_LEN_MAX))
+		return 0;
+
+	bssid_str = convert_bssid_to_str(bssid);
+	if (!bssid_str)
+		return 0;
+
+	assoc_data = g_hash_table_lookup(assoc_reject_table, bssid_str);
+	if (!assoc_data) {
+		g_free(bssid_str);
+		return 0;
+	}
+
+	if (g_slist_length(assoc_data->reject_time_list) < 1) {
+		g_free(bssid_str);
+		return 0;
+	}
+
+	/* Only events that occur within one hour are appened. */
+	curr_time = time(NULL);
+	timeinfo = localtime(&curr_time);
+	timeinfo->tm_hour -= 1;
+
+	assoc_count.ref_time = mktime(timeinfo);
+	assoc_count.assoc_count = 0;
+
+	g_slist_foreach(assoc_data->reject_time_list, count_assoc_reject, &assoc_count);
+
+	g_free(bssid_str);
+	return assoc_count.assoc_count;
+}
+
 static void update_bssid_list(gpointer key, gpointer value, gpointer user_data)
 {
 	struct g_supplicant_bss *bss = value;
 	struct g_connman_bssids *bssids = NULL;
-	GSList **list = (GSList **)user_data;
+	struct update_bssid_data *bssid_data = (struct update_bssid_data *)user_data;
 
 	bssids = (struct g_connman_bssids *)g_try_malloc0(sizeof(struct g_connman_bssids));
 
@@ -1825,36 +1980,187 @@ static void update_bssid_list(gpointer key, gpointer value, gpointer user_data)
 			bssids->strength = 100;
 
 		bssids->frequency = bss->frequency;
-		*list = g_slist_append(*list, bssids);
+
+		bssids->assoc_reject_cnt = get_assoc_reject_cnt(bssid_data->assoc_reject_table, bssids->bssid);
+
+		bssids->is_last_connected = compare_bssid(bssids->bssid, bssid_data->last_connected_bssid);
+
+		bssid_data->bssid_list = g_slist_append(bssid_data->bssid_list, bssids);
 	} else
 		SUPPLICANT_DBG("Failed to allocate memory");
+}
+
+static int calculate_score(dbus_int16_t strength, dbus_uint16_t frequency,
+		uint16_t assoc_reject_cnt, bool is_last_connected)
+{
+	int score = 0;
+
+	/* 5GHz & Signal >= RSSI Level 3 */
+	switch (ins_settings.preferred_freq_bssid) {
+	case G_SUPPLICANT_INS_PREFERRED_FREQ_24GHZ:
+		if ((frequency >= FREQ_RANGE_24GHZ_CHANNEL_1 &&
+			frequency <= FREQ_RANGE_24GHZ_CHANNEL_14) &&
+			(strength > ins_settings.signal_level3_24ghz))
+			score += ins_settings.preferred_freq_bssid_score;
+
+		break;
+	case G_SUPPLICANT_INS_PREFERRED_FREQ_5GHZ:
+		if ((frequency >= FREQ_RANGE_5GHZ_CHANNEL_32 &&
+			frequency <= FREQ_RANGE_5GHZ_CHANNEL_165) &&
+			(strength > ins_settings.signal_level3_5ghz))
+			score += ins_settings.preferred_freq_bssid_score;
+
+		break;
+	default:
+		break;
+	}
+
+	/* Last connected BSSID */
+	if (ins_settings.last_connected_bssid) {
+		if (is_last_connected)
+			score += ins_settings.last_connected_bssid_score;
+	}
+
+	/* Assoc reject */
+	if (ins_settings.assoc_reject)
+		score -= (assoc_reject_cnt * ins_settings.assoc_reject_score);
+
+	/* Signal */
+	if (ins_settings.signal_bssid)
+		score += (((strength > -60) ? -60 : strength) + 85);
+
+	return score;
 }
 
 static gint cmp_bss(gconstpointer a, gconstpointer b)
 {
 	struct g_connman_bssids *entry_a = (struct g_connman_bssids *)a;
 	struct g_connman_bssids *entry_b = (struct g_connman_bssids *)b;
+	int score_a = calculate_score(entry_a->strength - 120, entry_a->frequency,
+			entry_a->assoc_reject_cnt, entry_a->is_last_connected);
+	int score_b = calculate_score(entry_b->strength - 120, entry_b->frequency,
+			entry_b->assoc_reject_cnt, entry_b->is_last_connected);
 
-	if (entry_a->strength > entry_b->strength)
+	entry_a->ins_score = score_a;
+	entry_b->ins_score = score_b;
+
+	if (score_a > score_b)
 		return -1;
 
-	if (entry_a->strength < entry_b->strength)
+	if (score_a < score_b)
 		return 1;
 
 	return 0;
 }
 
+#if defined TIZEN_EXT_INS
+static void print_bssid_sort(gpointer data, gpointer user_data)
+{
+	struct g_connman_bssids *bssids = data;
+
+	SUPPLICANT_DBG("bssid[%02x:%02x:%02x:%02x:%02x:%02x] score[%d] "
+			"strength[%d] freq[%d] assoc_reject[%d] last_conn[%d]",
+			bssids->bssid[0], bssids->bssid[1], bssids->bssid[2],
+			bssids->bssid[3], bssids->bssid[4], bssids->bssid[5],
+			bssids->ins_score, bssids->strength, bssids->frequency,
+			bssids->assoc_reject_cnt, bssids->is_last_connected);
+}
+#endif
+
 void *g_supplicant_network_get_bssid_list(GSupplicantNetwork *network)
 {
-	GSList *bssid_list = NULL;
+	struct update_bssid_data bssid_data;
 
 	if (g_hash_table_size(network->bss_table) < 1)
 		return NULL;
 
-	g_hash_table_foreach(network->bss_table, update_bssid_list, &bssid_list);
-	bssid_list = g_slist_sort(bssid_list, cmp_bss);
+	bssid_data.network = network;
+	memset(&bssid_data, 0, sizeof(bssid_data));
+	memcpy(bssid_data.last_connected_bssid, network->last_connected_bssid, WIFI_BSSID_LEN_MAX);
+	bssid_data.assoc_reject_table = network->assoc_reject_table;
 
-	return bssid_list;
+	g_hash_table_foreach(network->bss_table, update_bssid_list, &bssid_data);
+	bssid_data.bssid_list = g_slist_sort(bssid_data.bssid_list, cmp_bss);
+#if defined TIZEN_EXT_INS
+	g_slist_foreach(bssid_data.bssid_list, print_bssid_sort, NULL);
+#endif
+
+	return bssid_data.bssid_list;
+}
+
+void g_supplicant_network_set_last_connected_bssid(GSupplicantNetwork *network, const unsigned char *bssid)
+{
+	if (!bssid)
+		return;
+
+	if (!memcmp(bssid, invalid_bssid, WIFI_BSSID_LEN_MAX))
+		return;
+
+	memcpy(network->last_connected_bssid, bssid, WIFI_BSSID_LEN_MAX);
+
+	SUPPLICANT_DBG("last connected bssid [%02x:%02x:%02x:%02x:%02x:%02x]",
+			bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+}
+
+const unsigned char *g_supplicant_network_get_last_connected_bssid(GSupplicantNetwork *network)
+{
+	if (network == NULL)
+		return NULL;
+
+	return (const unsigned char *)network->last_connected_bssid;
+}
+
+void g_supplicant_network_update_assoc_reject(GSupplicantInterface *interface,
+		GSupplicantNetwork *network)
+{
+	struct assoc_reject_data *assoc_data;
+	gchar *bssid_str;
+	time_t curr_time;
+
+	if (!network)
+		return;
+
+	bssid_str = convert_bssid_to_str(interface->add_network_bssid);
+	if (!bssid_str)
+		return;
+
+	assoc_data = g_hash_table_lookup(network->assoc_reject_table, bssid_str);
+	if (!assoc_data) {
+		assoc_data = g_try_new0(struct assoc_reject_data, 1);
+		if (!assoc_data) {
+			g_free(bssid_str);
+			return;
+		}
+
+		assoc_data->bssid = g_strdup(bssid_str);
+		g_hash_table_insert(network->assoc_reject_table, assoc_data->bssid, assoc_data);
+	}
+
+	curr_time = time(NULL);
+	assoc_data->reject_time_list = g_slist_append(assoc_data->reject_time_list, GINT_TO_POINTER(curr_time));
+
+	SUPPLICANT_DBG("bssid [%s] time [%u]", bssid_str, curr_time);
+
+	g_free(bssid_str);
+
+	callback_network_changed(network, "UpdateAssocReject");
+}
+
+GHashTable *g_supplicant_network_get_assoc_reject_table(GSupplicantNetwork *network)
+{
+	if (!network)
+		return NULL;
+
+	return network->assoc_reject_table;
+}
+
+GSupplicantNetwork *g_supplicant_interface_get_network(GSupplicantInterface *interface,
+		const char *group)
+{
+	if (!interface)
+		return NULL;
+
+	return g_hash_table_lookup(interface->network_table, group);
 }
 #endif
 
@@ -2093,6 +2399,42 @@ static char *create_group(struct g_supplicant_bss *bss)
 	return g_string_free(str, FALSE);
 }
 
+static bool update_best_bss(GSupplicantNetwork *network,
+		struct g_supplicant_bss *bss, struct g_supplicant_bss *best_bss)
+{
+	int score_new;
+	int score_best;
+
+	score_new = calculate_score(bss->signal, bss->frequency,
+		get_assoc_reject_cnt(network->assoc_reject_table, bss->bssid),
+		compare_bssid(bss->bssid, network->last_connected_bssid));
+	score_best = calculate_score(network->best_bss->signal, network->best_bss->frequency,
+		get_assoc_reject_cnt(network->assoc_reject_table, network->best_bss->bssid),
+		compare_bssid(network->best_bss->bssid, network->last_connected_bssid));
+
+	if (score_new > score_best) {
+		SUPPLICANT_DBG("new[%02x:%02x:%02x:%02x:%02x:%02x][%u] : "
+			"best[%02x:%02x:%02x:%02x:%02x:%02x][%u]",
+			bss->bssid[0], bss->bssid[1], bss->bssid[2],
+			bss->bssid[3], bss->bssid[4], bss->bssid[5],
+			score_new,
+			network->best_bss->bssid[0], network->best_bss->bssid[1],
+			network->best_bss->bssid[2], network->best_bss->bssid[3],
+			network->best_bss->bssid[4], network->best_bss->bssid[5],
+			score_best);
+
+		network->signal = bss->signal;
+		network->frequency = bss->frequency;
+		network->best_bss = bss;
+
+		SUPPLICANT_DBG("Update best BSS for %s", network->name);
+
+		return true;
+	}
+
+	return false;
+}
+
 static int add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 {
 	GSupplicantInterface *interface = bss->interface;
@@ -2172,6 +2514,11 @@ static int add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 	network->config_table = g_hash_table_new_full(g_str_hash, g_str_equal,
 							g_free, g_free);
 
+#if defined TIZEN_EXT
+	network->assoc_reject_table = g_hash_table_new_full(g_str_hash, g_str_equal,
+							NULL, remove_assoc_data);
+#endif
+
 	g_hash_table_replace(interface->network_table,
 						network->group, network);
 
@@ -2191,12 +2538,19 @@ done:
 	 * Do not change best BSS if we are connected. It will be done through
 	 * CurrentBSS property in case of misalignment with wpa_s or roaming.
 	 */
+#if defined TIZEN_EXT
+	if (network != interface->current_network) {
+		if (update_best_bss(network, bss, network->best_bss))
+			callback_network_changed(network, "Signal");
+	}
+#else
 	if (network != interface->current_network &&
 				bss->signal > network->signal) {
 		network->signal = bss->signal;
 		network->best_bss = bss;
 		callback_network_changed(network, "Signal");
 	}
+#endif
 
 	g_hash_table_replace(interface->bss_mapping, bss->path, network);
 	g_hash_table_replace(network->bss_table, bss->path, bss);
@@ -2818,10 +3172,22 @@ static void update_signal(gpointer key, gpointer value,
 	struct g_supplicant_bss *bss = value;
 	GSupplicantNetwork *network = user_data;
 
+#if defined TIZEN_EXT
+	if (!network->best_bss || (network->best_bss == bss)) {
+		if (bss->signal > network->signal) {
+			network->signal = bss->signal;
+			network->best_bss = bss;
+		}
+		return;
+	}
+
+	update_best_bss(network, bss, network->best_bss);
+#else
 	if (bss->signal > network->signal) {
 		network->signal = bss->signal;
 		network->best_bss = bss;
 	}
+#endif
 }
 
 static void update_network_signal(GSupplicantNetwork *network)
@@ -2834,6 +3200,61 @@ static void update_network_signal(GSupplicantNetwork *network)
 
 	SUPPLICANT_DBG("New network signal %d", network->signal);
 }
+
+#if defined TIZEN_EXT
+static gboolean last_connected_timeout(gpointer data)
+{
+	GSupplicantInterface *interface = data;
+	GSupplicantNetwork *current_network = interface->current_network;
+
+	SUPPLICANT_DBG("Timeout last connected bss");
+
+	if (current_network && current_network->best_bss) {
+		if (compare_bssid(current_network->best_bss->bssid, interface->connected_bssid)) {
+			g_supplicant_network_set_last_connected_bssid(current_network, interface->connected_bssid);
+			callback_network_changed(current_network, "LastConnectedBSSID");
+		}
+	}
+
+	last_connected_bss_timeout = 0;
+	return FALSE;
+}
+
+static void add_timer_for_last_connected(GSupplicantInterface *interface)
+{
+	GSupplicantNetwork *current_network = interface->current_network;
+
+	if (interface->state == G_SUPPLICANT_STATE_COMPLETED) {
+		if (current_network) {
+			struct g_supplicant_bss *best_bss = current_network->best_bss;
+
+			memcpy(interface->connected_bssid, best_bss->bssid, WIFI_BSSID_LEN_MAX);
+
+			if (last_connected_bss_timeout)
+				g_source_remove(last_connected_bss_timeout);
+
+			last_connected_bss_timeout = g_timeout_add_seconds(LAST_CONNECTED_TIMEOUT,
+				last_connected_timeout, interface);
+
+			SUPPLICANT_DBG("Add timer for last connected bssid "
+				"[%02x:%02x:%02x:%02x:%02x:%02x]",
+				best_bss->bssid[0], best_bss->bssid[1], best_bss->bssid[2],
+				best_bss->bssid[3], best_bss->bssid[4], best_bss->bssid[5]);
+		}
+	}
+}
+
+static void remove_timer_for_last_connected(GSupplicantInterface *interface)
+{
+	if (interface->state == G_SUPPLICANT_STATE_DISCONNECTED) {
+		if (last_connected_bss_timeout != 0) {
+			g_source_remove(last_connected_bss_timeout);
+			last_connected_bss_timeout = 0;
+			SUPPLICANT_DBG("Remove timer for last connected bss");
+		}
+	}
+}
+#endif
 
 static void interface_current_bss(GSupplicantInterface *interface,
 						DBusMessageIter *iter)
@@ -2859,6 +3280,9 @@ static void interface_current_bss(GSupplicantInterface *interface,
 		return;
 
 	interface->current_network = network;
+#if defined TIZEN_EXT
+	SUPPLICANT_DBG("current network [%p]", interface->current_network);
+#endif
 
 	if (bss != network->best_bss) {
 		/*
@@ -2900,6 +3324,9 @@ static void interface_current_bss(GSupplicantInterface *interface,
 	case G_SUPPLICANT_STATE_GROUP_HANDSHAKE:
 	case G_SUPPLICANT_STATE_COMPLETED:
 		callback_network_associated(network);
+#if defined TIZEN_EXT
+		add_timer_for_last_connected(interface);
+#endif
 		break;
 	}
 }
@@ -3037,7 +3464,18 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 				interface->state = string2state(str);
 				callback_interface_state(interface);
 			}
-
+#if defined TIZEN_EXT
+		switch (interface->state) {
+		case G_SUPPLICANT_STATE_COMPLETED:
+			add_timer_for_last_connected(interface);
+			break;
+		case G_SUPPLICANT_STATE_DISCONNECTED:
+			remove_timer_for_last_connected(interface);
+			break;
+		default:
+			break;
+		}
+#endif
 		if (interface->ap_create_in_progress) {
 			if (interface->state == G_SUPPLICANT_STATE_DISCONNECTED)
 				callback_ap_create_fail(interface);
@@ -3122,12 +3560,18 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 		if (dbus_message_iter_get_arg_type(iter) != DBUS_TYPE_INVALID) {
 			dbus_message_iter_get_basic(iter, &reason_code);
 			callback_disconnect_reason_code(interface, reason_code);
+#if defined TIZEN_EXT
+			SUPPLICANT_DBG("reason code (%d)", reason_code);
+#endif
 		}
 	} else if (g_strcmp0(key, "AssocStatusCode") == 0) {
 		int status_code;
 		if (dbus_message_iter_get_arg_type(iter) != DBUS_TYPE_INVALID) {
 			dbus_message_iter_get_basic(iter, &status_code);
 			callback_assoc_status_code(interface, status_code);
+#if defined TIZEN_EXT
+			SUPPLICANT_DBG("status code (%d)", status_code);
+#endif
 		}
 	} else {
 		SUPPLICANT_DBG("key %s type %c",
@@ -3658,22 +4102,28 @@ static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 	 * If the new signal is lower than the SSID signal, we need
 	 * to check for the new maximum.
 	 */
-	if (bss->signal < network->signal) {
-		if (bss != network->best_bss)
-#ifndef TIZEN_EXT
-			return;
-#else
-		{
+#if defined TIZEN_EXT
+	if (!update_best_bss(network, bss, network->best_bss)) {
+		if (bss != network->best_bss) {
 			callback_network_changed(network, "");
 			return;
 		}
-#endif
+
+		network->signal = bss->signal;
+		update_network_signal(network);
+	}
+#else
+	if (bss->signal < network->signal) {
+		if (bss != network->best_bss)
+			return;
+
 		network->signal = bss->signal;
 		update_network_signal(network);
 	} else {
 		network->signal = bss->signal;
 		network->best_bss = bss;
 	}
+#endif
 
 	SUPPLICANT_DBG("New network signal for %s %d dBm", network->ssid,
 			network->signal);
@@ -6474,6 +6924,9 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 	DBusMessageIter dict;
 	struct interface_connect_data *data = user_data;
 	GSupplicantSSID *ssid = data->ssid;
+#if defined TIZEN_EXT
+	GSupplicantInterface *interface = data->interface;
+#endif
 
 	supplicant_dbus_dict_open(iter, &dict);
 
@@ -6511,14 +6964,22 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 			return;
 		}
 
-		if (ssid->bssid_for_connect_len)
+		if (ssid->bssid_for_connect_len) {
 			snprintf(bssid, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
 					ssid->bssid_for_connect[0], ssid->bssid_for_connect[1], ssid->bssid_for_connect[2],
 					ssid->bssid_for_connect[3], ssid->bssid_for_connect[4], ssid->bssid_for_connect[5]);
-		else
+			memcpy(interface->add_network_bssid, ssid->bssid_for_connect, WIFI_BSSID_LEN_MAX);
+		} else {
 			snprintf(bssid, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
 					ssid->bssid[0], ssid->bssid[1], ssid->bssid[2],
 					ssid->bssid[3], ssid->bssid[4], ssid->bssid[5]);
+			memcpy(interface->add_network_bssid, ssid->bssid, WIFI_BSSID_LEN_MAX);
+		}
+
+		SUPPLICANT_DBG("bssid [%02x:%02x:%02x:%02x:%02x:%02x]",
+			interface->add_network_bssid[0], interface->add_network_bssid[1],
+			interface->add_network_bssid[2], interface->add_network_bssid[3],
+			interface->add_network_bssid[4], interface->add_network_bssid[5]);
 
 		supplicant_dbus_dict_append_basic(&dict, "bssid",
 					DBUS_TYPE_STRING, &bssid);
@@ -7705,6 +8166,34 @@ static void invoke_introspect_method(void)
 	dbus_connection_send(connection, message, NULL);
 	dbus_message_unref(message);
 }
+
+#if defined TIZEN_EXT
+void g_supplicant_set_ins_settings(GSupplicantINSPreferredFreq preferred_freq_bssid,
+		bool last_connected_bssid, bool assoc_reject, bool signal_bssid,
+		unsigned int preferred_freq_bssid_score, unsigned int last_connected_bssid_score,
+		unsigned int assoc_reject_score, int signal_level3_5ghz, int signal_level3_24ghz)
+{
+	ins_settings.preferred_freq_bssid = preferred_freq_bssid;
+	ins_settings.last_connected_bssid = last_connected_bssid;
+	ins_settings.assoc_reject = assoc_reject;
+	ins_settings.signal_bssid = signal_bssid;
+	ins_settings.preferred_freq_bssid_score = preferred_freq_bssid_score;
+	ins_settings.last_connected_bssid_score = last_connected_bssid_score;
+	ins_settings.assoc_reject_score = assoc_reject_score;
+	ins_settings.signal_level3_5ghz = signal_level3_5ghz;
+	ins_settings.signal_level3_24ghz = signal_level3_24ghz;
+
+	SUPPLICANT_DBG("preferred_freq_bssid [%s]", preferred_freq_bssid ? "true" : "false");
+	SUPPLICANT_DBG("preferred_freq_bssid_score [%d]", preferred_freq_bssid_score);
+	SUPPLICANT_DBG("last_connected_bssid [%s]", last_connected_bssid ? "true" : "false");
+	SUPPLICANT_DBG("last_connected_bssid_score [%d]", last_connected_bssid_score);
+	SUPPLICANT_DBG("assoc_reject [%s]", assoc_reject ? "true" : "false");
+	SUPPLICANT_DBG("assoc_reject_score [%d]", assoc_reject_score);
+	SUPPLICANT_DBG("signal_bssid [%s]", signal_bssid ? "true" : "false");
+	SUPPLICANT_DBG("signal_level3_5ghz [%d]", signal_level3_5ghz);
+	SUPPLICANT_DBG("signal_level3_24ghz [%d]", signal_level3_24ghz);
+}
+#endif
 
 int g_supplicant_register(const GSupplicantCallbacks *callbacks)
 {

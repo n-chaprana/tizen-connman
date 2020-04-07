@@ -232,6 +232,18 @@ bool connman_setting_get_bool(const char *key)
 	return false;
 }
 
+#if defined TIZEN_EXT
+unsigned int connman_setting_get_uint(const char *key)
+{
+	return 0;
+}
+
+int connman_setting_get_int(const char *key)
+{
+	return 0;
+}
+#endif
+
 char **connman_setting_get_string_list(const char *key)
 {
 	return NULL;

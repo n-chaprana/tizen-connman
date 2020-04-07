@@ -179,6 +179,14 @@ typedef enum {
 	G_SUPPLICANT_PEER_GROUP_FAILED,
 } GSupplicantPeerState;
 
+#if defined TIZEN_EXT
+typedef enum {
+	G_SUPPLICANT_INS_PREFERRED_FREQ_UNKNOWN,
+	G_SUPPLICANT_INS_PREFERRED_FREQ_24GHZ,
+	G_SUPPLICANT_INS_PREFERRED_FREQ_5GHZ,
+} GSupplicantINSPreferredFreq;
+#endif
+
 struct _GSupplicantSSID {
 #if defined TIZEN_EXT
 	void *ssid;
@@ -469,6 +477,15 @@ const unsigned char *g_supplicant_network_get_countrycode(GSupplicantNetwork
 void *g_supplicant_network_get_bssid_list(GSupplicantNetwork *network);
 GSupplicantPhy_mode g_supplicant_network_get_phy_mode(GSupplicantNetwork *network);
 #endif
+#if defined TIZEN_EXT
+void g_supplicant_network_set_last_connected_bssid(GSupplicantNetwork *network, const unsigned char *bssid);
+const unsigned char *g_supplicant_network_get_last_connected_bssid(GSupplicantNetwork *network);
+void g_supplicant_network_update_assoc_reject(GSupplicantInterface *interface,
+		GSupplicantNetwork *network);
+GHashTable *g_supplicant_network_get_assoc_reject_table(GSupplicantNetwork *network);
+GSupplicantNetwork *g_supplicant_interface_get_network(GSupplicantInterface *interface,
+		const char *group);
+#endif
 
 struct _GSupplicantCallbacks {
 	void (*system_ready) (void);
@@ -517,6 +534,13 @@ struct _GSupplicantCallbacks {
 };
 
 typedef struct _GSupplicantCallbacks GSupplicantCallbacks;
+
+#if defined TIZEN_EXT
+void g_supplicant_set_ins_settings(GSupplicantINSPreferredFreq preferred_freq_bssid,
+		bool last_connected_bssid, bool assoc_reject, bool signal_bssid,
+		unsigned int preferred_freq_bssid_score, unsigned int last_connected_bssid_score,
+		unsigned int assoc_reject_score, int signal_level3_5ghz, int signal_level3_24ghz);
+#endif
 
 int g_supplicant_register(const GSupplicantCallbacks *callbacks);
 void g_supplicant_unregister(const GSupplicantCallbacks *callbacks);

@@ -123,6 +123,22 @@ struct connman_device *connman_device_create_from_index(int index);
 struct connman_device *connman_device_find_by_index(int index);
 int connman_device_reconnect_service(struct connman_device *device);
 
+#if defined TIZEN_EXT
+bool connman_device_set_last_user_selection_time(struct connman_device *device,
+						time_t time);
+time_t connman_device_get_last_user_selection_time(struct connman_device *device);
+bool connman_device_set_last_user_selection_ident(struct connman_device *device,
+						const char *ident);
+const char *connman_device_get_last_user_selection_ident(struct connman_device *device);
+bool connman_device_set_last_connected_ident(struct connman_device *device,
+						const char *ident);
+const char *connman_device_get_last_connected_ident(struct connman_device *device);
+void connman_device_save_last_user_selection(struct connman_device *device);
+void connman_device_load_last_user_selection(struct connman_device *device);
+void connman_device_save_last_connected(struct connman_device *device);
+void connman_device_load_last_connected(struct connman_device *device);
+#endif
+
 struct connman_device_driver {
 	const char *name;
 	enum connman_device_type type;

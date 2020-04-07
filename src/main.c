@@ -98,6 +98,7 @@ static struct {
 	bool tizen_tv_extension;
 	bool auto_ip;
 	char *global_nameserver;
+	bool supplicant_debug;
 #endif
 } connman_settings  = {
 	.bg_scan = true,
@@ -126,8 +127,65 @@ static struct {
 	.tizen_tv_extension = false,
 	.auto_ip = true,
 	.global_nameserver = NULL,
+	.supplicant_debug = false,
 #endif
 };
+
+#if defined TIZEN_EXT
+static struct {
+	/* BSSID */
+	char *ins_preferred_freq_bssid;
+	bool ins_last_connected_bssid;
+	bool ins_assoc_reject;
+	bool ins_signal_bssid;
+	unsigned int ins_preferred_freq_bssid_score;
+	unsigned int ins_last_connected_bssid_score;
+	unsigned int ins_assoc_reject_score;
+	/* SSID */
+	bool ins_last_user_selection;
+	unsigned int ins_last_user_selection_time;
+	bool ins_last_connected;
+	char *ins_preferred_freq;
+	char **ins_security_priority;
+	unsigned int ins_security_priority_count;
+	bool ins_signal;
+	bool ins_internet;
+	unsigned int ins_last_user_selection_score;
+	unsigned int ins_last_connected_score;
+	unsigned int ins_preferred_freq_score;
+	unsigned int ins_security_priority_score;
+	unsigned int ins_internet_score;
+	/* Common */
+	int ins_signal_level3_5ghz;
+	int ins_signal_level3_24ghz;
+} connman_ins_settings = {
+	/* BSSID */
+	.ins_preferred_freq_bssid = NULL,
+	.ins_last_connected_bssid = true,
+	.ins_assoc_reject = true,
+	.ins_signal_bssid = true,
+	.ins_preferred_freq_bssid_score = 20,
+	.ins_last_connected_bssid_score = 20,
+	.ins_assoc_reject_score = 10,
+	/* SSID */
+	.ins_last_user_selection = true,
+	.ins_last_user_selection_time = 480,
+	.ins_last_connected = true,
+	.ins_preferred_freq = NULL,
+	.ins_security_priority = NULL,
+	.ins_security_priority_count = 0,
+	.ins_signal = true,
+	.ins_internet = true,
+	.ins_last_user_selection_score = 30,
+	.ins_last_connected_score = 30,
+	.ins_preferred_freq_score = 60,
+	.ins_security_priority_score = 5,
+	.ins_internet_score = 30,
+	/* Common */
+	.ins_signal_level3_5ghz = -76,
+	.ins_signal_level3_24ghz = -74,
+};
+#endif
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
 #define CONF_PREF_TIMESERVERS           "FallbackTimeservers"
@@ -152,9 +210,38 @@ static struct {
 #define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewaysAsTimeservers"
 #if defined TIZEN_EXT
 #define CONF_CELLULAR_INTERFACE         "NetworkCellularInterfaceList"
-#define CONF_TIZEN_TV_EXT		"TizenTVExtension"
-#define CONF_ENABLE_AUTO_IP		"EnableAutoIp"
+#define CONF_TIZEN_TV_EXT		        "TizenTVExtension"
+#define CONF_ENABLE_AUTO_IP		        "EnableAutoIp"
 #define CONF_GLOBAL_NAMESERVER          "GlobalNameserver"
+#define CONF_CONNMAN_SUPPLICANT_DEBUG   "ConnmanSupplicantDebug"
+#endif
+
+#if defined TIZEN_EXT
+/* BSSID */
+#define CONF_INS_PREFERRED_FREQ_BSSID        "INSPreferredFreqBSSID"
+#define CONF_INS_PREFERRED_FREQ_BSSID_SCORE  "INSPreferredFreqBSSIDScore"
+#define CONF_INS_LAST_CONNECTED_BSSID        "INSLastConnectedBSSID"
+#define CONF_INS_LAST_CONNECTED_BSSID_SCORE  "INSLastConnectedBSSIDScore"
+#define CONF_INS_ASSOC_REJECT                "INSAssocReject"
+#define CONF_INS_ASSOC_REJECT_SCORE          "INSAssocRejectScore"
+#define CONF_INS_SIGNAL_BSSID                "INSSignalBSSID"
+/* SSID */
+#define CONF_INS_LAST_USER_SELECTION         "INSLastUserSelection"
+#define CONF_INS_LAST_USER_SELECTION_TIME    "INSLastUserSelectionTime"
+#define CONF_INS_LAST_USER_SELECTION_SCORE   "INSLastUserSelectionScore"
+#define CONF_INS_LAST_CONNECTED              "INSLastConnected"
+#define CONF_INS_LAST_CONNECTED_SCORE        "INSLastConnectedScore"
+#define CONF_INS_PREFERRED_FREQ              "INSPreferredFreq"
+#define CONF_INS_PREFERRED_FREQ_SCORE        "INSPreferredFreqScore"
+#define CONF_INS_SECURITY_PRIORITY           "INSSecurityPriority"
+#define CONF_INS_SECURITY_PRIORITY_COUNT     "INSSecurityPriorityCount"
+#define CONF_INS_SECURITY_PRIORITY_SCORE     "INSSecurityPriorityScore"
+#define CONF_INS_SIGNAL                      "INSSignal"
+#define CONF_INS_INTERNET                    "INSInternet"
+#define CONF_INS_INTERNET_SCORE              "INSInternetScore"
+/* Common */
+#define CONF_INS_SIGNAL_LEVEL3_5GHZ          "INSSignalLevel3_5GHz"
+#define CONF_INS_SIGNAL_LEVEL3_24GHZ         "INSSignalLevel3_24GHz"
 #endif
 
 static const char *supported_options[] = {
@@ -183,9 +270,41 @@ static const char *supported_options[] = {
 	CONF_TIZEN_TV_EXT,
 	CONF_ENABLE_AUTO_IP,
 	CONF_GLOBAL_NAMESERVER,
+	CONF_CONNMAN_SUPPLICANT_DEBUG,
 #endif
 	NULL
 };
+
+#if defined TIZEN_EXT
+static const char *supported_ins_options[] = {
+	/* BSSID */
+	CONF_INS_PREFERRED_FREQ_BSSID,
+	CONF_INS_PREFERRED_FREQ_BSSID_SCORE,
+	CONF_INS_LAST_CONNECTED_BSSID,
+	CONF_INS_LAST_CONNECTED_BSSID_SCORE,
+	CONF_INS_ASSOC_REJECT,
+	CONF_INS_ASSOC_REJECT_SCORE,
+	CONF_INS_SIGNAL_BSSID,
+	/* SSID */
+	CONF_INS_LAST_USER_SELECTION,
+	CONF_INS_LAST_USER_SELECTION_TIME,
+	CONF_INS_LAST_USER_SELECTION_SCORE,
+	CONF_INS_LAST_CONNECTED,
+	CONF_INS_LAST_CONNECTED_SCORE,
+	CONF_INS_PREFERRED_FREQ,
+	CONF_INS_PREFERRED_FREQ_SCORE,
+	CONF_INS_SECURITY_PRIORITY,
+	CONF_INS_SECURITY_PRIORITY_COUNT,
+	CONF_INS_SECURITY_PRIORITY_SCORE,
+	CONF_INS_SIGNAL,
+	CONF_INS_INTERNET,
+	CONF_INS_INTERNET_SCORE,
+	/* Common */
+	CONF_INS_SIGNAL_LEVEL3_5GHZ,
+	CONF_INS_SIGNAL_LEVEL3_24GHZ,
+	NULL
+};
+#endif
 
 static GKeyFile *load_config(const char *file)
 {
@@ -270,7 +389,12 @@ static void check_config(GKeyFile *config)
 	keys = g_key_file_get_groups(config, NULL);
 
 	for (j = 0; keys && keys[j]; j++) {
+#if defined TIZEN_EXT
+		if (g_strcmp0(keys[j], "General") != 0 &&
+			g_strcmp0(keys[j], "INS") != 0)
+#else
 		if (g_strcmp0(keys[j], "General") != 0)
+#endif
 			connman_warn("Unknown group %s in %s",
 						keys[j], MAINFILE);
 	}
@@ -296,9 +420,192 @@ static void check_config(GKeyFile *config)
 	}
 
 	g_strfreev(keys);
+
+#if defined TIZEN_EXT
+	keys = g_key_file_get_keys(config, "INS", NULL, NULL);
+
+	for (j = 0; keys && keys[j]; j++) {
+		bool found;
+		int i;
+
+		found = false;
+		for (i = 0; supported_ins_options[i]; i++) {
+			if (g_strcmp0(keys[j], supported_ins_options[i]) == 0) {
+				found = true;
+				break;
+			}
+		}
+		if (!found && !supported_ins_options[i])
+			connman_warn("Unknown option %s in %s",
+						keys[j], MAINFILE);
+	}
+
+	g_strfreev(keys);
+#endif
 }
 
 #if defined TIZEN_EXT
+static void check_Tizen_INS_configuration(GKeyFile *config)
+{
+	GError *error = NULL;
+	char *ins_preferred_freq_bssid;
+	char *ins_preferred_freq;
+	char **ins_security_priority;
+	bool boolean;
+	int integer;
+	gsize len;
+
+	ins_preferred_freq_bssid = __connman_config_get_string(config, "INS",
+					CONF_INS_PREFERRED_FREQ_BSSID, &error);
+	if (!error)
+		connman_ins_settings.ins_preferred_freq_bssid = ins_preferred_freq_bssid;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_PREFERRED_FREQ_BSSID_SCORE, &error);
+	if (!error && integer >= 0)
+		connman_ins_settings.ins_preferred_freq_bssid_score = integer;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "INS",
+			CONF_INS_LAST_CONNECTED_BSSID, &error);
+	if (!error)
+		connman_ins_settings.ins_last_connected_bssid = boolean;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_LAST_CONNECTED_BSSID_SCORE, &error);
+	if (!error && integer >= 0)
+		connman_ins_settings.ins_last_connected_bssid_score = integer;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "INS",
+			CONF_INS_ASSOC_REJECT, &error);
+	if (!error)
+		connman_ins_settings.ins_assoc_reject = boolean;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_ASSOC_REJECT_SCORE, &error);
+	if (!error && integer >= 0)
+		connman_ins_settings.ins_assoc_reject_score = integer;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "INS",
+			CONF_INS_SIGNAL_BSSID, &error);
+	if (!error)
+		connman_ins_settings.ins_signal_bssid = boolean;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "INS",
+			CONF_INS_LAST_USER_SELECTION, &error);
+	if (!error)
+		connman_ins_settings.ins_last_user_selection = boolean;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_LAST_USER_SELECTION_TIME, &error);
+	if (!error && integer >= 0)
+		connman_ins_settings.ins_last_user_selection_time = integer;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_LAST_USER_SELECTION_SCORE, &error);
+	if (!error && integer >= 0)
+		connman_ins_settings.ins_last_user_selection_score = integer;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "INS",
+			CONF_INS_LAST_CONNECTED, &error);
+	if (!error)
+		connman_ins_settings.ins_last_connected = boolean;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_LAST_CONNECTED_SCORE, &error);
+	if (!error && integer >= 0)
+		connman_ins_settings.ins_last_connected_score = integer;
+
+	g_clear_error(&error);
+
+	ins_preferred_freq = __connman_config_get_string(config, "INS",
+					CONF_INS_PREFERRED_FREQ, &error);
+	if (!error)
+		connman_ins_settings.ins_preferred_freq = ins_preferred_freq;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_PREFERRED_FREQ_SCORE, &error);
+	if (!error && integer >= 0)
+		connman_ins_settings.ins_preferred_freq_score = integer;
+
+	g_clear_error(&error);
+
+	ins_security_priority = g_key_file_get_string_list(config, "INS",
+			CONF_INS_SECURITY_PRIORITY, &len, &error);
+
+	if (error == NULL) {
+		connman_ins_settings.ins_security_priority = ins_security_priority;
+		connman_ins_settings.ins_security_priority_count = len;
+	}
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_SECURITY_PRIORITY_SCORE, &error);
+	if (!error && integer >= 0)
+		connman_ins_settings.ins_security_priority_score = integer;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "INS",
+			CONF_INS_SIGNAL, &error);
+	if (!error)
+		connman_ins_settings.ins_signal = boolean;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "INS",
+			CONF_INS_INTERNET, &error);
+	if (!error)
+		connman_ins_settings.ins_internet = boolean;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_INTERNET_SCORE, &error);
+	if (!error && integer >= 0)
+		connman_ins_settings.ins_internet_score = integer;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_SIGNAL_LEVEL3_5GHZ, &error);
+	if (!error)
+		connman_ins_settings.ins_signal_level3_5ghz = integer;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "INS",
+			CONF_INS_SIGNAL_LEVEL3_24GHZ, &error);
+	if (!error)
+		connman_ins_settings.ins_signal_level3_24ghz = integer;
+
+	g_clear_error(&error);
+}
+
 static void check_Tizen_configuration(GKeyFile *config)
 {
 	GError *error = NULL;
@@ -335,6 +642,15 @@ static void check_Tizen_configuration(GKeyFile *config)
 		connman_settings.global_nameserver = global_nameserver;
 
 	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
+			CONF_CONNMAN_SUPPLICANT_DEBUG, &error);
+	if (!error)
+		connman_settings.supplicant_debug = boolean;
+
+	g_clear_error(&error);
+
+	check_Tizen_INS_configuration(config);
 }
 
 static void set_nofile_inc(void)
@@ -752,6 +1068,14 @@ const char *connman_option_get_string(const char *key)
 	if (g_str_equal(key, CONF_GLOBAL_NAMESERVER))
 		return connman_settings.global_nameserver;
 #endif
+
+#if defined TIZEN_EXT
+	if (g_str_equal(key, CONF_INS_PREFERRED_FREQ_BSSID))
+		return connman_ins_settings.ins_preferred_freq_bssid;
+
+	if (g_str_equal(key, CONF_INS_PREFERRED_FREQ))
+		return connman_ins_settings.ins_preferred_freq;
+#endif
 	return NULL;
 }
 
@@ -790,10 +1114,84 @@ bool connman_setting_get_bool(const char *key)
 #if defined TIZEN_EXT
 	if (g_str_equal(key, CONF_ENABLE_AUTO_IP))
 		return connman_settings.auto_ip;
+
+	if (g_str_equal(key, CONF_CONNMAN_SUPPLICANT_DEBUG))
+		return connman_settings.supplicant_debug;
+#endif
+
+#if defined TIZEN_EXT
+	if (g_str_equal(key, CONF_INS_LAST_CONNECTED_BSSID))
+		return connman_ins_settings.ins_last_connected_bssid;
+
+	if (g_str_equal(key, CONF_INS_ASSOC_REJECT))
+		return connman_ins_settings.ins_assoc_reject;
+
+	if (g_str_equal(key, CONF_INS_SIGNAL_BSSID))
+		return connman_ins_settings.ins_signal_bssid;
+
+	if (g_str_equal(key, CONF_INS_LAST_USER_SELECTION))
+		return connman_ins_settings.ins_last_user_selection;
+
+	if (g_str_equal(key, CONF_INS_LAST_CONNECTED))
+		return connman_ins_settings.ins_last_connected;
+
+	if (g_str_equal(key, CONF_INS_SIGNAL))
+		return connman_ins_settings.ins_signal;
+
+	if (g_str_equal(key, CONF_INS_INTERNET))
+		return connman_ins_settings.ins_internet;
 #endif
 
 	return false;
 }
+
+#if defined TIZEN_EXT
+unsigned int connman_setting_get_uint(const char *key)
+{
+	if (g_str_equal(key, CONF_INS_PREFERRED_FREQ_BSSID_SCORE))
+		return connman_ins_settings.ins_preferred_freq_bssid_score;
+
+	if (g_str_equal(key, CONF_INS_LAST_CONNECTED_BSSID_SCORE))
+		return connman_ins_settings.ins_last_connected_bssid_score;
+
+	if (g_str_equal(key, CONF_INS_ASSOC_REJECT_SCORE))
+		return connman_ins_settings.ins_assoc_reject_score;
+
+	if (g_str_equal(key, CONF_INS_LAST_USER_SELECTION_TIME))
+		return connman_ins_settings.ins_last_user_selection_time;
+
+	if (g_str_equal(key, CONF_INS_SECURITY_PRIORITY_COUNT))
+		return connman_ins_settings.ins_security_priority_count;
+
+	if (g_str_equal(key, CONF_INS_LAST_USER_SELECTION_SCORE))
+		return connman_ins_settings.ins_last_user_selection_score;
+
+	if (g_str_equal(key, CONF_INS_LAST_CONNECTED_SCORE))
+		return connman_ins_settings.ins_last_connected_score;
+
+	if (g_str_equal(key, CONF_INS_PREFERRED_FREQ_SCORE))
+		return connman_ins_settings.ins_preferred_freq_score;
+
+	if (g_str_equal(key, CONF_INS_SECURITY_PRIORITY_SCORE))
+		return connman_ins_settings.ins_security_priority_score;
+
+	if (g_str_equal(key, CONF_INS_INTERNET_SCORE))
+		return connman_ins_settings.ins_internet_score;
+
+	return 0;
+}
+
+int connman_setting_get_int(const char *key)
+{
+	if (g_str_equal(key, CONF_INS_SIGNAL_LEVEL3_5GHZ))
+		return connman_ins_settings.ins_signal_level3_5ghz;
+
+	if (g_str_equal(key, CONF_INS_SIGNAL_LEVEL3_24GHZ))
+		return connman_ins_settings.ins_signal_level3_24ghz;
+
+	return 0;
+}
+#endif
 
 char **connman_setting_get_string_list(const char *key)
 {
@@ -812,6 +1210,11 @@ char **connman_setting_get_string_list(const char *key)
 #if defined TIZEN_EXT
 	if (g_str_equal(key, CONF_CELLULAR_INTERFACE))
 		return connman_settings.cellular_interfaces;
+#endif
+
+#if defined TIZEN_EXT
+	if (g_str_equal(key, CONF_INS_SECURITY_PRIORITY))
+		return connman_ins_settings.ins_security_priority;
 #endif
 
 	return NULL;
@@ -1031,6 +1434,13 @@ int main(int argc, char *argv[])
 	g_strfreev(connman_settings.fallback_nameservers);
 	g_strfreev(connman_settings.blacklisted_interfaces);
 	g_strfreev(connman_settings.tethering_technologies);
+
+#if defined TIZEN_EXT
+	g_free(connman_ins_settings.ins_preferred_freq_bssid);
+	g_free(connman_ins_settings.ins_preferred_freq);
+	if (connman_ins_settings.ins_security_priority)
+		g_strfreev(connman_ins_settings.ins_security_priority);
+#endif
 
 	g_free(option_debug);
 	g_free(option_wifi);

@@ -44,6 +44,13 @@
 #define MAX_WIFI_PROFILES	200
 #endif
 
+#if defined TIZEN_EXT
+#define FREQ_RANGE_24GHZ_CHANNEL_1   2412
+#define FREQ_RANGE_24GHZ_CHANNEL_14  2484
+#define FREQ_RANGE_5GHZ_CHANNEL_32   5160
+#define FREQ_RANGE_5GHZ_CHANNEL_165  5825
+#endif
+
 static DBusConnection *connection = NULL;
 
 static GList *service_list = NULL;
@@ -62,6 +69,38 @@ struct saved_profiles {
 	gchar *profile_name;
 };
 
+#endif
+
+#if defined TIZEN_EXT
+enum connman_ins_preferred_freq {
+	CONNMAN_INS_PREFERRED_FREQ_UNKNOWN,
+	CONNMAN_INS_PREFERRED_FREQ_24GHZ,
+	CONNMAN_INS_PREFERRED_FREQ_5GHZ,
+};
+
+struct connman_ins_settings {
+	bool last_user_selection;
+	unsigned int last_user_selection_time;
+	unsigned int last_user_selection_score;
+	bool last_connected;
+	unsigned int last_connected_score;
+	enum connman_ins_preferred_freq preferred_freq;
+	unsigned int preferred_freq_score;
+	unsigned int security_priority[CONNMAN_SERVICE_SECURITY_MAX];
+	unsigned int security_priority_count;
+	unsigned int security_priority_score;
+	bool signal;
+	bool internet;
+	unsigned int internet_score;
+	int signal_level3_5ghz;
+	int signal_level3_24ghz;
+};
+
+static struct connman_ins_settings ins_settings;
+
+static unsigned char invalid_bssid[WIFI_BSSID_LEN_MAX] = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
 #endif
 
 struct connman_stats {
@@ -184,6 +223,12 @@ struct connman_service {
 	char *c_sign_key;
 	char *net_access_key;
 #endif
+#if defined TIZEN_EXT
+	unsigned char last_connected_bssid[WIFI_BSSID_LEN_MAX];
+	bool is_internet_connection;
+	int assoc_reject_count;
+	int ins_score;
+#endif
 };
 
 static bool allow_property_changed(struct connman_service *service);
@@ -198,6 +243,13 @@ struct find_data {
 	const char *path;
 	struct connman_service *service;
 };
+
+#if defined TIZEN_EXT
+struct assoc_reject_data {
+	char *bssid;
+	GSList *reject_time_list;
+};
+#endif
 
 #if defined TIZEN_EXT
 /*
@@ -572,6 +624,242 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	return 0;
 }
 
+#if defined TIZEN_EXT
+static void save_assoc_reject(gpointer key, gpointer value, gpointer user_data)
+{
+	struct assoc_reject_data *assoc_rd = value;
+	GString *assoc_reject_str = user_data;
+	GSList *list;
+	char *val_str;
+
+	if (g_slist_length(assoc_rd->reject_time_list) < 1)
+		return;
+
+	for (list = assoc_rd->reject_time_list; list; list = list->next) {
+		time_t assoc_reject_time = GPOINTER_TO_INT(list->data);
+
+		val_str = g_strdup_printf("%s_%ld", assoc_rd->bssid, assoc_reject_time);
+
+		if (assoc_reject_str->len > 0)
+			g_string_append_printf(assoc_reject_str, " %s", val_str);
+		else
+			g_string_append(assoc_reject_str, val_str);
+
+		g_free(val_str);
+	}
+}
+
+static void count_assoc_reject(gpointer key, gpointer value, gpointer user_data)
+{
+	struct assoc_reject_data *assoc_data = value;
+	int *assoc_reject_count = user_data;
+
+	*assoc_reject_count += g_slist_length(assoc_data->reject_time_list);
+}
+
+static bool update_assoc_reject(struct connman_service *service)
+{
+	GHashTable *assoc_reject_table;
+	int assoc_reject_count;
+
+	if (!service->network)
+		return false;
+
+	assoc_reject_table = connman_network_get_assoc_reject_table(service->network);
+	if (assoc_reject_table) {
+		assoc_reject_count = 0;
+		g_hash_table_foreach(assoc_reject_table, count_assoc_reject, &assoc_reject_count);
+#if defined TIZEN_EXT_INS
+		DBG("assoc reject count [%d -> %d]",
+			service->assoc_reject_count, assoc_reject_count);
+#endif
+		if (service->assoc_reject_count != assoc_reject_count) {
+			service->assoc_reject_count = assoc_reject_count;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static int service_ext_load(struct connman_service *service)
+{
+	GKeyFile *keyfile;
+	GHashTable *reject_table;
+	char **reject_list;
+	gsize reject_len;
+	struct assoc_reject_data *reject_data;
+	char **bssid_time;
+	char *bssid;
+	time_t reject_time;
+	time_t curr_time;
+	time_t ref_time;
+	struct tm* ref_timeinfo;
+	int i;
+	int err = 0;
+
+	DBG("service %p", service);
+
+	if (!service->network)
+		return -EINVAL;
+
+	if (service->type != CONNMAN_SERVICE_TYPE_WIFI)
+		return -EINVAL;
+
+	keyfile = connman_storage_load_service(service->identifier);
+	if (!keyfile)
+		return -EIO;
+
+	reject_table = connman_network_get_assoc_reject_table(service->network);
+
+	reject_list = g_key_file_get_string_list(keyfile,
+		service->identifier, "AssocReject", &reject_len, NULL);
+
+	if (!reject_list || reject_len == 0) {
+		g_strfreev(reject_list);
+		goto done;
+	}
+
+	/* Only events that occur within one hour are appened. */
+	curr_time = time(NULL);
+	ref_timeinfo = localtime(&curr_time);
+	ref_timeinfo->tm_hour -= 1;
+	ref_time = mktime(ref_timeinfo);
+
+	for (i = 0; reject_list[i]; i++) {
+		bssid_time = g_strsplit(reject_list[i], "_", 0);
+		if (!bssid_time) {
+			err = -ERANGE;
+			continue;
+		}
+
+		bssid = bssid_time[0];
+		reject_time = strtol(bssid_time[1], NULL, 10);
+
+		if (reject_time < ref_time) {
+			g_strfreev(bssid_time);
+			err = -ERANGE;
+			continue;
+		}
+
+		reject_data = g_hash_table_lookup(reject_table, bssid);
+		if (!reject_data) {
+			reject_data = g_try_new0(struct assoc_reject_data, 1);
+			if (!reject_data) {
+				g_strfreev(bssid_time);
+				err = -ERANGE;
+				continue;
+			}
+
+			memset(reject_data, 0, sizeof(struct assoc_reject_data));
+			reject_data->bssid = g_strdup(bssid);
+			g_hash_table_insert(reject_table, reject_data->bssid, reject_data);
+		}
+
+		reject_data->reject_time_list = g_slist_append(reject_data->reject_time_list,
+				GINT_TO_POINTER(reject_time));
+
+#if defined TIZEN_EXT_INS
+		DBG("assoc reject [%s_%ld]", bssid, reject_time);
+#endif
+
+		g_strfreev(bssid_time);
+	}
+
+	g_strfreev(reject_list);
+
+done:
+	g_key_file_free(keyfile);
+	return err;
+}
+
+static int service_ext_save(struct connman_service *service)
+{
+	GKeyFile *keyfile;
+	GHashTable *reject_table;
+	GString *reject_str;
+	char **reject_list;
+	guint reject_len;
+	int err = 0;
+
+	DBG("service %p", service);
+
+	if (!service->network)
+		return -EINVAL;
+
+	if (service->type != CONNMAN_SERVICE_TYPE_WIFI)
+		return -EINVAL;
+
+	keyfile = __connman_storage_open_service(service->identifier);
+	if (!keyfile)
+		return -EIO;
+
+	/* Last connected BSSID */
+	if (memcmp(service->last_connected_bssid, invalid_bssid, WIFI_BSSID_LEN_MAX)) {
+		char *identifier = service->identifier;
+		GString *bssid_str;
+		unsigned int i;
+
+		bssid_str = g_string_sized_new(MAC_ADDRESS_LENGTH);
+		if (!bssid_str) {
+			err = -ENOMEM;
+			goto next;
+		}
+
+		for (i = 0; i < WIFI_BSSID_LEN_MAX; i++) {
+			g_string_append_printf(bssid_str,
+					"%02x", service->last_connected_bssid[i]);
+			if (i < WIFI_BSSID_LEN_MAX - 1)
+				g_string_append(bssid_str, ":");
+		}
+
+		g_key_file_set_string(keyfile, identifier,
+					"LastConnectedBSSID", bssid_str->str);
+
+#if defined TIZEN_EXT_INS
+		DBG("last connected bssid[%s]", bssid_str->str);
+#endif
+
+		g_string_free(bssid_str, TRUE);
+	}
+
+next:
+
+	/* Assoc reject */
+	reject_table = connman_network_get_assoc_reject_table(service->network);
+	if (reject_table && g_hash_table_size(reject_table) > 0) {
+		reject_str = g_string_new(NULL);
+		if (!reject_str) {
+			err = -ENOMEM;
+			goto done;
+		}
+
+		g_hash_table_foreach(reject_table, save_assoc_reject, reject_str);
+
+		reject_list = g_strsplit_set(reject_str->str, " ", 0);
+		reject_len = g_strv_length(reject_list);
+
+		g_key_file_set_string_list(keyfile, service->identifier,
+			"AssocReject", (const gchar **)reject_list, reject_len);
+
+#if defined TIZEN_EXT_INS
+		DBG("assoc reject table [%d]", reject_len);
+#endif
+
+		g_strfreev(reject_list);
+		g_string_free(reject_str, TRUE);
+	} else {
+		g_key_file_remove_key(keyfile, service->identifier, "AssocReject", NULL);
+	}
+
+done:
+	__connman_storage_save_service(keyfile, service->identifier);
+
+	g_key_file_free(keyfile);
+	return err;
+}
+#endif
+
 static int service_load(struct connman_service *service)
 {
 	GKeyFile *keyfile;
@@ -581,6 +869,9 @@ static int service_load(struct connman_service *service)
 	bool autoconnect;
 	unsigned int ssid_len;
 	int err = 0;
+#if defined TIZEN_EXT
+	bool internet_connection;
+#endif
 
 	DBG("service %p", service);
 
@@ -661,6 +952,46 @@ static int service_load(struct connman_service *service)
 
 			g_free(hex_ssid);
 		}
+
+#if defined TIZEN_EXT
+		/* Last connected BSSID */
+		if (service->network) {
+			gchar *bssid_str;
+			unsigned char last_connected_bssid[WIFI_BSSID_LEN_MAX];
+			char **str_list;
+			unsigned int i;
+
+			bssid_str = g_key_file_get_string(keyfile,
+				service->identifier, "LastConnectedBSSID", NULL);
+
+			if (bssid_str) {
+				str_list = g_strsplit(bssid_str, ":", 0);
+
+				if (str_list) {
+					for (i = 0; i < WIFI_BSSID_LEN_MAX; i++)
+						last_connected_bssid[i] = strtol(str_list[i], NULL, 16);
+
+					memcpy(service->last_connected_bssid,
+						last_connected_bssid, WIFI_BSSID_LEN_MAX);
+
+					connman_network_set_last_connected_bssid(service->network,
+						last_connected_bssid);
+
+					g_strfreev(str_list);
+				}
+
+				g_free(bssid_str);
+			}
+		}
+
+		/* Internet connection */
+		internet_connection = g_key_file_get_boolean(keyfile,
+				service->identifier, "InternetConnection", &error);
+		if (!error)
+			service->is_internet_connection = internet_connection;
+
+		g_clear_error(&error);
+#endif
 		/* fall through */
 
 	case CONNMAN_SERVICE_TYPE_GADGET:
@@ -899,6 +1230,9 @@ static int service_save(struct connman_service *service)
 		if (service->network) {
 			const unsigned char *ssid;
 			unsigned int ssid_len = 0;
+#if defined TIZEN_EXT
+			GHashTable *assoc_reject_table;
+#endif
 
 			ssid = connman_network_get_blob(service->network,
 							"WiFi.SSID", &ssid_len);
@@ -927,6 +1261,74 @@ static int service_save(struct connman_service *service)
 			freq = connman_network_get_frequency(service->network);
 			g_key_file_set_integer(keyfile, service->identifier,
 						"Frequency", freq);
+
+#if defined TIZEN_EXT
+			/* Last connected BSSID */
+			if (memcmp(service->last_connected_bssid, invalid_bssid, WIFI_BSSID_LEN_MAX)) {
+				char *identifier = service->identifier;
+				GString *bssid_str;
+				unsigned int i;
+
+				bssid_str = g_string_sized_new(18);
+				if (!bssid_str) {
+					err = -ENOMEM;
+					goto done;
+				}
+
+				for (i = 0; i < WIFI_BSSID_LEN_MAX; i++) {
+					g_string_append_printf(bssid_str,
+							"%02x", service->last_connected_bssid[i]);
+					if (i < WIFI_BSSID_LEN_MAX - 1)
+						g_string_append(bssid_str, ":");
+				}
+
+				g_key_file_set_string(keyfile, identifier,
+							"LastConnectedBSSID", bssid_str->str);
+
+#if defined TIZEN_EXT_INS
+				DBG("last connected bssid[%s]", bssid_str->str);
+#endif
+
+				g_string_free(bssid_str, TRUE);
+			}
+
+			/* Assoc reject */
+			assoc_reject_table = connman_network_get_assoc_reject_table(service->network);
+			if (assoc_reject_table && g_hash_table_size(assoc_reject_table) > 0) {
+				GString *assoc_reject_str;
+				char **assoc_reject_list;
+				guint assoc_reject_len;
+
+				assoc_reject_str = g_string_new(NULL);
+				if (!assoc_reject_str) {
+					err = -ENOMEM;
+					goto done;
+				}
+
+				g_hash_table_foreach(assoc_reject_table, save_assoc_reject, assoc_reject_str);
+
+				assoc_reject_list = g_strsplit_set(assoc_reject_str->str, " ", 0);
+				assoc_reject_len = g_strv_length(assoc_reject_list);
+
+				g_key_file_set_string_list(keyfile, service->identifier,
+					"AssocReject", (const gchar **)assoc_reject_list, assoc_reject_len);
+
+#if defined TIZEN_EXT_INS
+				DBG("assoc reject table [%d]", assoc_reject_len);
+#endif
+
+				g_strfreev(assoc_reject_list);
+				g_string_free(assoc_reject_str, TRUE);
+			} else
+				g_key_file_remove_key(keyfile, service->identifier, "AssocReject", NULL);
+
+			/* Internet connection */
+			g_key_file_set_boolean(keyfile, service->identifier,
+					"InternetConnection", service->is_internet_connection);
+#if defined TIZEN_EXT_INS
+			DBG("internet connection [%s]", service->is_internet_connection ? "true" : "false");
+#endif
+#endif
 		}
 		/* fall through */
 
@@ -2353,11 +2755,30 @@ static void state_changed(struct connman_service *service)
 #if defined TIZEN_EXT
 static void connect_reason_changed(struct connman_service *service)
 {
+	struct connman_device *device;
+
 	if (!service->path)
 		return;
 
 	if (!allow_property_changed(service))
 		return;
+
+	if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER) {
+		device = connman_network_get_device(service->network);
+		if (device) {
+			bool need_save = false;
+
+			need_save |= connman_device_set_last_user_selection_ident(device, service->identifier);
+			need_save |= connman_device_set_last_user_selection_time(device, time(NULL));
+
+			DBG("last user selection ident[%s] time[%ld]",
+				connman_device_get_last_user_selection_ident(device),
+				connman_device_get_last_user_selection_time(device));
+
+			if (need_save)
+				connman_device_save_last_user_selection(device);
+		}
+	}
 
 	connman_dbus_property_changed_basic(service->path,
 					    CONNMAN_SERVICE_INTERFACE,
@@ -2407,6 +2828,27 @@ static void strength_changed(struct connman_service *service)
 				CONNMAN_SERVICE_INTERFACE, "Strength",
 					DBUS_TYPE_BYTE, &service->strength);
 }
+
+#if defined TIZEN_EXT
+static bool update_last_connected_bssid(struct connman_service *service)
+{
+	const unsigned char *last_connected_bssid;
+
+	if (!service->network)
+		return false;
+
+	last_connected_bssid = connman_network_get_last_connected_bssid(service->network);
+	if (memcmp(last_connected_bssid, invalid_bssid, WIFI_BSSID_LEN_MAX) == 0)
+		return false;
+
+	if (memcmp(last_connected_bssid, service->last_connected_bssid, WIFI_BSSID_LEN_MAX) != 0) {
+		memcpy(service->last_connected_bssid, last_connected_bssid, WIFI_BSSID_LEN_MAX);
+		return true;
+	}
+
+	return false;
+}
+#endif
 
 static void favorite_changed(struct connman_service *service)
 {
@@ -4015,6 +4457,30 @@ const char *connman_service_get_proxy_url(struct connman_service *service)
 
 	return service->pac;
 }
+
+#if defined TIZEN_EXT
+void connman_service_set_internet_connection(struct connman_service *service,
+							bool internet_connection)
+{
+	if (!service)
+		return;
+
+	if (service->is_internet_connection != internet_connection) {
+		service->is_internet_connection = internet_connection;
+
+		g_get_current_time(&service->modified);
+		service_save(service);
+	}
+}
+
+bool connman_service_get_internet_connection(struct connman_service *service)
+{
+	if (!service)
+		return false;
+
+	return service->is_internet_connection;
+}
+#endif
 
 void __connman_service_set_proxy_autoconfig(struct connman_service *service,
 							const char *url)
@@ -6536,6 +7002,11 @@ static void service_initialize(struct connman_service *service)
 	service->wps = false;
 	service->wps_advertizing = false;
 #if defined TIZEN_EXT
+	memset(service->last_connected_bssid, 0, WIFI_BSSID_LEN_MAX);
+	service->is_internet_connection = false;
+	service->assoc_reject_count = 0;
+#endif
+#if defined TIZEN_EXT
 	service->disconnection_requested = false;
 	service->storage_reload = false;
 	/*
@@ -6632,13 +7103,173 @@ void connman_service_unref_debug(struct connman_service *service,
 	g_hash_table_remove(service_hash, service->identifier);
 }
 
+#if defined TIZEN_EXT
+static int calculate_score_last_user_selection(struct connman_service *service)
+{
+	int score = 0;
+	struct connman_device *device;
+	const char *last_user_selection_ident;
+	time_t last_user_selection_time;
+	unsigned int frequency;
+	time_t curr_time;
+	time_t ref_time;
+	struct tm* ref_timeinfo;
+
+	device = connman_network_get_device(service->network);
+	last_user_selection_time = connman_device_get_last_user_selection_time(device);
+	last_user_selection_ident = connman_device_get_last_user_selection_ident(device);
+	frequency = connman_network_get_frequency(service->network);
+
+	if (ins_settings.last_user_selection) {
+		if (g_strcmp0(last_user_selection_ident, service->identifier) == 0 &&
+			(((frequency >= FREQ_RANGE_24GHZ_CHANNEL_1 &&
+			frequency <= FREQ_RANGE_24GHZ_CHANNEL_14) &&
+			service->strength >= ins_settings.signal_level3_24ghz) ||
+			((frequency >= FREQ_RANGE_5GHZ_CHANNEL_32 &&
+			frequency <= FREQ_RANGE_5GHZ_CHANNEL_165) &&
+			service->strength >= ins_settings.signal_level3_5ghz))) {
+
+			/* Only events that occur within 8 hours are counted. */
+			curr_time = time(NULL);
+			ref_timeinfo = localtime(&curr_time);
+			ref_timeinfo->tm_hour -= 8;
+			ref_time = mktime(ref_timeinfo);
+
+			if (last_user_selection_time > ref_time) {
+				int time_diff = (curr_time - last_user_selection_time) / 60;
+				int denominator = ins_settings.last_user_selection_time - time_diff;
+				int numerator = ins_settings.last_user_selection_time /
+									ins_settings.last_user_selection_score;
+				int last_user_score = denominator / numerator;
+
+				score += (last_user_score > ins_settings.last_user_selection_score ?
+					ins_settings.last_user_selection_score : last_user_score);
+			}
+		}
+	}
+
+	return score;
+}
+
+static int calculate_score_last_connected(struct connman_service *service)
+{
+	int score = 0;
+	struct connman_device *device;
+	const char *last_connected_ident;
+	unsigned int frequency;
+
+	device = connman_network_get_device(service->network);
+	last_connected_ident = connman_device_get_last_connected_ident(device);
+	frequency = connman_network_get_frequency(service->network);
+
+	if (g_strcmp0(last_connected_ident, service->identifier) == 0 &&
+		(((frequency >= FREQ_RANGE_24GHZ_CHANNEL_1 &&
+		frequency <= FREQ_RANGE_24GHZ_CHANNEL_14) &&
+		service->strength >= ins_settings.signal_level3_24ghz) ||
+		((frequency >= FREQ_RANGE_5GHZ_CHANNEL_32 &&
+		frequency <= FREQ_RANGE_5GHZ_CHANNEL_165) &&
+		service->strength >= ins_settings.signal_level3_5ghz))) {
+		score += ins_settings.last_connected_score;
+	}
+
+	return score;
+}
+
+static int calculate_score_frequency(struct connman_service *service)
+{
+	int score = 0;
+	unsigned int frequency;
+
+	frequency = connman_network_get_frequency(service->network);
+
+	switch (ins_settings.preferred_freq) {
+	case CONNMAN_INS_PREFERRED_FREQ_24GHZ:
+		if ((frequency >= FREQ_RANGE_24GHZ_CHANNEL_14 &&
+			frequency <= FREQ_RANGE_24GHZ_CHANNEL_14) &&
+			(service->strength >= ins_settings.signal_level3_24ghz))
+			score += ins_settings.preferred_freq_score;
+
+		break;
+	case CONNMAN_INS_PREFERRED_FREQ_5GHZ:
+		if ((frequency >= FREQ_RANGE_5GHZ_CHANNEL_32 &&
+			frequency <= FREQ_RANGE_5GHZ_CHANNEL_165) &&
+			(service->strength >= ins_settings.signal_level3_5ghz))
+			score += ins_settings.preferred_freq_score;
+
+		break;
+	default:
+		break;
+	}
+
+	return score;
+}
+
+static int calculate_score_security_priority(struct connman_service *service)
+{
+	int score = 0;
+
+	if (ins_settings.security_priority_count)
+		score += ins_settings.security_priority[service->security];
+
+	return score;
+}
+
+static int calculate_score_internet_connection(struct connman_service *service)
+{
+	int score = 0;
+
+	if (ins_settings.internet) {
+		if (service->is_internet_connection)
+			score += ins_settings.internet_score;
+	}
+
+	return score;
+}
+
+static int calculate_score_strength(struct connman_service *service)
+{
+	int score = 0;
+
+	if (ins_settings.signal)
+		score += (((service->strength > 60) ? 60 : service->strength) - 35);
+
+	return score;
+}
+
+static int calculate_score(struct connman_service *service)
+{
+	int score = 0;
+
+	if (service->type != CONNMAN_SERVICE_TYPE_WIFI) {
+		score += calculate_score_internet_connection(service);
+		service->ins_score = score;
+		return score;
+	}
+
+	score += calculate_score_last_user_selection(service);
+	score += calculate_score_last_connected(service);
+	score += calculate_score_frequency(service);
+	score += calculate_score_security_priority(service);
+	score += calculate_score_internet_connection(service);
+	score += calculate_score_strength(service);
+
+	service->ins_score = score;
+	return score;
+}
+#endif
+
 static gint service_compare(gconstpointer a, gconstpointer b)
 {
 	struct connman_service *service_a = (void *) a;
 	struct connman_service *service_b = (void *) b;
 	enum connman_service_state state_a, state_b;
 	bool a_connected, b_connected;
+#if defined TIZEN_EXT
+	int score_a;
+	int score_b;
+#else
 	gint strength;
+#endif
 
 	state_a = service_a->state;
 	state_b = service_b->state;
@@ -6727,17 +7358,60 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 			return 1;
 	}
 
+#if defined TIZEN_EXT
+	score_a = calculate_score(service_a);
+	score_b = calculate_score(service_b);
+	if (score_b != score_a)
+		return score_b - score_a;
+#else
 	strength = (gint) service_b->strength - (gint) service_a->strength;
 	if (strength)
 		return strength;
+#endif
 
 	return g_strcmp0(service_a->name, service_b->name);
 }
+
+#if defined TIZEN_EXT_INS
+static void print_service_sort(gpointer data, gpointer user_data)
+{
+	struct connman_service *service = data;
+	struct connman_device *device;
+	const char *last_user_selection_ident;
+	const char *last_connected_ident;
+	unsigned int frequency;
+	time_t ref_time;
+	struct tm* timeinfo;
+	time_t last_user_selection_time;
+
+	device = connman_network_get_device(service->network);
+	last_user_selection_ident = connman_device_get_last_user_selection_ident(device);
+	last_user_selection_time = connman_device_get_last_user_selection_time(device);
+	last_connected_ident = connman_device_get_last_connected_ident(device);
+	frequency = connman_network_get_frequency(service->network);
+
+	/* Only events that occur within 8 hours are checked. */
+	ref_time = time(NULL);
+	timeinfo = localtime(&ref_time);
+	timeinfo->tm_hour -= 8;
+	ref_time = mktime(timeinfo);
+
+	DBG("name[%s] score[%d] strength[%d] freq[%d] last_usr[%d] last_conn[%d] internet[%d]",
+		service->name, service->ins_score, service->strength, frequency,
+		(g_strcmp0(last_user_selection_ident, service->identifier) == 0 &&
+		last_user_selection_time > ref_time) ? 1 : 0,
+		g_strcmp0(last_connected_ident, service->identifier) == 0 ? 1 : 0,
+		service->is_internet_connection);
+}
+#endif
 
 static void service_list_sort(void)
 {
 	if (service_list && service_list->next) {
 		service_list = g_list_sort(service_list, service_compare);
+#if defined TIZEN_EXT_INS
+		g_list_foreach(service_list, print_service_sort, NULL);
+#endif
 		service_schedule_changed();
 	}
 }
@@ -7657,6 +8331,10 @@ static int service_indicate_state(struct connman_service *service)
 			single_connected_tech(service);
 #endif
 
+#if defined TIZEN_EXT
+		if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
+			connman_service_set_internet_connection(service, true);
+#endif
 		break;
 
 	case CONNMAN_SERVICE_STATE_DISCONNECT:
@@ -8784,8 +9462,12 @@ static int service_register(struct connman_service *service)
 	DBG("path %s", service->path);
 
 #if defined TIZEN_EXT
+	int ret;
 	service_load(service);
-	int ret = __connman_config_provision_service(service);
+	ret = service_ext_load(service);
+	if (ret == -ERANGE)
+		service_ext_save(service);
+	ret = __connman_config_provision_service(service);
 	if (ret < 0)
 		DBG("Failed to provision service");
 #else
@@ -9416,6 +10098,9 @@ void __connman_service_update_from_network(struct connman_network *network)
 	bool roaming;
 	const char *name;
 	bool stats_enable;
+#if defined TIZEN_EXT
+	bool need_save = false;
+#endif
 
 	service = connman_service_lookup_from_network(network);
 	if (!service)
@@ -9472,6 +10157,16 @@ roaming:
 	roaming_changed(service);
 
 sorting:
+#if defined TIZEN_EXT
+	need_save |= update_last_connected_bssid(service);
+	need_save |= update_assoc_reject(service);
+	if (need_save) {
+		g_get_current_time(&service->modified);
+		service_ext_save(service);
+		need_sort = true;
+	}
+#endif
+
 	if (need_sort) {
 		service_list_sort();
 	}
@@ -9654,6 +10349,94 @@ static struct connman_agent_driver agent_driver = {
 	.context_unref	= agent_context_unref,
 };
 
+#if defined TIZEN_EXT
+static void ins_setting_init(void)
+{
+	int i;
+	const char *string;
+	char **string_list;
+	unsigned int string_count;
+
+	ins_settings.last_user_selection = connman_setting_get_bool("INSLastUserSelection");
+	ins_settings.last_user_selection_time = connman_setting_get_uint("INSLastUserSelectionTime");
+	ins_settings.last_connected = connman_setting_get_bool("INSLastConnected");
+
+	string = connman_option_get_string("INSPreferredFreq");
+	if (g_str_equal(string, "5GHz"))
+		ins_settings.preferred_freq = CONNMAN_INS_PREFERRED_FREQ_5GHZ;
+	else if (g_str_equal(string, "2.4GHz"))
+		ins_settings.preferred_freq = CONNMAN_INS_PREFERRED_FREQ_24GHZ;
+	else
+		ins_settings.preferred_freq = CONNMAN_INS_PREFERRED_FREQ_UNKNOWN;
+
+	ins_settings.security_priority_count = connman_setting_get_uint("INSSecurityPriorityCount");
+	ins_settings.security_priority_score = connman_setting_get_uint("INSSecurityPriorityScore");
+	string_count = ins_settings.security_priority_count;
+
+	memset(ins_settings.security_priority, 0, sizeof(ins_settings.security_priority));
+	string_list = connman_setting_get_string_list("INSSecurityPriority");
+	for (i = 0; string_list && string_list[i]; i++) {
+		unsigned int security_score = string_count * ins_settings.security_priority_score;
+
+		if (g_str_equal(string_list[i], "WEP"))
+			ins_settings.security_priority[CONNMAN_SERVICE_SECURITY_WEP] = security_score;
+		else if (g_str_equal(string_list[i], "PSK"))
+			ins_settings.security_priority[CONNMAN_SERVICE_SECURITY_PSK] = security_score;
+		else if (g_str_equal(string_list[i], "8021X"))
+			ins_settings.security_priority[CONNMAN_SERVICE_SECURITY_8021X] = security_score;
+		else if (g_str_equal(string_list[i], "WPA"))
+			ins_settings.security_priority[CONNMAN_SERVICE_SECURITY_WPA] = security_score;
+		else if (g_str_equal(string_list[i], "RSN"))
+			ins_settings.security_priority[CONNMAN_SERVICE_SECURITY_RSN] = security_score;
+		else if (g_str_equal(string_list[i], "SAE"))
+			ins_settings.security_priority[CONNMAN_SERVICE_SECURITY_SAE] = security_score;
+		else if (g_str_equal(string_list[i], "OWE"))
+			ins_settings.security_priority[CONNMAN_SERVICE_SECURITY_OWE] = security_score;
+		else if (g_str_equal(string_list[i], "DPP"))
+			ins_settings.security_priority[CONNMAN_SERVICE_SECURITY_DPP] = security_score;
+
+		string_count--;
+	}
+
+	ins_settings.signal = connman_setting_get_bool("INSSignal");
+	ins_settings.internet = connman_setting_get_bool("INSInternet");
+
+	ins_settings.last_user_selection_score = connman_setting_get_uint("INSLastUserSelectionScore");
+	ins_settings.last_connected_score = connman_setting_get_uint("INSLastConnectedScore");
+	ins_settings.preferred_freq_score = connman_setting_get_uint("INSPreferredFreqScore");
+	ins_settings.internet_score = connman_setting_get_uint("INSInternetScore");
+
+	ins_settings.signal_level3_5ghz = connman_setting_get_int("INSSignalLevel3_5GHz");
+	ins_settings.signal_level3_24ghz = connman_setting_get_int("INSSignalLevel3_24GHz");
+
+	DBG("last_user_selection [%s]", ins_settings.last_user_selection ? "true" : "false");
+	DBG("last_user_selection_time [%d]", ins_settings.last_user_selection_time);
+	DBG("last_user_selection_score [%d]", ins_settings.last_user_selection_score);
+
+	DBG("last_connected [%s]", ins_settings.last_connected ? "true" : "false");
+	DBG("last_connected_score [%d]", ins_settings.last_connected_score);
+
+	DBG("preferred_freq [%s]", ins_settings.preferred_freq ? "true" : "false");
+	DBG("preferred_freq_score [%d]", ins_settings.preferred_freq_score);
+
+	DBG("security_priority_count [%d]", ins_settings.security_priority_count);
+	for (i = 0; i < CONNMAN_SERVICE_SECURITY_MAX; i++) {
+		if (ins_settings.security_priority[i])
+			DBG("security_priority %s [%d]", security2string(i),
+					ins_settings.security_priority[i]);
+	}
+	DBG("security_priority_score [%d]", ins_settings.security_priority_score);
+
+	DBG("signal [%s]", ins_settings.signal ? "true" : "false");
+
+	DBG("internet [%s]", ins_settings.internet ? "true" : "false");
+	DBG("internet_score [%d]", ins_settings.internet_score);
+
+	DBG("signal_level3_5ghz [%d]", ins_settings.signal_level3_5ghz);
+	DBG("signal_level3_24ghz [%d]", ins_settings.signal_level3_24ghz);
+}
+#endif
+
 int __connman_service_init(void)
 {
 	int err;
@@ -9680,6 +10463,10 @@ int __connman_service_init(void)
 	services_notify->add = g_hash_table_new(g_str_hash, g_str_equal);
 
 	remove_unprovisioned_services();
+
+#if defined TIZEN_EXT
+	ins_setting_init();
+#endif
 
 	return 0;
 }

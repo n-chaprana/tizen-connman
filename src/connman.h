@@ -279,6 +279,10 @@ GKeyFile *__connman_storage_open_global(void);
 GKeyFile *__connman_storage_load_global(void);
 int __connman_storage_save_global(GKeyFile *keyfile);
 void __connman_storage_delete_global(void);
+#if defined TIZEN_EXT
+GKeyFile *__connman_storage_load_ins(void);
+int __connman_storage_save_ins(GKeyFile *keyfile);
+#endif
 
 GKeyFile *__connman_storage_load_config(const char *ident);
 GKeyFile *__connman_storage_load_provider_config(const char *ident);

@@ -35,6 +35,9 @@
 
 #define SETTINGS	"settings"
 #define DEFAULT		"default.profile"
+#if defined TIZEN_EXT
+#define INS_SETTINGS	"settings.ins"
+#endif
 
 #define MODE		(S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | \
 			S_IXGRP | S_IROTH | S_IXOTH)
@@ -129,6 +132,40 @@ int __connman_storage_save_global(GKeyFile *keyfile)
 
 	return ret;
 }
+
+#if defined TIZEN_EXT
+GKeyFile *__connman_storage_load_ins(void)
+{
+	gchar *pathname;
+	GKeyFile *keyfile = NULL;
+
+	pathname = g_strdup_printf("%s/%s", STORAGEDIR, INS_SETTINGS);
+	if (!pathname)
+		return NULL;
+
+	keyfile = storage_load(pathname);
+
+	g_free(pathname);
+
+	return keyfile;
+}
+
+int __connman_storage_save_ins(GKeyFile *keyfile)
+{
+	gchar *pathname;
+	int ret;
+
+	pathname = g_strdup_printf("%s/%s", STORAGEDIR, INS_SETTINGS);
+	if (!pathname)
+		return -ENOMEM;
+
+	ret = storage_save(keyfile, pathname);
+
+	g_free(pathname);
+
+	return ret;
+}
+#endif
 
 void __connman_storage_delete_global(void)
 {

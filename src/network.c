@@ -52,6 +52,12 @@
 
 #define DHCP_RETRY_TIMEOUT     10
 
+#if defined TIZEN_EXT
+static unsigned char invalid_bssid[WIFI_BSSID_LEN_MAX] = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+#endif
+
 static GSList *network_list = NULL;
 static GSList *driver_list = NULL;
 
@@ -130,6 +136,10 @@ struct connman_network {
 		char *connector;
 		char *c_sign_key;
 		char *net_access_key;
+#endif
+#if defined TIZEN_EXT
+		unsigned char last_connected_bssid[WIFI_BSSID_LEN_MAX];
+		GHashTable *assoc_reject_table;
 #endif
 	} wifi;
 
@@ -2508,6 +2518,45 @@ connection_mode_e connman_network_get_connection_mode(struct connman_network *ne
 void *connman_network_get_bssid_list(struct connman_network *network)
 {
 	return network->wifi.bssid_list;
+}
+
+int connman_network_set_last_connected_bssid(struct connman_network *network,
+				const unsigned char *bssid)
+{
+	if (!bssid)
+		return -EINVAL;
+
+	if (!memcmp(bssid, invalid_bssid, WIFI_BSSID_LEN_MAX))
+		return -EINVAL;
+
+	memcpy(network->wifi.last_connected_bssid, bssid, WIFI_BSSID_LEN_MAX);
+
+	return 0;
+}
+
+unsigned char *connman_network_get_last_connected_bssid(struct connman_network *network)
+{
+	return (unsigned char *)network->wifi.last_connected_bssid;
+}
+
+void connman_network_set_assoc_reject_table(struct connman_network *network,
+		GHashTable *assoc_reject_table)
+{
+	if (!network)
+		return;
+
+	if (!assoc_reject_table)
+		return;
+
+	network->wifi.assoc_reject_table = assoc_reject_table;
+}
+
+GHashTable *connman_network_get_assoc_reject_table(struct connman_network *network)
+{
+	if (!network)
+		return NULL;
+
+	return network->wifi.assoc_reject_table;
 }
 #endif
 

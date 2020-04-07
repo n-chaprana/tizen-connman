@@ -68,6 +68,11 @@ struct connman_device {
 	char *last_network;
 	struct connman_network *network;
 	GHashTable *networks;
+#if defined TIZEN_EXT
+	time_t last_user_selection_time;
+	char *last_user_selection_ident;
+	char *last_connected_ident;
+#endif
 };
 
 static void clear_pending_trigger(struct connman_device *device)
@@ -423,6 +428,11 @@ static void device_destruct(struct connman_device *device)
 
 	g_free(device->last_network);
 
+#if defined TIZEN_EXT
+	g_free(device->last_user_selection_ident);
+	g_free(device->last_connected_ident);
+#endif
+
 	g_free(device);
 }
 
@@ -695,6 +705,194 @@ int connman_device_reconnect_service(struct connman_device *device)
 
 	return 0;
 }
+
+#if defined TIZEN_EXT
+bool connman_device_set_last_user_selection_time(struct connman_device *device,
+						time_t time)
+{
+	if (device->last_user_selection_time != time) {
+		device->last_user_selection_time = time;
+		return true;
+	}
+
+	return false;
+}
+
+time_t connman_device_get_last_user_selection_time(struct connman_device *device)
+{
+	return device->last_user_selection_time;
+}
+
+bool connman_device_set_last_user_selection_ident(struct connman_device *device,
+						const char *ident)
+{
+	if (g_strcmp0(device->last_user_selection_ident, ident) != 0) {
+		g_free(device->last_user_selection_ident);
+		device->last_user_selection_ident = g_strdup(ident);
+
+		return true;
+	}
+
+	return false;
+}
+
+const char *connman_device_get_last_user_selection_ident(struct connman_device *device)
+{
+	return device->last_user_selection_ident;
+}
+
+bool connman_device_set_last_connected_ident(struct connman_device *device,
+						const char *ident)
+{
+	if (g_strcmp0(device->last_connected_ident, ident) != 0) {
+		g_free(device->last_connected_ident);
+		device->last_connected_ident = g_strdup(ident);
+
+		return true;
+	}
+
+	return false;
+}
+
+const char *connman_device_get_last_connected_ident(struct connman_device *device)
+{
+	return device->last_connected_ident;
+}
+
+void connman_device_save_last_user_selection(struct connman_device *device)
+{
+	GKeyFile *keyfile;
+	gchar *get_str;
+	gchar *selection_str;
+
+	keyfile = __connman_storage_load_ins();
+
+	selection_str = g_strdup_printf("%s:%ld",
+			device->last_user_selection_ident, device->last_user_selection_time);
+
+	if (!keyfile) {
+		keyfile = g_key_file_new();
+
+		g_key_file_set_string(keyfile, device->interface, "LastUserSelection", selection_str);
+		DBG("%s", selection_str);
+		__connman_storage_save_ins(keyfile);
+
+	} else {
+		get_str = g_key_file_get_string(keyfile, device->interface, "LastUserSelection", NULL);
+		if (!get_str || g_strcmp0(get_str, selection_str) != 0) {
+			g_key_file_set_string(keyfile, device->interface, "LastUserSelection", selection_str);
+			DBG("%s -> %s", get_str, selection_str);
+			__connman_storage_save_ins(keyfile);
+		}
+
+		g_free(get_str);
+	}
+
+	g_free(selection_str);
+	g_key_file_free(keyfile);
+}
+
+void connman_device_load_last_user_selection(struct connman_device *device)
+{
+	GKeyFile *keyfile;
+	gchar *get_str;
+	char **selection_str;
+
+	keyfile = __connman_storage_load_ins();
+	if (!keyfile)
+		return;
+
+	get_str = g_key_file_get_string(keyfile, device->interface, "LastUserSelection", NULL);
+	if (get_str) {
+		selection_str = g_strsplit(get_str, ":", 0);
+		if (selection_str) {
+			time_t ref_time;
+			struct tm* timeinfo;
+			time_t last_user_selection_time;
+
+			/* Only events that occur within 8 hours are counted. */
+			ref_time = time(NULL);
+			timeinfo = localtime(&ref_time);
+			timeinfo->tm_hour -= 8;
+			ref_time = mktime(timeinfo);
+
+			last_user_selection_time = strtol(selection_str[1], NULL, 10);
+
+			if (last_user_selection_time > ref_time) {
+				if (g_strcmp0(selection_str[0], device->last_user_selection_ident) != 0) {
+					g_free(device->last_user_selection_ident);
+					device->last_user_selection_ident = g_strdup(selection_str[0]);
+				}
+
+				device->last_user_selection_time = last_user_selection_time;
+
+				DBG("%s %ld", device->last_user_selection_ident, device->last_user_selection_time);
+			}
+
+			g_strfreev(selection_str);
+		}
+
+		g_free(get_str);
+	}
+
+	g_key_file_free(keyfile);
+}
+
+void connman_device_save_last_connected(struct connman_device *device)
+{
+	GKeyFile *keyfile;
+	gchar *get_str;
+
+	if (!device->last_connected_ident)
+		return;
+
+	keyfile = __connman_storage_load_ins();
+
+	if (!keyfile) {
+		keyfile = g_key_file_new();
+
+		g_key_file_set_string(keyfile, device->interface, "LastConnected", device->last_connected_ident);
+		DBG("%s", device->last_connected_ident);
+		__connman_storage_save_ins(keyfile);
+
+	} else {
+		get_str = g_key_file_get_string(keyfile, device->interface, "LastConnected", NULL);
+		if (!get_str || g_strcmp0(get_str, device->last_connected_ident) != 0) {
+			g_key_file_set_string(keyfile, device->interface, "LastConnected", device->last_connected_ident);
+			DBG("%s -> %s", get_str, device->last_connected_ident);
+			__connman_storage_save_ins(keyfile);
+		}
+
+		g_free(get_str);
+	}
+
+	g_key_file_free(keyfile);
+}
+
+void connman_device_load_last_connected(struct connman_device *device)
+{
+	GKeyFile *keyfile;
+	gchar *get_str;
+
+	keyfile = __connman_storage_load_ins();
+	if (!keyfile)
+		return;
+
+	get_str = g_key_file_get_string(keyfile, device->interface, "LastConnected", NULL);
+	if (get_str) {
+		if (g_strcmp0(get_str, device->last_connected_ident) != 0) {
+			g_free(device->last_connected_ident);
+			device->last_connected_ident = g_strdup(get_str);
+		}
+
+		DBG("%s", device->last_connected_ident);
+
+		g_free(get_str);
+	}
+
+	g_key_file_free(keyfile);
+}
+#endif
 
 static void mark_network_available(gpointer key, gpointer value,
 							gpointer user_data)
@@ -1531,6 +1729,10 @@ struct connman_device *connman_device_create_from_index(int index)
 
 	connman_device_set_index(device, index);
 	connman_device_set_interface(device, devname);
+#if defined TIZEN_EXT
+	connman_device_load_last_connected(device);
+	connman_device_load_last_user_selection(device);
+#endif
 
 	if (ident) {
 		connman_device_set_ident(device, ident);

@@ -29,6 +29,10 @@ extern "C" {
 #endif
 
 bool connman_setting_get_bool(const char *key);
+#if defined TIZEN_EXT
+unsigned int connman_setting_get_uint(const char *key);
+int connman_setting_get_int(const char *key);
+#endif
 char **connman_setting_get_string_list(const char *key);
 unsigned int *connman_setting_get_uint_list(const char *key);
 

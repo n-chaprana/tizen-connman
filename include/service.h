@@ -73,6 +73,9 @@ enum connman_service_security {
 	CONNMAN_SERVICE_SECURITY_OWE     = 11,
 	CONNMAN_SERVICE_SECURITY_DPP     = 12,
 #endif
+#if defined TIZEN_EXT
+	CONNMAN_SERVICE_SECURITY_MAX
+#endif
 };
 
 enum connman_service_state {
@@ -199,6 +202,12 @@ int connman_service_set_proxy(struct connman_service *service,
 
 void connman_service_set_disconnection_requested(struct connman_service *service,
 						 bool disconnection_requested);
+#endif
+
+#if defined TIZEN_EXT
+void connman_service_set_internet_connection(struct connman_service *service,
+							bool internet_connection);
+bool connman_service_get_internet_connection(struct connman_service *service);
 #endif
 
 #ifdef __cplusplus
