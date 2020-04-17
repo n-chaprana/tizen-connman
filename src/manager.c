@@ -216,6 +216,28 @@ static DBusMessage *get_services(DBusConnection *conn,
 	return reply;
 }
 
+#if defined TIZEN_EXT_INS
+static void append_ins_structs(DBusMessageIter *iter, void *user_data)
+{
+	__connman_ins_list_struct(iter);
+}
+
+static DBusMessage *get_ins(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	__connman_dbus_append_objpath_dict_array(reply,
+			append_ins_structs, NULL);
+
+	return reply;
+}
+#endif
+
 static void append_peer_structs(DBusMessageIter *iter, void *user_data)
 {
 	__connman_peer_list_struct(iter);
@@ -666,6 +688,11 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("GetServices",
 			NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
 			get_services) },
+#if defined TIZEN_EXT_INS
+	{ GDBUS_METHOD("GetINS",
+			NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
+			get_ins) },
+#endif
 	{ GDBUS_METHOD("GetPeers",
 			NULL, GDBUS_ARGS({ "peers", "a(oa{sv})" }),
 			get_peers) },

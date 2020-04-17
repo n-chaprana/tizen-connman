@@ -76,6 +76,15 @@ struct connman_bssids {
 	unsigned char bssid[WIFI_BSSID_LEN_MAX];
 	uint16_t strength;
 	uint16_t frequency;
+	uint16_t assoc_reject_cnt;
+	bool is_last_connected;
+#if defined TIZEN_EXT_INS
+	int score_last_connected_bssid;
+	int score_assoc_reject;
+	int score_frequency;
+	int score_strength;
+#endif
+	int ins_score;
 };
 
 /* Backward compatible

@@ -374,6 +374,10 @@ if TIZEN_EXT_WIFI_MESH
 client_connmanctl_SOURCES += client/mesh.c client/mesh.h
 endif
 
+if TIZEN_EXT_INS
+client_connmanctl_SOURCES += client/ins.c client/ins.h
+endif
+
 client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
 				-lreadline -ldl -lncurses
 endif

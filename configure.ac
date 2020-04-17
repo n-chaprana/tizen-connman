@@ -80,6 +80,11 @@ AC_ARG_ENABLE(tizen-ext,
 			fi])
 AM_CONDITIONAL(TIZEN_EXT, test "${enable-tizen-ext}" != "no")
 
+AC_ARG_ENABLE(tizen-ext-ins,
+	AC_HELP_STRING([--enable-tizen-ext-ins], [enable TIZEN extensions for INS]),
+			[CFLAGS="$CFLAGS -DTIZEN_EXT_INS"], [enable_tizen_ext_ins="no"])
+AM_CONDITIONAL(TIZEN_EXT_INS, test "${enable_tizen_ext_ins}" != "no")
+
 AC_ARG_ENABLE(tizen-ext-wifi-mesh,
 	AC_HELP_STRING([--enable-tizen-ext-wifi-mesh], [enable TIZEN extensions for Wi-Fi Mesh]),
 			[CFLAGS="$CFLAGS -DTIZEN_EXT_WIFI_MESH"], [enable_tizen_ext_wifi_mesh="no"])

@@ -5,7 +5,7 @@
 
 Name:           connman
 Version:        1.37
-Release:        36
+Release:        37
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -153,6 +153,7 @@ chmod +x bootstrap
 	    --sysconfdir=/etc \
 	    --enable-client \
 	    --enable-tizen-ext \
+	    --disable-tizen-ext-ins \
 	    --enable-pacrunner \
             --enable-wifi=builtin \
 %if %{with connman_openconnect}

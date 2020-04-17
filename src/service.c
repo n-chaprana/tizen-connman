@@ -49,6 +49,9 @@
 #define FREQ_RANGE_24GHZ_CHANNEL_14  2484
 #define FREQ_RANGE_5GHZ_CHANNEL_32   5160
 #define FREQ_RANGE_5GHZ_CHANNEL_165  5825
+
+#define MAC2STR(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
+#define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
 #endif
 
 static DBusConnection *connection = NULL;
@@ -227,6 +230,14 @@ struct connman_service {
 	unsigned char last_connected_bssid[WIFI_BSSID_LEN_MAX];
 	bool is_internet_connection;
 	int assoc_reject_count;
+#if defined TIZEN_EXT_INS
+	int score_last_user_selection;
+	int score_last_connected;
+	int score_frequency;
+	int score_security_priority;
+	int score_internet_connection;
+	int score_strength;
+#endif
 	int ins_score;
 #endif
 };
@@ -751,7 +762,6 @@ static int service_ext_load(struct connman_service *service)
 				continue;
 			}
 
-			memset(reject_data, 0, sizeof(struct assoc_reject_data));
 			reject_data->bssid = g_strdup(bssid);
 			g_hash_table_insert(reject_table, reject_data->bssid, reject_data);
 		}
@@ -3887,9 +3897,7 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 	country_code = connman_network_get_countrycode(network);
 	connection_mode = connman_network_get_connection_mode(network);
 
-	snprintf(bssid_str, WIFI_BSSID_STR_LEN, "%02x:%02x:%02x:%02x:%02x:%02x",
-				bssid[0], bssid[1], bssid[2],
-				bssid[3], bssid[4], bssid[5]);
+	snprintf(bssid_str, WIFI_BSSID_STR_LEN, MACSTR, MAC2STR(bssid));
 
 	snprintf(country_code_str, (WIFI_COUNTRY_CODE_LEN + 1), "%c%c",
 		 country_code[0], country_code[1]);
@@ -3965,9 +3973,7 @@ static void append_bssid_info(DBusMessageIter *iter, void *user_data)
 		GSList *list;
 		for (list = bssid_list; list; list = list->next) {
 			bssids = (struct connman_bssids *)list->data;
-			g_snprintf(bssid_buf, MAC_ADDRESS_LENGTH, "%02x:%02x:%02x:%02x:%02x:%02x",
-					bssids->bssid[0], bssids->bssid[1], bssids->bssid[2],
-					bssids->bssid[3], bssids->bssid[4], bssids->bssid[5]);
+			g_snprintf(bssid_buf, MAC_ADDRESS_LENGTH, MACSTR, MAC2STR(bssids->bssid));
 
 			connman_dbus_dict_append_basic(iter, "BSSID",
 					DBUS_TYPE_STRING, &bssid_str);
@@ -4168,6 +4174,99 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		connman_network_append_acddbus(dict, service->network);
 }
 
+#if defined TIZEN_EXT_INS
+static void append_ins_bssid_info(DBusMessageIter *iter, void *user_data)
+{
+	GSList *bssid_list = NULL;
+	struct connman_network *network = user_data;
+	struct connman_bssids *bssids;
+	char bssid_buf[MAC_ADDRESS_LENGTH] = {0,};
+	char *bssid_str = bssid_buf;
+
+	bssid_list = (GSList *)connman_network_get_bssid_list(network);
+	if(bssid_list) {
+		GSList *list;
+		for (list = bssid_list; list; list = list->next) {
+			bssids = (struct connman_bssids *)list->data;
+			g_snprintf(bssid_buf, MAC_ADDRESS_LENGTH, MACSTR, MAC2STR(bssids->bssid));
+
+			connman_dbus_dict_append_basic(iter, "BSSID",
+					DBUS_TYPE_STRING, &bssid_str);
+
+			connman_dbus_dict_append_basic(iter, "ScoreINS",
+					DBUS_TYPE_INT32, &bssids->ins_score);
+
+			connman_dbus_dict_append_basic(iter, "ScoreLastConnected",
+					DBUS_TYPE_INT32, &bssids->score_last_connected_bssid);
+
+			connman_dbus_dict_append_basic(iter, "ScoreAssocReject",
+					DBUS_TYPE_INT32, &bssids->score_assoc_reject);
+
+			connman_dbus_dict_append_basic(iter, "Frequency",
+					DBUS_TYPE_UINT16, &bssids->frequency);
+
+			connman_dbus_dict_append_basic(iter, "ScoreFrequency",
+					DBUS_TYPE_INT32, &bssids->score_frequency);
+
+			connman_dbus_dict_append_basic(iter, "Strength",
+					DBUS_TYPE_UINT16, &bssids->strength);
+
+			connman_dbus_dict_append_basic(iter, "ScoreStrength",
+					DBUS_TYPE_INT32, &bssids->score_strength);
+		}
+	}
+}
+
+static void append_ins_properties(DBusMessageIter *dict,
+					struct connman_service *service)
+{
+	const char *str;
+	unsigned int frequency = 0U;
+
+	if (service->name)
+		connman_dbus_dict_append_basic(dict, "Name",
+					DBUS_TYPE_STRING, &service->name);
+
+	connman_dbus_dict_append_basic(dict, "ScoreINS",
+				DBUS_TYPE_INT32, &service->ins_score);
+
+	connman_dbus_dict_append_basic(dict, "ScoreLastUserSelection",
+				DBUS_TYPE_INT32, &service->score_last_user_selection);
+
+	connman_dbus_dict_append_basic(dict, "ScoreLastConnected",
+				DBUS_TYPE_INT32, &service->score_last_connected);
+
+	str = security2string(service->security);
+	if (str)
+		connman_dbus_dict_append_basic(dict, "Security",
+				DBUS_TYPE_STRING, &str);
+
+	connman_dbus_dict_append_basic(dict, "ScoreSecurityPriority",
+				DBUS_TYPE_INT32, &service->score_security_priority);
+
+	connman_dbus_dict_append_basic(dict, "Strength",
+				DBUS_TYPE_BYTE, &service->strength);
+
+	connman_dbus_dict_append_basic(dict, "ScoreStrength",
+				DBUS_TYPE_INT32, &service->score_strength);
+
+	connman_dbus_dict_append_basic(dict, "ScoreInternetConnection",
+				DBUS_TYPE_INT32, &service->score_internet_connection);
+
+	if (service->network) {
+		frequency = connman_network_get_frequency(service->network);
+		connman_dbus_dict_append_basic(dict, "Frequency",
+				DBUS_TYPE_UINT16, &frequency);
+
+		connman_dbus_dict_append_basic(dict, "ScoreFrequency",
+				DBUS_TYPE_INT32, &service->score_frequency);
+
+		connman_dbus_dict_append_dict(dict, "BSSID.List",
+				append_ins_bssid_info, service->network);
+	}
+}
+#endif
+
 static void append_struct_service(DBusMessageIter *iter,
 		connman_dbus_append_cb_t function,
 		struct connman_service *service)
@@ -4209,6 +4308,34 @@ void __connman_service_list_struct(DBusMessageIter *iter)
 {
 	g_list_foreach(service_list, append_struct, iter);
 }
+
+#if defined TIZEN_EXT_INS
+static void append_dict_ins_properties(DBusMessageIter *dict, void *user_data)
+{
+	struct connman_service *service = user_data;
+
+	append_ins_properties(dict, service);
+}
+
+static void append_ins_struct(gpointer value, gpointer user_data)
+{
+	struct connman_service *service = value;
+	DBusMessageIter *iter = user_data;
+
+	if (!service->path)
+		return;
+
+	if (service->type != CONNMAN_SERVICE_TYPE_WIFI)
+		return;
+
+	append_struct_service(iter, append_dict_ins_properties, service);
+}
+
+void __connman_ins_list_struct(DBusMessageIter *iter)
+{
+	g_list_foreach(service_list, append_ins_struct, iter);
+}
+#endif
 
 bool __connman_service_is_hidden(struct connman_service *service)
 {
@@ -7238,6 +7365,12 @@ static int calculate_score_strength(struct connman_service *service)
 
 static int calculate_score(struct connman_service *service)
 {
+	int score_last_user_selection;
+	int score_last_connected;
+	int score_frequency;
+	int score_security_priority;
+	int score_internet_connection;
+	int score_strength;
 	int score = 0;
 
 	if (service->type != CONNMAN_SERVICE_TYPE_WIFI) {
@@ -7246,12 +7379,25 @@ static int calculate_score(struct connman_service *service)
 		return score;
 	}
 
-	score += calculate_score_last_user_selection(service);
-	score += calculate_score_last_connected(service);
-	score += calculate_score_frequency(service);
-	score += calculate_score_security_priority(service);
-	score += calculate_score_internet_connection(service);
-	score += calculate_score_strength(service);
+	score_last_user_selection = calculate_score_last_user_selection(service);
+	score_last_connected = calculate_score_last_connected(service);
+	score_frequency = calculate_score_frequency(service);
+	score_security_priority = calculate_score_security_priority(service);
+	score_internet_connection = calculate_score_internet_connection(service);
+	score_strength = calculate_score_strength(service);
+
+	score = score_last_user_selection + score_last_connected +
+		score_frequency + score_security_priority +
+		score_internet_connection + score_strength;
+
+#if defined TIZEN_EXT_INS
+	service->score_last_user_selection = score_last_user_selection;
+	service->score_last_connected = score_last_connected;
+	service->score_frequency = score_frequency;
+	service->score_security_priority = score_security_priority;
+	service->score_internet_connection = score_internet_connection;
+	service->score_strength = score_strength;
+#endif
 
 	service->ins_score = score;
 	return score;
@@ -7376,32 +7522,16 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 static void print_service_sort(gpointer data, gpointer user_data)
 {
 	struct connman_service *service = data;
-	struct connman_device *device;
-	const char *last_user_selection_ident;
-	const char *last_connected_ident;
-	unsigned int frequency;
-	time_t ref_time;
-	struct tm* timeinfo;
-	time_t last_user_selection_time;
 
-	device = connman_network_get_device(service->network);
-	last_user_selection_ident = connman_device_get_last_user_selection_ident(device);
-	last_user_selection_time = connman_device_get_last_user_selection_time(device);
-	last_connected_ident = connman_device_get_last_connected_ident(device);
-	frequency = connman_network_get_frequency(service->network);
+	if (service->type != CONNMAN_SERVICE_TYPE_WIFI)
+		return;
 
-	/* Only events that occur within 8 hours are checked. */
-	ref_time = time(NULL);
-	timeinfo = localtime(&ref_time);
-	timeinfo->tm_hour -= 8;
-	ref_time = mktime(timeinfo);
-
-	DBG("name[%s] score[%d] strength[%d] freq[%d] last_usr[%d] last_conn[%d] internet[%d]",
-		service->name, service->ins_score, service->strength, frequency,
-		(g_strcmp0(last_user_selection_ident, service->identifier) == 0 &&
-		last_user_selection_time > ref_time) ? 1 : 0,
-		g_strcmp0(last_connected_ident, service->identifier) == 0 ? 1 : 0,
-		service->is_internet_connection);
+	DBG("name[%-20s] total[%2d] last_usr[%2d] last_conn[%2d] "
+		"freq[%2d] sec[%2d] internet[%2d] strength[%2d]",
+		service->name, service->ins_score, service->score_last_user_selection,
+		service->score_last_connected, service->score_frequency,
+		service->score_security_priority, service->score_internet_connection,
+		service->score_strength);
 }
 #endif
 

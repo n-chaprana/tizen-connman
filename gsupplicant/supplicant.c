@@ -60,6 +60,9 @@
 #define FREQ_RANGE_24GHZ_CHANNEL_14  2484
 #define FREQ_RANGE_5GHZ_CHANNEL_32   5160
 #define FREQ_RANGE_5GHZ_CHANNEL_165  5825
+
+#define MAC2STR(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
+#define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
 #endif
 
 #define BSS_UNKNOWN_STRENGTH    -90
@@ -416,6 +419,12 @@ struct g_connman_bssids {
 	uint16_t frequency;
 	uint16_t assoc_reject_cnt;
 	bool is_last_connected;
+#if defined TIZEN_EXT_INS
+	int score_last_connected_bssid;
+	int score_assoc_reject;
+	int score_frequency;
+	int score_strength;
+#endif
 	int ins_score;
 };
 
@@ -1962,6 +1971,77 @@ static uint16_t get_assoc_reject_cnt(GHashTable *assoc_reject_table, unsigned ch
 	return assoc_count.assoc_count;
 }
 
+static int calculate_score_last_connected_bssid(bool is_last_connected)
+{
+	int score = 0;
+
+	if (ins_settings.last_connected_bssid) {
+		if (is_last_connected)
+			score += ins_settings.last_connected_bssid_score;
+	}
+
+	return score;
+}
+
+static int calculate_score_assoc_reject(uint16_t assoc_reject_cnt)
+{
+	int score = 0;
+
+	if (ins_settings.assoc_reject)
+		score -= (assoc_reject_cnt * ins_settings.assoc_reject_score);
+
+	return score;
+}
+
+static int calculate_score_frequency(dbus_int16_t strength, dbus_uint16_t frequency)
+{
+	int score = 0;
+
+	switch (ins_settings.preferred_freq_bssid) {
+	case G_SUPPLICANT_INS_PREFERRED_FREQ_24GHZ:
+		if ((frequency >= FREQ_RANGE_24GHZ_CHANNEL_1 &&
+			frequency <= FREQ_RANGE_24GHZ_CHANNEL_14) &&
+			(strength > ins_settings.signal_level3_24ghz))
+			score += ins_settings.preferred_freq_bssid_score;
+
+		break;
+	case G_SUPPLICANT_INS_PREFERRED_FREQ_5GHZ:
+		if ((frequency >= FREQ_RANGE_5GHZ_CHANNEL_32 &&
+			frequency <= FREQ_RANGE_5GHZ_CHANNEL_165) &&
+			(strength > ins_settings.signal_level3_5ghz))
+			score += ins_settings.preferred_freq_bssid_score;
+
+		break;
+	default:
+		break;
+	}
+
+	return score;
+}
+
+static int calculate_score_strength(dbus_int16_t strength)
+{
+	int score = 0;
+
+	if (ins_settings.signal_bssid)
+		score += (((strength > -60) ? -60 : strength) + 85);
+
+	return score;
+}
+
+static int calculate_score(bool is_last_connected, uint16_t assoc_reject_cnt,
+		dbus_int16_t strength, dbus_uint16_t frequency)
+{
+	int score = 0;
+
+	score += calculate_score_last_connected_bssid(is_last_connected);
+	score += calculate_score_assoc_reject(assoc_reject_cnt);
+	score += calculate_score_frequency(strength, frequency);
+	score += calculate_score_strength(strength);
+
+	return score;
+}
+
 static void update_bssid_list(gpointer key, gpointer value, gpointer user_data)
 {
 	struct g_supplicant_bss *bss = value;
@@ -1985,69 +2065,30 @@ static void update_bssid_list(gpointer key, gpointer value, gpointer user_data)
 
 		bssids->is_last_connected = compare_bssid(bssids->bssid, bssid_data->last_connected_bssid);
 
+#if defined TIZEN_EXT_INS
+		bssids->score_last_connected_bssid = calculate_score_last_connected_bssid(bssids->is_last_connected);
+		bssids->score_assoc_reject = calculate_score_assoc_reject(bssids->assoc_reject_cnt);
+		bssids->score_frequency = calculate_score_frequency(bss->signal, bssids->frequency);
+		bssids->score_strength = calculate_score_strength(bssids->strength);
+#endif
+
+		bssids->ins_score = calculate_score(bssids->is_last_connected,
+			bssids->assoc_reject_cnt, bssids->frequency, bss->signal);
+
 		bssid_data->bssid_list = g_slist_append(bssid_data->bssid_list, bssids);
 	} else
 		SUPPLICANT_DBG("Failed to allocate memory");
-}
-
-static int calculate_score(dbus_int16_t strength, dbus_uint16_t frequency,
-		uint16_t assoc_reject_cnt, bool is_last_connected)
-{
-	int score = 0;
-
-	/* 5GHz & Signal >= RSSI Level 3 */
-	switch (ins_settings.preferred_freq_bssid) {
-	case G_SUPPLICANT_INS_PREFERRED_FREQ_24GHZ:
-		if ((frequency >= FREQ_RANGE_24GHZ_CHANNEL_1 &&
-			frequency <= FREQ_RANGE_24GHZ_CHANNEL_14) &&
-			(strength > ins_settings.signal_level3_24ghz))
-			score += ins_settings.preferred_freq_bssid_score;
-
-		break;
-	case G_SUPPLICANT_INS_PREFERRED_FREQ_5GHZ:
-		if ((frequency >= FREQ_RANGE_5GHZ_CHANNEL_32 &&
-			frequency <= FREQ_RANGE_5GHZ_CHANNEL_165) &&
-			(strength > ins_settings.signal_level3_5ghz))
-			score += ins_settings.preferred_freq_bssid_score;
-
-		break;
-	default:
-		break;
-	}
-
-	/* Last connected BSSID */
-	if (ins_settings.last_connected_bssid) {
-		if (is_last_connected)
-			score += ins_settings.last_connected_bssid_score;
-	}
-
-	/* Assoc reject */
-	if (ins_settings.assoc_reject)
-		score -= (assoc_reject_cnt * ins_settings.assoc_reject_score);
-
-	/* Signal */
-	if (ins_settings.signal_bssid)
-		score += (((strength > -60) ? -60 : strength) + 85);
-
-	return score;
 }
 
 static gint cmp_bss(gconstpointer a, gconstpointer b)
 {
 	struct g_connman_bssids *entry_a = (struct g_connman_bssids *)a;
 	struct g_connman_bssids *entry_b = (struct g_connman_bssids *)b;
-	int score_a = calculate_score(entry_a->strength - 120, entry_a->frequency,
-			entry_a->assoc_reject_cnt, entry_a->is_last_connected);
-	int score_b = calculate_score(entry_b->strength - 120, entry_b->frequency,
-			entry_b->assoc_reject_cnt, entry_b->is_last_connected);
 
-	entry_a->ins_score = score_a;
-	entry_b->ins_score = score_b;
-
-	if (score_a > score_b)
+	if (entry_a->ins_score > entry_b->ins_score)
 		return -1;
 
-	if (score_a < score_b)
+	if (entry_a->ins_score < entry_b->ins_score)
 		return 1;
 
 	return 0;
@@ -2058,12 +2099,11 @@ static void print_bssid_sort(gpointer data, gpointer user_data)
 {
 	struct g_connman_bssids *bssids = data;
 
-	SUPPLICANT_DBG("bssid[%02x:%02x:%02x:%02x:%02x:%02x] score[%d] "
-			"strength[%d] freq[%d] assoc_reject[%d] last_conn[%d]",
-			bssids->bssid[0], bssids->bssid[1], bssids->bssid[2],
-			bssids->bssid[3], bssids->bssid[4], bssids->bssid[5],
-			bssids->ins_score, bssids->strength, bssids->frequency,
-			bssids->assoc_reject_cnt, bssids->is_last_connected);
+	SUPPLICANT_DBG("bssid[" MACSTR "] total[%2d] freq[%2d] "
+			"last_conn[%2d] assoc_reject[%2d] strength[%2d]",
+			MAC2STR(bssids->bssid), bssids->ins_score,
+			bssids->score_frequency, bssids->score_last_connected_bssid,
+			bssids->score_assoc_reject, bssids->score_strength);
 }
 #endif
 
@@ -2098,8 +2138,7 @@ void g_supplicant_network_set_last_connected_bssid(GSupplicantNetwork *network, 
 
 	memcpy(network->last_connected_bssid, bssid, WIFI_BSSID_LEN_MAX);
 
-	SUPPLICANT_DBG("last connected bssid [%02x:%02x:%02x:%02x:%02x:%02x]",
-			bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+	SUPPLICANT_DBG("last connected bssid [" MACSTR "]", MAC2STR(bssid));
 }
 
 const unsigned char *g_supplicant_network_get_last_connected_bssid(GSupplicantNetwork *network)
@@ -2405,23 +2444,19 @@ static bool update_best_bss(GSupplicantNetwork *network,
 	int score_new;
 	int score_best;
 
-	score_new = calculate_score(bss->signal, bss->frequency,
+	score_new = calculate_score(
+		compare_bssid(bss->bssid, network->last_connected_bssid),
 		get_assoc_reject_cnt(network->assoc_reject_table, bss->bssid),
-		compare_bssid(bss->bssid, network->last_connected_bssid));
-	score_best = calculate_score(network->best_bss->signal, network->best_bss->frequency,
+		bss->frequency, bss->signal);
+	score_best = calculate_score(
+		compare_bssid(network->best_bss->bssid, network->last_connected_bssid),
 		get_assoc_reject_cnt(network->assoc_reject_table, network->best_bss->bssid),
-		compare_bssid(network->best_bss->bssid, network->last_connected_bssid));
+		network->best_bss->frequency, network->best_bss->signal);
 
 	if (score_new > score_best) {
-		SUPPLICANT_DBG("new[%02x:%02x:%02x:%02x:%02x:%02x][%u] : "
-			"best[%02x:%02x:%02x:%02x:%02x:%02x][%u]",
-			bss->bssid[0], bss->bssid[1], bss->bssid[2],
-			bss->bssid[3], bss->bssid[4], bss->bssid[5],
-			score_new,
-			network->best_bss->bssid[0], network->best_bss->bssid[1],
-			network->best_bss->bssid[2], network->best_bss->bssid[3],
-			network->best_bss->bssid[4], network->best_bss->bssid[5],
-			score_best);
+		SUPPLICANT_DBG("new[" MACSTR "][%u] : best[" MACSTR "][%u]",
+			MAC2STR(bss->bssid), score_new,
+			MAC2STR(network->best_bss->bssid), score_best);
 
 		network->signal = bss->signal;
 		network->frequency = bss->frequency;
@@ -3236,10 +3271,8 @@ static void add_timer_for_last_connected(GSupplicantInterface *interface)
 			last_connected_bss_timeout = g_timeout_add_seconds(LAST_CONNECTED_TIMEOUT,
 				last_connected_timeout, interface);
 
-			SUPPLICANT_DBG("Add timer for last connected bssid "
-				"[%02x:%02x:%02x:%02x:%02x:%02x]",
-				best_bss->bssid[0], best_bss->bssid[1], best_bss->bssid[2],
-				best_bss->bssid[3], best_bss->bssid[4], best_bss->bssid[5]);
+			SUPPLICANT_DBG("Add timer for last connected bssid [" MACSTR "]",
+					MAC2STR(best_bss->bssid));
 		}
 	}
 }
@@ -6965,21 +6998,14 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 		}
 
 		if (ssid->bssid_for_connect_len) {
-			snprintf(bssid, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
-					ssid->bssid_for_connect[0], ssid->bssid_for_connect[1], ssid->bssid_for_connect[2],
-					ssid->bssid_for_connect[3], ssid->bssid_for_connect[4], ssid->bssid_for_connect[5]);
+			snprintf(bssid, 18, MACSTR, MAC2STR(ssid->bssid_for_connect));
 			memcpy(interface->add_network_bssid, ssid->bssid_for_connect, WIFI_BSSID_LEN_MAX);
 		} else {
-			snprintf(bssid, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
-					ssid->bssid[0], ssid->bssid[1], ssid->bssid[2],
-					ssid->bssid[3], ssid->bssid[4], ssid->bssid[5]);
+			snprintf(bssid, 18, MACSTR, MAC2STR(ssid->bssid));
 			memcpy(interface->add_network_bssid, ssid->bssid, WIFI_BSSID_LEN_MAX);
 		}
 
-		SUPPLICANT_DBG("bssid [%02x:%02x:%02x:%02x:%02x:%02x]",
-			interface->add_network_bssid[0], interface->add_network_bssid[1],
-			interface->add_network_bssid[2], interface->add_network_bssid[3],
-			interface->add_network_bssid[4], interface->add_network_bssid[5]);
+		SUPPLICANT_DBG("bssid [" MACSTR "]", MAC2STR(interface->add_network_bssid));
 
 		supplicant_dbus_dict_append_basic(&dict, "bssid",
 					DBUS_TYPE_STRING, &bssid);

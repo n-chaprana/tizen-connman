@@ -39,6 +39,9 @@
 #include "dbus_helpers.h"
 #include "input.h"
 #include "services.h"
+#if defined TIZEN_EXT_INS
+#include "ins.h"
+#endif
 #include "tethering.h"
 #include "peers.h"
 #include "commands.h"
@@ -310,6 +313,25 @@ static int services_list(DBusMessageIter *iter, const char *error,
 	return 0;
 }
 
+#if defined TIZEN_EXT_INS
+static int ins_list(DBusMessageIter *iter, const char *error,
+		void *user_data)
+{
+	char *filter = user_data;
+
+	if (!error) {
+		__connmanctl_ins_list(iter, filter);
+		fprintf(stdout, "\n");
+	} else {
+		fprintf(stderr, "Error: %s\n", error);
+	}
+
+	g_free(filter);
+
+	return 0;
+}
+#endif
+
 static int peers_list(DBusMessageIter *iter,
 					const char *error, void *user_data)
 {
@@ -404,6 +426,24 @@ static int cmd_services(char *args[], int num, struct connman_option *options)
 			"net.connman.Service", "GetProperties",
 			object_properties, path, NULL, NULL);
 }
+
+#if defined TIZEN_EXT_INS
+static int cmd_ins(char *args[], int num, struct connman_option *options)
+{
+	char *filter = NULL;
+
+	if (num > 2)
+		return -E2BIG;
+
+	if (num == 2)
+		filter = g_strdup(args[1]);
+
+	return __connmanctl_dbus_method_call(connection,
+				CONNMAN_SERVICE, CONNMAN_PATH,
+				"net.connman.Manager", "GetINS",
+				ins_list, filter, NULL, NULL);
+}
+#endif
 
 static int cmd_peers(char *args[], int num, struct connman_option *options)
 {
@@ -2950,6 +2990,15 @@ static struct connman_option service_options[] = {
 	{ NULL, }
 };
 
+#if defined TIZEN_EXT_INS
+static struct connman_option ins_options[] = {
+	{"all",         'a', ""},
+	{"filter-ssid", 's', "ssid"},
+	{"filter-name", 'n', "[<service_name>]"},
+	{ NULL, }
+};
+#endif
+
 static struct connman_option config_options[] = {
 	{"nameservers", 'n', "<dns1> [<dns2>] [<dns3>]"},
 	{"timeservers", 't', "<ntp1> [<ntp2>] [...]"},
@@ -3400,6 +3449,10 @@ static const struct {
 	  "Display tethering clients", NULL },
 	{ "services",     "[<service>]",  service_options, cmd_services,
 	  "Display services", lookup_service_arg },
+#if defined TIZEN_EXT_INS
+	{ "ins",		  NULL,      ins_options, cmd_ins,
+	  "Display intelligent network selection", NULL },
+#endif
 	{ "peers",        "[peer]",       NULL,            cmd_peers,
 	  "Display peers", lookup_peer_arg },
 	{ "scan",         "<technology>", NULL,            cmd_scan,

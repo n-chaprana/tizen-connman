@@ -727,6 +727,9 @@ void __connman_service_cleanup(void);
 int __connman_service_load_modifiable(struct connman_service *service);
 
 void __connman_service_list_struct(DBusMessageIter *iter);
+#if defined TIZEN_EXT_INS
+void __connman_ins_list_struct(DBusMessageIter *iter);
+#endif
 
 #if defined TIZEN_EXT
 int connman_service_get_ipv6_dns_method(struct connman_service *service);
