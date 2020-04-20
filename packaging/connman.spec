@@ -5,7 +5,7 @@
 
 Name:           connman
 Version:        1.37
-Release:        37
+Release:        38
 License:        GPL-2.0+
 Summary:        Connection Manager
 Url:            http://connman.net
@@ -154,6 +154,7 @@ chmod +x bootstrap
 	    --enable-client \
 	    --enable-tizen-ext \
 	    --disable-tizen-ext-ins \
+            --enable-tizen-ext-eap-on-ethernet \
 	    --enable-pacrunner \
             --enable-wifi=builtin \
 %if %{with connman_openconnect}
@@ -169,6 +170,8 @@ chmod +x bootstrap
             %connman_features \
 %endif
             --disable-ofono \
+            --disable-tools \
+            --disable-unit \
             --enable-telephony=builtin \
             --enable-test \
 	    --enable-loopback \

@@ -239,6 +239,11 @@ struct connman_service {
 	int score_strength;
 #endif
 	int ins_score;
+
+	/*
+	 * To indicate use of EAP over Ethernet.
+	 */
+	bool use_eapol;
 #endif
 };
 
@@ -5020,6 +5025,18 @@ const char *__connman_service_get_passphrase(struct connman_service *service)
 	return service->passphrase;
 }
 
+#if defined TIZEN_EXT
+int __connman_service_get_use_eapol(struct connman_service *service)
+{
+	if (!service) {
+		DBG("Service is NULL");
+		return -1;
+	}
+
+	return service->use_eapol;
+}
+#endif
+
 static DBusMessage *get_properties(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
@@ -5724,6 +5741,15 @@ static DBusMessage *set_property(DBusConnection *conn,
 		dbus_message_iter_get_basic(&value, &passphrase);
 
 		__connman_service_set_passphrase(service, passphrase);
+	} else if (g_str_equal(name, "UseEapol")) {
+		dbus_bool_t use_eapol;
+
+		if (type != DBUS_TYPE_BOOLEAN)
+			return __connman_error_invalid_arguments(msg);
+
+		dbus_message_iter_get_basic(&value, &use_eapol);
+
+		service->use_eapol = use_eapol;
 #endif
 	} else
 		return __connman_error_invalid_property(msg);

@@ -382,6 +382,7 @@ client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
 				-lreadline -ldl -lncurses
 endif
 
+if UNIT
 noinst_PROGRAMS += unit/test-ippool
 
 unit_test_ippool_SOURCES = $(backtrace_sources) src/log.c src/dbus.c \
@@ -390,6 +391,7 @@ unit_test_ippool_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 TESTS = unit/test-ippool
+endif
 
 if WISPR
 noinst_PROGRAMS += tools/wispr
@@ -467,7 +469,7 @@ tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c \
 tools_iptables_unit_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ -ldl
 
-TESTS += unit/test-iptables
+#TESTS += unit/test-iptables
 
 unit_test_iptables_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @GLIB_CFLAGS@
 unit_test_iptables_SOURCES = $(backtrace_sources) src/connman.h src/log.c \

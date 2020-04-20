@@ -5432,12 +5432,15 @@ static void scan_done(GSupplicantInterface *interface)
 
 static void debug(const char *str)
 {
+#if 0
 #if defined TIZEN_EXT
 	if (connman_setting_get_bool("ConnmanSupplicantDebug"))
 #else
 	if (getenv("CONNMAN_SUPPLICANT_DEBUG"))
 #endif
 		connman_debug("%s", str);
+#endif
+		DBG("%s", str);
 }
 
 static void disconnect_reasoncode(GSupplicantInterface *interface,

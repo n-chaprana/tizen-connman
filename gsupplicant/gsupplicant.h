@@ -531,6 +531,10 @@ struct _GSupplicantCallbacks {
 	void (*mesh_peer_connected) (GSupplicantMeshPeer *mesh_peer);
 	void (*mesh_peer_disconnected) (GSupplicantMeshPeer *mesh_peer);
 #endif
+
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+	void (*eap) (GSupplicantInterface *interface);
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 };
 
 typedef struct _GSupplicantCallbacks GSupplicantCallbacks;

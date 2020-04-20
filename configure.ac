@@ -92,6 +92,11 @@ AC_ARG_ENABLE(tizen-ext-wifi-mesh,
 			[CFLAGS="$CFLAGS -DTIZEN_EXT_WIFI_MESH"], [enable_tizen_ext_wifi_mesh="no"])
 AM_CONDITIONAL(TIZEN_EXT_WIFI_MESH, test "${enable_tizen_ext_wifi_mesh}" != "no")
 
+AC_ARG_ENABLE(tizen-ext-eap-on-ethernet,
+	AC_HELP_STRING([--enable-tizen-ext-eap-on-ethernet], [enable TIZEN extensions for EAP on Ethernet]),
+			[CFLAGS="$CFLAGS -DTIZEN_EXT_EAP_ON_ETHERNET"], [enable_tizen_ext_eap_on_ethernet="no"])
+AM_CONDITIONAL(TIZEN_EXT_EAP_ON_ETHERNET, test "${enable_tizen_ext_eap_on_ethernet}" != "no")
+
 AC_ARG_ENABLE(tizen-maintain-online,
 	AC_HELP_STRING([--enable-tizen-maintain-online], [enable TIZEN extensions]),
 			[if (test "${enableval}" = "yes"); then
@@ -483,6 +488,11 @@ AC_ARG_ENABLE(client, AC_HELP_STRING([--disable-client],
 				[disable command line client]),
 					[enable_client=${enableval}])
 AM_CONDITIONAL(CLIENT, test "${enable_client}" != "no")
+
+AC_ARG_ENABLE(unit, AC_HELP_STRING([--disable-unit],
+				[disable unit test-ippool]),
+					[enable_client=${enableval}])
+AM_CONDITIONAL(UNIT, test "${enable_unit}" != "no")
 
 if (test "${enable_wispr}" != "no"); then
 	PKG_CHECK_MODULES(GNUTLS, gnutls, dummy=yes,

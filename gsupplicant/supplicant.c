@@ -906,6 +906,19 @@ static void callback_sta_deauthorized(GSupplicantInterface *interface,
 	callbacks_pointer->sta_deauthorized(interface, addr);
 }
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+static void callback_eap(GSupplicantInterface *interface)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->eap)
+		return;
+
+	callbacks_pointer->eap(interface);
+}
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
 static void callback_peer_found(GSupplicantPeer *peer)
 {
 	if (!callbacks_pointer)
@@ -3441,6 +3454,21 @@ static void wps_property(const char *key, DBusMessageIter *iter,
 
 }
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+void g_supplicant_replace_config_file(const char* ifname, const char *config_file)
+{
+	if (!ifname)
+	       return;
+
+	if (!config_file)
+		return;
+
+	SUPPLICANT_DBG("New {%s, %s}", ifname, config_file);
+	g_hash_table_replace(config_file_table,
+			g_strdup(ifname), g_strdup(config_file));
+}
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
 static void interface_property(const char *key, DBusMessageIter *iter,
 							void *user_data)
 {
@@ -4014,6 +4042,28 @@ static void signal_sta_deauthorized(const char *path, DBusMessageIter *iter)
 
 	callback_sta_deauthorized(interface, addr);
 }
+
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+static void signal_eap(const char *path, DBusMessageIter *iter)
+{
+	GSupplicantInterface *interface;
+	const char *addr = NULL;
+
+	SUPPLICANT_DBG("EAPOL_DEBUG callback eap signal");
+
+	interface = g_hash_table_lookup(interface_table, path);
+	if (!interface)
+		return;
+
+#if 0
+	dbus_message_iter_get_basic(iter, &addr);
+	if (!addr)
+		return;
+
+	callback_eap(interface);
+#endif
+}
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 {
@@ -5089,6 +5139,10 @@ static struct {
 	{ SUPPLICANT_INTERFACE ".Interface.Mesh", "MeshPeerDisconnected",
 		signal_mesh_peer_disconnected },
 #endif
+
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+	{ SUPPLICANT_INTERFACE ".Interface", "EAP", signal_eap },
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 	{ }
 };
