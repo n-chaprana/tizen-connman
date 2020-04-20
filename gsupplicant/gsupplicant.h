@@ -307,6 +307,10 @@ typedef void (*GSupplicantMaxSpeedCallback) (int result, int maxspeed,
 					     int strength, void *user_data);
 #endif
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+void g_supplicant_replace_config_file(const char* ifname, const char *config_file);
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
 void g_supplicant_interface_cancel(GSupplicantInterface *interface);
 
 int g_supplicant_interface_create(const char *ifname, const char *driver,

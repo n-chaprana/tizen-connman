@@ -165,6 +165,10 @@ struct connman_device_driver {
 			struct connman_device *device, const char *ssid, unsigned int freq,
 			void *user_data);
 #endif
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+	int (*enable_eapol) (struct connman_device *device);
+	int (*disable_eapol) (struct connman_device *device);
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 };
 
 int connman_device_driver_register(struct connman_device_driver *driver);

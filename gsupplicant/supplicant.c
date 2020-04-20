@@ -385,6 +385,9 @@ struct interface_create_data {
 	char *parent_ifname;
 	bool is_mesh_interface;
 #endif
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+	char *config_file;
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 	GSupplicantInterface *interface;
 	GSupplicantInterfaceCallback callback;
 	void *user_data;
@@ -3408,6 +3411,21 @@ static void wps_property(const char *key, DBusMessageIter *iter,
 
 }
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+void g_supplicant_replace_config_file(const char* ifname, const char *config_file)
+{
+	if (!ifname)
+	       return;
+
+	if (!config_file)
+		return;
+
+	SUPPLICANT_DBG("New {%s, %s}", ifname, config_file);
+	g_hash_table_replace(config_file_table,
+			g_strdup(ifname), g_strdup(config_file));
+}
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
 static void interface_property(const char *key, DBusMessageIter *iter,
 							void *user_data)
 {
@@ -5382,7 +5400,7 @@ static void interface_create_result(const char *error,
 	const char *path = NULL;
 	int err;
 
-	SUPPLICANT_DBG("");
+	SUPPLICANT_DBG("[EAPOL_DEBUG]");
 
 	if (error) {
 		g_message("error %s", error);
@@ -5430,7 +5448,7 @@ static void interface_create_params(DBusMessageIter *iter, void *user_data)
 	DBusMessageIter dict;
 	char *config_file = NULL;
 
-	SUPPLICANT_DBG("");
+	SUPPLICANT_DBG("[EAPOL_DEBUG]");
 
 	supplicant_dbus_dict_open(iter, &dict);
 
@@ -5475,10 +5493,10 @@ static void interface_get_result(const char *error,
 	const char *path = NULL;
 	int err;
 
-	SUPPLICANT_DBG("");
+	SUPPLICANT_DBG("[EAPOL_DEBUG]");
 
 	if (error) {
-		SUPPLICANT_DBG("Interface not created yet");
+		SUPPLICANT_DBG("[EAPOL_DEBUG] Interface not created yet");
 		goto create;
 	}
 
@@ -5514,7 +5532,7 @@ create:
 		goto done;
 	}
 
-	SUPPLICANT_DBG("Creating interface");
+	SUPPLICANT_DBG("[EAPOL_DEBUG] Creating interface");
 
 	err = supplicant_dbus_method_call(SUPPLICANT_PATH,
 						SUPPLICANT_INTERFACE,
@@ -5536,7 +5554,7 @@ static void interface_get_params(DBusMessageIter *iter, void *user_data)
 {
 	struct interface_create_data *data = user_data;
 
-	SUPPLICANT_DBG("");
+	SUPPLICANT_DBG("[EAPOL_DEBUG]");
 
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &data->ifname);
 }
@@ -5660,13 +5678,17 @@ int g_supplicant_interface_create(const char *ifname, const char *driver,
 	struct interface_create_data *data;
 	int ret;
 
-	SUPPLICANT_DBG("ifname %s", ifname);
+	SUPPLICANT_DBG("[EAPOL_DEBUG] ifname %s", ifname);
 
-	if (!ifname)
+	if (!ifname) {
+		SUPPLICANT_DBG("[EAPOL_DEBUG] EINVAL: ifname is NULL");
 		return -EINVAL;
+	}
 
-	if (!system_available)
+	if (!system_available) {
+		SUPPLICANT_DBG("[EAPOL_DEBUG] EFAULT: system not available");
 		return -EFAULT;
+	}
 
 	data = dbus_malloc0(sizeof(*data));
 	if (!data)
@@ -5674,7 +5696,13 @@ int g_supplicant_interface_create(const char *ifname, const char *driver,
 
 	data->ifname = g_strdup(ifname);
 	data->driver = g_strdup(driver);
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
 	data->bridge = g_strdup(bridge);
+	data->config_file = NULL;
+#else /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+	data->bridge = NULL;
+	data->config_file = g_strdup(bridge); // incase of EAPoL Ethernet bridge will contain config_file
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 	data->callback = callback;
 	data->user_data = user_data;
 
