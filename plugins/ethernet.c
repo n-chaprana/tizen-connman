@@ -152,7 +152,10 @@ static void eth_network_remove(struct connman_network *network)
 
 static int eth_network_connect(struct connman_network *network)
 {
-	DBG("network %p", network);
+	DBG("[Nishant] network %p", network);
+
+	if (connman_network_check_validity(network))
+		DBG("[Nishant] network is valid");
 
 	connman_network_set_connected(network, true);
 

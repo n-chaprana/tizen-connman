@@ -146,6 +146,9 @@ bool connman_network_get_connecting(struct connman_network *network);
 #if defined TIZEN_EXT
 void connman_network_set_connecting(struct connman_network *network);
 #endif
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+bool connman_network_check_validity(struct connman_network *network);
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 int connman_network_set_available(struct connman_network *network,
 						bool available);
 bool connman_network_get_available(struct connman_network *network);

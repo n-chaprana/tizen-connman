@@ -8342,7 +8342,7 @@ static int service_indicate_state(struct connman_service *service)
 	old_state = service->state;
 	new_state = combine_state(service->state_ipv4, service->state_ipv6);
 
-	DBG("service %p old %s - new %s/%s => %s",
+	DBG("[Nishant] service %p old %s - new %s/%s => %s",
 					service,
 					state2string(old_state),
 					state2string(service->state_ipv4),
@@ -8922,7 +8922,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		}
 #endif
 
-	DBG("service %p (%s) old state %d (%s) new state %d (%s) type %d (%s)",
+	DBG("[Nishant] service %p (%s) old state %d (%s) new state %d (%s) type %d (%s)",
 		service, service ? service->identifier : NULL,
 		old_state, state2string(old_state),
 		new_state, state2string(new_state),
@@ -9138,6 +9138,8 @@ static int service_connect(struct connman_service *service)
 
 	if (service->hidden)
 		return -EPERM;
+
+	DBG("[Nishant] service_connect");
 
 #if defined TIZEN_EXT
 	GList *list;

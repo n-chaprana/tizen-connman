@@ -1005,7 +1005,7 @@ static void set_connected(struct connman_network *network)
 	ipconfig_ipv4 = __connman_service_get_ip4config(service);
 	ipconfig_ipv6 = __connman_service_get_ip6config(service);
 
-	DBG("service %p ipv4 %p ipv6 %p", service, ipconfig_ipv4,
+	DBG("[Nishant] service %p ipv4 %p ipv6 %p", service, ipconfig_ipv4,
 		ipconfig_ipv6);
 
 	__connman_network_enable_ipconfig(network, ipconfig_ipv4);
@@ -1730,6 +1730,13 @@ static gboolean __connman_network_clear_associating_delayed(gpointer user_data)
 }
 #endif
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+bool connman_network_check_validity(struct connman_network *network)
+{
+	return (NULL == g_slist_find(network_list, network)) ? false : true;
+}
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
 /**
  * connman_network_set_associating:
  * @network: network structure
@@ -1740,7 +1747,7 @@ static gboolean __connman_network_clear_associating_delayed(gpointer user_data)
 int connman_network_set_associating(struct connman_network *network,
 						bool associating)
 {
-	DBG("network %p associating %d", network, associating);
+	DBG("[Nishant] network %p associating %d", network, associating);
 
 	if (network->associating == associating)
 		return -EALREADY;
@@ -1923,7 +1930,7 @@ void connman_network_set_error(struct connman_network *network,
 int connman_network_set_connected(struct connman_network *network,
 						bool connected)
 {
-	DBG("network %p connected %d/%d connecting %d associating %d",
+	DBG("[Nishant] network %p connected %d/%d connecting %d associating %d",
 		network, network->connected, connected, network->connecting,
 		network->associating);
 
@@ -2053,7 +2060,7 @@ int __connman_network_connect(struct connman_network *network)
 	network->connecting = true;
 
 #if defined TIZEN_EXT
-	DBG("ConnMan, Connect Request [%s]", network->name);
+	DBG("[Nishant] ConnMan, Connect Request [%s]", network->name);
 #endif
 
 	err = network->driver->connect(network);
