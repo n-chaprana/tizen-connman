@@ -487,6 +487,10 @@ GSupplicantNetwork *g_supplicant_interface_get_network(GSupplicantInterface *int
 		const char *group);
 #endif
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+typedef void (*g_supplicant_eap_callback)(GSupplicantInterface *interface);
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
 struct _GSupplicantCallbacks {
 	void (*system_ready) (void);
 	void (*system_killed) (void);
@@ -533,7 +537,7 @@ struct _GSupplicantCallbacks {
 #endif
 
 #if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
-	void (*eap) (GSupplicantInterface *interface);
+	g_supplicant_eap_callback eap;
 #endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 };
 
@@ -545,6 +549,11 @@ void g_supplicant_set_ins_settings(GSupplicantINSPreferredFreq preferred_freq_bs
 		unsigned int preferred_freq_bssid_score, unsigned int last_connected_bssid_score,
 		unsigned int assoc_reject_score, int signal_level3_5ghz, int signal_level3_24ghz);
 #endif
+
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+int g_supplicant_register_eap_callback(g_supplicant_eap_callback cb);
+void g_supplicant_unregister_eap_callback(void);
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 int g_supplicant_register(const GSupplicantCallbacks *callbacks);
 void g_supplicant_unregister(const GSupplicantCallbacks *callbacks);

@@ -69,7 +69,11 @@
 
 static DBusConnection *connection;
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+static GSupplicantCallbacks *callbacks_pointer;
+#else /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 static const GSupplicantCallbacks *callbacks_pointer;
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 static dbus_bool_t system_available = FALSE;
 static dbus_bool_t system_ready = FALSE;
@@ -4047,7 +4051,6 @@ static void signal_sta_deauthorized(const char *path, DBusMessageIter *iter)
 static void signal_eap(const char *path, DBusMessageIter *iter)
 {
 	GSupplicantInterface *interface;
-	const char *addr = NULL;
 
 	SUPPLICANT_DBG("EAPOL_DEBUG callback eap signal");
 
@@ -4059,9 +4062,9 @@ static void signal_eap(const char *path, DBusMessageIter *iter)
 	dbus_message_iter_get_basic(iter, &addr);
 	if (!addr)
 		return;
+#endif
 
 	callback_eap(interface);
-#endif
 }
 #endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
@@ -8274,6 +8277,18 @@ void g_supplicant_set_ins_settings(GSupplicantINSPreferredFreq preferred_freq_bs
 	SUPPLICANT_DBG("signal_level3_24ghz [%d]", signal_level3_24ghz);
 }
 #endif
+
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+int g_supplicant_register_eap_callback(g_supplicant_eap_callback cb)
+{
+	callbacks_pointer->eap = cb;
+}
+
+void g_supplicant_unregister_eap_callback(void)
+{
+	callbacks_pointer->eap = NULL;
+}
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 int g_supplicant_register(const GSupplicantCallbacks *callbacks)
 {

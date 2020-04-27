@@ -150,12 +150,54 @@ static void eth_network_remove(struct connman_network *network)
 	DBG("network %p", network);
 }
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+struct connman_network *g_network = NULL;
+
+void handle_eap_signal(GSupplicantInterface *interface)
+{
+	DBG("[Nishant] captured EAP signal");
+
+	if (!g_network)
+		return;
+
+	if (g_strcmp0("eth0", g_supplicant_interface_get_ifname(interface)))
+		return;
+
+	if (!connman_network_check_validity(g_network))
+		return;
+
+	DBG("[Nishant] network is valid");
+
+	connman_network_set_connected(g_network, true);
+	g_network = NULL;
+}
+
 static int eth_network_connect(struct connman_network *network)
 {
 	DBG("[Nishant] network %p", network);
 
-	if (connman_network_check_validity(network))
-		DBG("[Nishant] network is valid");
+	g_supplicant_register_eap_callback(handle_eap_signal);
+	g_network = network;
+
+	return 0;
+}
+
+static int eth_network_disconnect(struct connman_network *network)
+{
+	DBG("[Nishant] network %p", network);
+
+	g_network = NULL;
+	g_supplicant_unregister_eap_callback();
+	connman_network_set_connected(network, false);
+
+	return 0;
+}
+
+#else /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
+static int eth_network_connect(struct connman_network *network)
+{
+	DBG("network %p", network);
 
 	connman_network_set_connected(network, true);
 
@@ -170,6 +212,8 @@ static int eth_network_disconnect(struct connman_network *network)
 
 	return 0;
 }
+
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 static struct connman_network_driver eth_network_driver = {
 	.name		= "cable",
