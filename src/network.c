@@ -2076,6 +2076,18 @@ int __connman_network_connect(struct connman_network *network)
 		return err;
 	}
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+	/*
+	 * Note: If EAP on Ethernet is ON, then network will be connected
+	 * after EAP Success event is recieved, from plugin/ethernet.c
+	 */
+	struct connman_service *service = connman_service_lookup_from_network(network);
+	if (service && __connman_service_get_use_eapol(service)) {
+		connman_network_set_associating(network, true);
+		return 0;
+	}
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
 	set_connected(network);
 
 	return err;

@@ -7168,6 +7168,9 @@ static void service_initialize(struct connman_service *service)
 	service->user_pdn_connection_refcount = 0;
 	__sync_synchronize();
 #endif
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+	service->use_eapol = true;
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 }
 
 /**

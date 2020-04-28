@@ -181,8 +181,7 @@ static int eth_network_connect(struct connman_network *network)
 	g_network = network;
 //	connman_network_set_connected(network, true);
 
-	//TODO: Fix this return value only for EAP method
-	return -EINPROGRESS;
+	return 0;
 }
 
 static int eth_network_disconnect(struct connman_network *network)
