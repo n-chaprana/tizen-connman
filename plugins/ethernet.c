@@ -206,8 +206,10 @@ static int eth_network_connect(struct connman_network *network)
 	g_supplicant_replace_config_file(ifname, config_file);
 	free(config_file);
 
-	g_supplicant_interface_remove(ethernet->interface, NULL, NULL);
-	g_supplicant_interface_create(ifname, driver, NULL,
+	g_supplicant_interface_remove_blocking(ethernet->interface, NULL, NULL);
+//	g_supplicant_interface_create(ifname, driver, NULL,
+//			interface_create_callback, ethernet);
+	g_supplicant_interface_create_blocking(ifname, driver, NULL,
 			interface_create_callback, ethernet);
 
 	g_free(ifname);
@@ -226,7 +228,8 @@ static int eth_network_disconnect(struct connman_network *network)
 
 	g_network = NULL;
 	g_supplicant_unregister_eap_callback();
-	g_supplicant_interface_remove(ethernet->interface, NULL, NULL);
+	g_supplicant_interface_remove_blocking(ethernet->interface, NULL, NULL);
+	connman_network_set_associating(network, false);
 	connman_network_set_connected(network, false);
 
 	return 0;
@@ -394,7 +397,7 @@ static void eth_dev_remove(struct connman_device *device)
 	connman_device_set_data(device, NULL);
 
 #if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
-	g_supplicant_interface_remove(ethernet->interface, NULL, NULL);
+	g_supplicant_interface_remove_blocking(ethernet->interface, NULL, NULL);
 #endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 	connman_rtnl_remove_watch(ethernet->watch);

@@ -541,6 +541,74 @@ int supplicant_dbus_method_call(const char *path,
 	return 0;
 }
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+int supplicant_dbus_method_call_blocking(const char *path,
+				const char *interface, const char *method,
+				supplicant_dbus_setup_function setup,
+				supplicant_dbus_result_function function,
+				void *user_data,
+				gpointer caller)
+{
+	struct method_call_data *method_call = NULL;
+	DBusMessage *message;
+	DBusMessage *reply;
+	DBusMessageIter iter;
+	DBusError error;
+	const char *reply_error;
+
+	if (!connection)
+		return -EINVAL;
+
+	if (!path || !interface || !method)
+		return -EINVAL;
+
+	method_call = g_try_new0(struct method_call_data, 1);
+	if (!method_call)
+		return -ENOMEM;
+
+	message = dbus_message_new_method_call(SUPPLICANT_SERVICE, path,
+							interface, method);
+	if (!message) {
+		g_free(method_call);
+		return -ENOMEM;
+	}
+
+	dbus_message_set_auto_start(message, FALSE);
+
+	dbus_message_iter_init_append(message, &iter);
+	if (setup)
+		setup(&iter, user_data);
+
+	dbus_error_init(&error);
+
+	reply = dbus_connection_send_with_reply_and_block(connection, message,
+						TIMEOUT, &error);
+	if (reply == NULL) {
+		if (dbus_error_is_set(&error))
+			dbus_error_free(&error);
+
+		dbus_message_unref(message);
+		g_free(method_call);
+		return -EIO;
+	}
+
+	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR)
+		reply_error = dbus_message_get_error_name(reply);
+	else
+		reply_error = NULL;
+
+	dbus_message_iter_init(reply, &iter);
+
+	if (function)
+		function(reply_error, &iter, user_data);
+
+	dbus_message_unref(message);
+	dbus_message_unref(reply);
+
+	return 0;
+}
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
 void supplicant_dbus_property_append_basic(DBusMessageIter *iter,
 					const char *key, int type, void *val)
 {

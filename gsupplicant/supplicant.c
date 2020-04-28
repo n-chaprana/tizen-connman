@@ -5780,6 +5780,110 @@ int g_supplicant_interface_create(const char *ifname, const char *driver,
 	return ret;
 }
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+static void interface_get_result_blocking(const char *error,
+		DBusMessageIter *iter, void *user_data)
+{
+	struct interface_create_data *data = user_data;
+	GSupplicantInterface *interface;
+	const char *path = NULL;
+	int err;
+
+	SUPPLICANT_DBG("");
+
+	if (error) {
+		SUPPLICANT_DBG("Interface not created yet");
+		goto create;
+	}
+
+	dbus_message_iter_get_basic(iter, &path);
+	if (!path) {
+		err = -EINVAL;
+		goto done;
+	}
+
+	interface = g_hash_table_lookup(interface_table, path);
+	if (!interface) {
+		err = -ENOENT;
+		goto done;
+	}
+
+	if (data->callback) {
+		data->callback(0, interface, data->user_data);
+#if !defined TIZEN_EXT
+		callback_p2p_support(interface);
+#endif
+#if defined TIZEN_EXT_WIFI_MESH
+		callback_mesh_support(interface);
+#endif
+	}
+
+	interface_create_data_free(data);
+
+	return;
+
+create:
+	if (!system_available) {
+		err = -EFAULT;
+		goto done;
+	}
+
+	SUPPLICANT_DBG("Creating interface");
+
+	err = supplicant_dbus_method_call_blocking(SUPPLICANT_PATH,
+						SUPPLICANT_INTERFACE,
+						"CreateInterface",
+						interface_create_params,
+						interface_create_result, data,
+						NULL);
+	if (err == 0)
+		return;
+
+done:
+	if (data->callback)
+		data->callback(err, NULL, data->user_data);
+
+	interface_create_data_free(data);
+}
+
+int g_supplicant_interface_create_blocking(const char *ifname, const char *driver,
+		const char *bridge, GSupplicantInterfaceCallback callback,
+		void *user_data)
+{
+	struct interface_create_data *data;
+	int ret;
+
+	SUPPLICANT_DBG("ifname %s", ifname);
+
+	if (!ifname)
+		return -EINVAL;
+
+	if (!system_available)
+		return -EFAULT;
+
+	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
+
+	data->ifname = g_strdup(ifname);
+	data->driver = g_strdup(driver);
+	data->bridge = g_strdup(bridge);
+	data->callback = callback;
+	data->user_data = user_data;
+
+	ret = supplicant_dbus_method_call_blocking(SUPPLICANT_PATH,
+							SUPPLICANT_INTERFACE,
+							"GetInterface",
+							interface_get_params,
+							interface_get_result_blocking, data,
+							NULL);
+	if (ret < 0)
+		interface_create_data_free(data);
+
+	return ret;
+}
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
 static void interface_remove_result(const char *error,
 				DBusMessageIter *iter, void *user_data)
 {
@@ -5821,6 +5925,43 @@ static void interface_remove_params(DBusMessageIter *iter, void *user_data)
 							&data->interface->path);
 }
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+int g_supplicant_interface_remove_blocking(GSupplicantInterface *interface,
+		GSupplicantInterfaceCallback callback, void *user_data)
+{
+	struct interface_data *data;
+	int ret;
+
+	if (!interface)
+		return -EINVAL;
+
+	if (!system_available)
+		return -EFAULT;
+
+	g_supplicant_interface_cancel(interface);
+
+	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
+
+	data->interface = interface;
+	data->path = g_strdup(interface->path);
+	data->callback = callback;
+	data->user_data = user_data;
+
+	ret = supplicant_dbus_method_call_blocking(SUPPLICANT_PATH,
+						SUPPLICANT_INTERFACE,
+						"RemoveInterface",
+						interface_remove_params,
+						interface_remove_result, data,
+						NULL);
+	if (ret < 0) {
+		g_free(data->path);
+		dbus_free(data);
+	}
+	return ret;
+}
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 int g_supplicant_interface_remove(GSupplicantInterface *interface,
 			GSupplicantInterfaceCallback callback,

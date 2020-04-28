@@ -76,6 +76,15 @@ int supplicant_dbus_method_call(const char *path,
 				void *user_data,
 				gpointer caller);
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+int supplicant_dbus_method_call_blocking(const char *path,
+				const char *interface, const char *method,
+				supplicant_dbus_setup_function setup,
+				supplicant_dbus_result_function function,
+				void *user_data,
+				gpointer caller);
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
+
 void supplicant_dbus_method_call_cancel_all(gpointer caller);
 
 void supplicant_dbus_property_append_basic(DBusMessageIter *iter,

@@ -981,9 +981,6 @@ static gchar *option_plugin = NULL;
 static gchar *option_nodevice = NULL;
 static gchar *option_noplugin = NULL;
 static gchar *option_wifi = NULL;
-#if defined TIZEN_EXT && TIZEN_EXT_EAP_ON_ETHERNET
-static gchar *option_ethernet = NULL;
-#endif /* defined TIZEN_EXT && TIZEN_EXT_EAP_ON_ETHERNET */
 static gboolean option_detach = TRUE;
 static gboolean option_dnsproxy = TRUE;
 static gboolean option_backtrace = TRUE;
@@ -1041,10 +1038,6 @@ static GOptionEntry options[] = {
 				"Specify plugins not to load", "NAME,..." },
 	{ "wifi", 'W', 0, G_OPTION_ARG_STRING, &option_wifi,
 				"Specify driver for WiFi/Supplicant", "NAME" },
-#if defined TIZEN_EXT && TIZEN_EXT_EAP_ON_ETHERNET
-	{ "ethernet", 'W', 0, G_OPTION_ARG_STRING, &option_ethernet,
-				"Specify driver for WiFi/Supplicant", "NAME" },
-#endif /* defined TIZEN_EXT && TIZEN_EXT_EAP_ON_ETHERNET */
 	{ "nodaemon", 'n', G_OPTION_FLAG_REVERSE,
 				G_OPTION_ARG_NONE, &option_detach,
 				"Don't fork daemon to background" },
@@ -1069,13 +1062,6 @@ const char *connman_option_get_string(const char *key)
 			return "nl80211,wext";
 		else
 			return option_wifi;
-#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
-	} else if (g_strcmp0(key, "ethernet") == 0) {
-		if (!option_wifi)
-			return "wired";
-		else
-			return option_ethernet;
-#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 	}
 
 #if defined TIZEN_EXT
@@ -1458,9 +1444,6 @@ int main(int argc, char *argv[])
 
 	g_free(option_debug);
 	g_free(option_wifi);
-#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
-	g_free(option_ethernet);
-#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 	return 0;
 }

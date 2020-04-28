@@ -553,6 +553,11 @@ void g_supplicant_set_ins_settings(GSupplicantINSPreferredFreq preferred_freq_bs
 #if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
 int g_supplicant_register_eap_callback(g_supplicant_eap_callback cb);
 void g_supplicant_unregister_eap_callback(void);
+int g_supplicant_interface_create_blocking(const char *ifname, const char *driver,
+		const char *bridge, GSupplicantInterfaceCallback callback,
+		void *user_data);
+int g_supplicant_interface_remove_blocking(GSupplicantInterface *interface,
+		GSupplicantInterfaceCallback callback, void *user_data);
 #endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 #if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
