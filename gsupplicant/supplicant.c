@@ -5844,7 +5844,7 @@ static void ethernet_interface_get_result(const char *error,
 	const char *path = NULL;
 	int err;
 
-	SUPPLICANT_DBG("[Nishant]");
+	SUPPLICANT_DBG("[Nishant] ethernet_interface_get_result");
 
 	if (error) {
 		SUPPLICANT_DBG("[Nishant] Interface not created yet");
@@ -5898,17 +5898,23 @@ int g_supplicant_ethernet_interface_create(const char *ifname, const char *drive
 	struct interface_create_data *data;
 	int ret;
 
-	SUPPLICANT_DBG("ifname %s", ifname);
+	SUPPLICANT_DBG("[Nishant] g_supplicant_ethernet_interface_create");
 
-	if (!ifname)
+	if (!ifname) {
+		SUPPLICANT_DBG("[Nishant] ifname %s", ifname);
 		return -EINVAL;
+	}
 
-	if (!system_available)
+	if (!system_available) {
+		SUPPLICANT_DBG("[Nishant] System is not available");
 		return -EFAULT;
+	}
 
 	data = dbus_malloc0(sizeof(*data));
-	if (!data)
+	if (!data) {
+		SUPPLICANT_DBG("[Nishant] Out of memory");
 		return -ENOMEM;
+	}
 
 	data->ifname = g_strdup(ifname);
 	data->driver = g_strdup(driver);
@@ -5976,6 +5982,8 @@ int g_supplicant_ethernet_interface_remove(GSupplicantInterface *interface,
 {
 	struct interface_data *data;
 	int ret;
+
+	SUPPLICANT_DBG("[Nishant] g_supplicant_ethernet_interface_remove");
 
 	if (!interface) {
 		SUPPLICANT_DBG("[Nishant] Interface is NULL");

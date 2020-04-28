@@ -30,6 +30,7 @@
 #include <glib.h>
 
 #include "dbus.h"
+#include <connman/log.h>
 
 #define TIMEOUT 30000
 
@@ -556,19 +557,28 @@ int supplicant_dbus_method_call_blocking(const char *path,
 	DBusError error;
 	const char *reply_error;
 
-	if (!connection)
-		return -EINVAL;
+	DBG("[Nishant] supplicant_dbus_method_call_blocking");
 
-	if (!path || !interface || !method)
+	if (!connection) {
+		DBG("[Nishant] connection is NULL");
 		return -EINVAL;
+	}
+
+	if (!path || !interface || !method) {
+		DBG("[Nishant] Invalid parameters");
+		return -EINVAL;
+	}
 
 	method_call = g_try_new0(struct method_call_data, 1);
-	if (!method_call)
+	if (!method_call) {
+		DBG("[Nishant] Out of memory");
 		return -ENOMEM;
+	}
 
 	message = dbus_message_new_method_call(SUPPLICANT_SERVICE, path,
 							interface, method);
 	if (!message) {
+		DBG("[Nishant] message is NULL");
 		g_free(method_call);
 		return -ENOMEM;
 	}
@@ -584,8 +594,12 @@ int supplicant_dbus_method_call_blocking(const char *path,
 	reply = dbus_connection_send_with_reply_and_block(connection, message,
 						TIMEOUT, &error);
 	if (reply == NULL) {
-		if (dbus_error_is_set(&error))
+		if (dbus_error_is_set(&error)) {
+			DBG("[Nishant] dbus error : %s", error.message);
 			dbus_error_free(&error);
+		} else {
+			DBG("[Nishant] Failed dbus call");
+		}
 
 		dbus_message_unref(message);
 		g_free(method_call);
