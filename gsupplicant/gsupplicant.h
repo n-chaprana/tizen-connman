@@ -551,7 +551,8 @@ void g_supplicant_set_ins_settings(GSupplicantINSPreferredFreq preferred_freq_bs
 #endif
 
 #if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
-int g_supplicant_register_eap_callback(g_supplicant_eap_callback cb);
+void g_supplicant_replace_config_file(const char* ifname, const char *config_file);
+void g_supplicant_register_eap_callback(g_supplicant_eap_callback cb);
 void g_supplicant_unregister_eap_callback(void);
 int g_supplicant_ethernet_interface_create(const char *ifname, const char *driver,
 		const char *bridge, GSupplicantInterfaceCallback callback,

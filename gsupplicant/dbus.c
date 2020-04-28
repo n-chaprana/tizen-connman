@@ -596,6 +596,9 @@ int supplicant_dbus_method_call_blocking(const char *path,
 	if (reply == NULL) {
 		if (dbus_error_is_set(&error)) {
 			DBG("[Nishant] dbus error : %s", error.message);
+			if (function)
+				function("", NULL, user_data);
+
 			dbus_error_free(&error);
 		} else {
 			DBG("[Nishant] Failed dbus call");

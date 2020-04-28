@@ -5826,14 +5826,11 @@ static void ethernet_interface_create_result(const char *error,
 #endif
 	}
 
-	interface_create_data_free(data);
 	return;
 
 done:
 	if (data->callback)
 		data->callback(err, NULL, data->user_data);
-
-	interface_create_data_free(data);
 }
 
 static void ethernet_interface_get_result(const char *error,
@@ -5861,8 +5858,7 @@ static void ethernet_interface_get_result(const char *error,
 	interface = g_hash_table_lookup(interface_table, path);
 	if (!interface) {
 		SUPPLICANT_DBG("[Nishant] Object path not found in lookup table");
-		err = -ENOENT;
-		goto done;
+		goto create;
 	}
 
 	g_supplicant_ethernet_interface_remove(interface, NULL, NULL);
@@ -5887,8 +5883,6 @@ create:
 done:
 	if (data->callback)
 		data->callback(err, NULL, data->user_data);
-
-	interface_create_data_free(data);
 }
 
 int g_supplicant_ethernet_interface_create(const char *ifname, const char *driver,
@@ -8479,7 +8473,7 @@ void g_supplicant_set_ins_settings(GSupplicantINSPreferredFreq preferred_freq_bs
 #endif
 
 #if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
-int g_supplicant_register_eap_callback(g_supplicant_eap_callback cb)
+void g_supplicant_register_eap_callback(g_supplicant_eap_callback cb)
 {
 	SUPPLICANT_DBG("[Nishant] g_supplicant_register_eap_callback %p", cb);
 
