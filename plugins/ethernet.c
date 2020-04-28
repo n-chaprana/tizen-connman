@@ -177,12 +177,12 @@ static void interface_create_callback(int result,
 {
 	struct ethernet_data *ethernet = user_data;
 
+	if (result < 0 || !interface || !ethernet)
+		return;
+
 	DBG("[Nishant] result %d ifname %s, wifi %p", result,
 			g_supplicant_interface_get_ifname(interface),
 			ethernet);
-
-	if (result < 0 || !ethernet)
-		return;
 
 	ethernet->interface = interface;
 	g_supplicant_interface_set_data(interface, ethernet);
