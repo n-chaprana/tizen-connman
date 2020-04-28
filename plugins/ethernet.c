@@ -172,14 +172,48 @@ void handle_eap_signal(GSupplicantInterface *interface)
 	g_network = NULL;
 }
 
+static void interface_create_callback(int result,
+		GSupplicantInterface *interface, void *user_data)
+{
+	struct ethernet_data *ethernet = user_data;
+
+	DBG("[Nishant] result %d ifname %s, wifi %p", result,
+			g_supplicant_interface_get_ifname(interface),
+			ethernet);
+
+	if (result < 0 || !ethernet)
+		return;
+
+	ethernet->interface = interface;
+	g_supplicant_interface_set_data(interface, ethernet);
+}
+
 static int eth_network_connect(struct connman_network *network)
 {
 	DBG("[Nishant] network %p", network);
+	struct connman_device *device = connman_network_get_device(network);
+	struct ethernet_data *ethernet = connman_device_get_data(device);
+	const char *driver = "wired";
+	int index = connman_network_get_index(network);
+	char *ifname = connman_inet_ifname(index);;
+	char *config_file = NULL;
 
-//	eth_init_supplicant();
+	if (asprintf(&config_file, "/opt/usr/data/network/%s-eapol.conf", ifname) < 0)
+		return -ENOMEM;
+
+	DBG("[Nishant] config_file %s", config_file);
+
+	g_supplicant_replace_config_file(ifname, config_file);
+	free(config_file);
+
+	g_supplicant_interface_remove(ethernet->interface, NULL, NULL);
+	g_supplicant_interface_create(ifname, driver, NULL,
+			interface_create_callback, ethernet);
+
+	g_free(ifname);
+
 	g_supplicant_register_eap_callback(handle_eap_signal);
 	g_network = network;
-//	connman_network_set_connected(network, true);
 
 	return 0;
 }
@@ -187,10 +221,12 @@ static int eth_network_connect(struct connman_network *network)
 static int eth_network_disconnect(struct connman_network *network)
 {
 	DBG("[Nishant] network %p", network);
+	struct connman_device *device = connman_network_get_device(network);
+	struct ethernet_data *ethernet = connman_device_get_data(device);
 
 	g_network = NULL;
-//	eth_deinit_supplicant();
 	g_supplicant_unregister_eap_callback();
+	g_supplicant_interface_remove(ethernet->interface, NULL, NULL);
 	connman_network_set_connected(network, false);
 
 	return 0;
@@ -339,6 +375,9 @@ static int eth_dev_probe(struct connman_device *device)
 
 	ethernet->index = connman_device_get_index(device);
 	ethernet->flags = 0;
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+	ethernet->interface = NULL;
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 	ethernet->watch = connman_rtnl_add_newlink_watch(ethernet->index,
 						ethernet_newlink, device);
@@ -353,6 +392,10 @@ static void eth_dev_remove(struct connman_device *device)
 	DBG("device %p", device);
 
 	connman_device_set_data(device, NULL);
+
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+	g_supplicant_interface_remove(ethernet->interface, NULL, NULL);
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
 	connman_rtnl_remove_watch(ethernet->watch);
 
@@ -379,80 +422,6 @@ static int eth_dev_disable(struct connman_device *device)
 	return connman_inet_ifdown(ethernet->index);
 }
 
-#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
-static void finalize_interface_creation(struct ethernet_data *ethernet)
-{
-	DBG("interface is ready ethernet %p", ethernet);
-
-	if (!ethernet) {
-		connman_error("Ethernet device not set");
-		return;
-	}
-
-	/* TODO: Start EAPOL here */
-}
-
-static void interface_create_callback(int result,
-					GSupplicantInterface *interface,
-					void *user_data)
-{
-	struct ethernet_data *ethernet = user_data;
-
-	DBG("result %d ifname %s, wifi %p", result,
-				g_supplicant_interface_get_ifname(interface),
-				ethernet);
-
-	if (result < 0 || !ethernet)
-		return;
-
-	ethernet->interface = interface;
-	g_supplicant_interface_set_data(interface, ethernet);
-
-	if (g_supplicant_interface_get_ready(interface))
-		finalize_interface_creation(ethernet);
-}
-
-static int eth_dev_enable_eapol(struct connman_device *device)
-{
-	struct ethernet_data *ethernet = connman_device_get_data(device);
-	int index;
-	char *interface;
-	const char *driver = connman_option_get_string("ethernet");
-	int ret;
-
-	DBG("device %p %p", device, ethernet);
-
-	index = ethernet->index;
-	if (!ethernet || index < 0)
-		return -ENODEV;
-
-	interface = connman_inet_ifname(index);
-	ret = g_supplicant_interface_create(interface, driver, NULL,
-						interface_create_callback,
-						ethernet);
-	g_free(interface);
-
-	if (ret < 0)
-		return ret;
-
-	return -EINPROGRESS;
-}
-
-static int eth_dev_disable_eapol(struct connman_device *device)
-{
-	struct ethernet_data *ethernet = connman_device_get_data(device);
-	int ret;
-
-	DBG("device %p %p", device, ethernet);
-
-	ret = g_supplicant_interface_remove(ethernet->interface, NULL, NULL);
-	if (ret < 0)
-		return ret;
-
-	return -EINPROGRESS;
-}
-#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
-
 static struct connman_device_driver eth_dev_driver = {
 	.name		= "ethernet",
 	.type		= CONNMAN_DEVICE_TYPE_ETHERNET,
@@ -460,10 +429,6 @@ static struct connman_device_driver eth_dev_driver = {
 	.remove		= eth_dev_remove,
 	.enable		= eth_dev_enable,
 	.disable	= eth_dev_disable,
-#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
-	.enable_eapol   = eth_dev_enable_eapol,
-	.disable_eapol   = eth_dev_disable_eapol,
-#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 };
 
 static int eth_tech_probe(struct connman_technology *technology)
