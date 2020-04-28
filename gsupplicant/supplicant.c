@@ -5788,10 +5788,10 @@ static void ethernet_interface_create_result(const char *error,
 	const char *path = NULL;
 	int err;
 
-	SUPPLICANT_DBG("[Nishant]");
+	SUPPLICANT_DBG("[Nishant] ethernet_interface_create_result");
 
 	if (error) {
-		g_message("error %s", error);
+		SUPPLICANT_DBG("[Nishant] error %s", error);
 		err = -EIO;
 		goto done;
 	}
