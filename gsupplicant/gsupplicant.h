@@ -555,7 +555,11 @@ int g_supplicant_register_eap_callback(g_supplicant_eap_callback cb);
 void g_supplicant_unregister_eap_callback(void);
 #endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+int g_supplicant_register(GSupplicantCallbacks *callbacks);
+#else /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 int g_supplicant_register(const GSupplicantCallbacks *callbacks);
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 void g_supplicant_unregister(const GSupplicantCallbacks *callbacks);
 
 static inline

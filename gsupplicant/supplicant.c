@@ -8281,16 +8281,34 @@ void g_supplicant_set_ins_settings(GSupplicantINSPreferredFreq preferred_freq_bs
 #if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
 int g_supplicant_register_eap_callback(g_supplicant_eap_callback cb)
 {
+	SUPPLICANT_DBG("[Nishant] g_supplicant_register_eap_callback %p", cb);
+
+	if (!callbacks_pointer) {
+		SUPPLICANT_DBG("[Nishant] callbacks_pointer is NULL");
+		return;
+	}
+
 	callbacks_pointer->eap = cb;
 }
 
 void g_supplicant_unregister_eap_callback(void)
 {
+	SUPPLICANT_DBG("[Nishant] g_supplicant_unregister_eap_callback");
+
+	if (callbacks_pointer) {
+		SUPPLICANT_DBG("[Nishant] callbacks_pointer is NULL");
+		return;
+	}
+
 	callbacks_pointer->eap = NULL;
 }
 #endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+int g_supplicant_register(GSupplicantCallbacks *callbacks)
+#else /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 int g_supplicant_register(const GSupplicantCallbacks *callbacks)
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 {
 	connection = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
 	if (!connection)
@@ -8352,6 +8370,7 @@ int g_supplicant_register(const GSupplicantCallbacks *callbacks)
 	} else
 		invoke_introspect_method();
 
+	SUPPLICANT_DBG("[Nishant] supplicant dbus setup completed");
 	return 0;
 }
 

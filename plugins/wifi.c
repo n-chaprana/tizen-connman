@@ -5462,7 +5462,11 @@ static void assoc_status_code(GSupplicantInterface *interface, int status_code)
 	}
 }
 
+#if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
+static GSupplicantCallbacks callbacks = {
+#else /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 static const GSupplicantCallbacks callbacks = {
+#endif /* defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET */
 	.system_ready		= system_ready,
 	.system_killed		= system_killed,
 	.interface_added	= interface_added,
@@ -5840,6 +5844,7 @@ static int wifi_init(void)
 {
 	int err;
 
+	DBG("[Nishant] wifi_init");
 	err = connman_network_driver_register(&network_driver);
 	if (err < 0)
 		return err;

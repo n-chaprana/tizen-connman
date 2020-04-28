@@ -176,8 +176,10 @@ static int eth_network_connect(struct connman_network *network)
 {
 	DBG("[Nishant] network %p", network);
 
+//	eth_init_supplicant();
 	g_supplicant_register_eap_callback(handle_eap_signal);
 	g_network = network;
+	connman_network_set_connected(network, true);
 
 	return 0;
 }
@@ -187,6 +189,7 @@ static int eth_network_disconnect(struct connman_network *network)
 	DBG("[Nishant] network %p", network);
 
 	g_network = NULL;
+//	eth_deinit_supplicant();
 	g_supplicant_unregister_eap_callback();
 	connman_network_set_connected(network, false);
 
