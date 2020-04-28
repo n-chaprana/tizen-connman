@@ -5781,7 +5781,62 @@ int g_supplicant_interface_create(const char *ifname, const char *driver,
 }
 
 #if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
-static void interface_get_result_blocking(const char *error,
+static void ethernet_interface_create_result(const char *error,
+				DBusMessageIter *iter, void *user_data)
+{
+	struct interface_create_data *data = user_data;
+	const char *path = NULL;
+	int err;
+
+	SUPPLICANT_DBG("[Nishant]");
+
+	if (error) {
+		g_message("error %s", error);
+		err = -EIO;
+		goto done;
+	}
+
+	dbus_message_iter_get_basic(iter, &path);
+	if (!path) {
+		SUPPLICANT_DBG("[Nishant] Unable to get object_path");
+		err = -EINVAL;
+		goto done;
+	}
+
+	if (!system_available) {
+		SUPPLICANT_DBG("[Nishant] System unavailable");
+		err = -EFAULT;
+		goto done;
+	}
+
+	data->interface = g_hash_table_lookup(interface_table, path);
+	if (!data->interface) {
+		data->interface = interface_alloc(path);
+		if (!data->interface) {
+			SUPPLICANT_DBG("[Nishant] Out of memory");
+			err = -ENOMEM;
+			goto done;
+		}
+	}
+
+	if (data->callback) {
+		data->callback(0, data->interface, data->user_data);
+#if defined TIZEN_EXT_WIFI_MESH
+		callback_mesh_support(interface);
+#endif
+	}
+
+	interface_create_data_free(data);
+	return;
+
+done:
+	if (data->callback)
+		data->callback(err, NULL, data->user_data);
+
+	interface_create_data_free(data);
+}
+
+static void ethernet_interface_get_result(const char *error,
 		DBusMessageIter *iter, void *user_data)
 {
 	struct interface_create_data *data = user_data;
@@ -5789,38 +5844,28 @@ static void interface_get_result_blocking(const char *error,
 	const char *path = NULL;
 	int err;
 
-	SUPPLICANT_DBG("");
+	SUPPLICANT_DBG("[Nishant]");
 
 	if (error) {
-		SUPPLICANT_DBG("Interface not created yet");
+		SUPPLICANT_DBG("[Nishant] Interface not created yet");
 		goto create;
 	}
 
 	dbus_message_iter_get_basic(iter, &path);
 	if (!path) {
+		SUPPLICANT_DBG("[Nishant] Unable to get object path");
 		err = -EINVAL;
 		goto done;
 	}
 
 	interface = g_hash_table_lookup(interface_table, path);
 	if (!interface) {
+		SUPPLICANT_DBG("[Nishant] Object path not found in lookup table");
 		err = -ENOENT;
 		goto done;
 	}
 
-	if (data->callback) {
-		data->callback(0, interface, data->user_data);
-#if !defined TIZEN_EXT
-		callback_p2p_support(interface);
-#endif
-#if defined TIZEN_EXT_WIFI_MESH
-		callback_mesh_support(interface);
-#endif
-	}
-
-	interface_create_data_free(data);
-
-	return;
+	g_supplicant_ethernet_interface_remove(interface, NULL, NULL);
 
 create:
 	if (!system_available) {
@@ -5828,13 +5873,13 @@ create:
 		goto done;
 	}
 
-	SUPPLICANT_DBG("Creating interface");
+	SUPPLICANT_DBG("[Nishant] Creating interface");
 
 	err = supplicant_dbus_method_call_blocking(SUPPLICANT_PATH,
 						SUPPLICANT_INTERFACE,
 						"CreateInterface",
 						interface_create_params,
-						interface_create_result, data,
+						ethernet_interface_create_result, data,
 						NULL);
 	if (err == 0)
 		return;
@@ -5846,7 +5891,7 @@ done:
 	interface_create_data_free(data);
 }
 
-int g_supplicant_interface_create_blocking(const char *ifname, const char *driver,
+int g_supplicant_ethernet_interface_create(const char *ifname, const char *driver,
 		const char *bridge, GSupplicantInterfaceCallback callback,
 		void *user_data)
 {
@@ -5875,7 +5920,7 @@ int g_supplicant_interface_create_blocking(const char *ifname, const char *drive
 							SUPPLICANT_INTERFACE,
 							"GetInterface",
 							interface_get_params,
-							interface_get_result_blocking, data,
+							ethernet_interface_get_result, data,
 							NULL);
 	if (ret < 0)
 		interface_create_data_free(data);
@@ -5926,23 +5971,29 @@ static void interface_remove_params(DBusMessageIter *iter, void *user_data)
 }
 
 #if defined TIZEN_EXT && defined TIZEN_EXT_EAP_ON_ETHERNET
-int g_supplicant_interface_remove_blocking(GSupplicantInterface *interface,
+int g_supplicant_ethernet_interface_remove(GSupplicantInterface *interface,
 		GSupplicantInterfaceCallback callback, void *user_data)
 {
 	struct interface_data *data;
 	int ret;
 
-	if (!interface)
+	if (!interface) {
+		SUPPLICANT_DBG("[Nishant] Interface is NULL");
 		return -EINVAL;
+	}
 
-	if (!system_available)
+	if (!system_available) {
+		SUPPLICANT_DBG("[Nishant] System is not available");
 		return -EFAULT;
+	}
 
 	g_supplicant_interface_cancel(interface);
 
 	data = dbus_malloc0(sizeof(*data));
-	if (!data)
+	if (!data) {
+		SUPPLICANT_DBG("[Nishant] Out of memory");
 		return -ENOMEM;
+	}
 
 	data->interface = interface;
 	data->path = g_strdup(interface->path);
